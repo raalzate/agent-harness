@@ -8,6 +8,9 @@ Cuatro capas, de la teoría al copiar y pegar. Si tenés diez minutos, leé la p
 |---|---|
 | [buenas-practicas.md](buenas-practicas.md) | La guía de fondo, agnóstica de stack: qué es un arnés, las cinco decisiones del bucle, los pilares, los niveles de madurez L0–L4, el ciclo RHO. **Es el documento que hay que leer.** |
 | [decisions/0001-arnes-portable.md](decisions/0001-arnes-portable.md) | Por qué la especificidad va en un JSON y no en el código, y por qué el gate es declarativo. |
+| [decisions/0002-sin-dependencias.md](decisions/0002-sin-dependencias.md) | Por qué sólo `node` y `bash`, y qué precisión se resigna a cambio (el lint es regex, no AST). |
+| [decisions/0003-selftest-generado.md](decisions/0003-selftest-generado.md) | Por qué el self-test deriva sus casos del config en vez de tener uno escrito por freno. |
+| [decisions/0004-contrato-de-hooks.md](decisions/0004-contrato-de-hooks.md) | El contrato de exit codes, y por qué un arnés roto **deja pasar** en vez de bloquear. |
 
 ## 2. Cómo (la práctica)
 

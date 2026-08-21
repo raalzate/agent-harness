@@ -36,21 +36,14 @@ otro proyecto sin preguntarse qué atrapa cada una.
    `invariants`, `patterns`, `forbiddenDeps`, `tests`, `incidents`. Agregar una regla al proyecto es
    editar JSON; agregar una *clase* nueva es tocar el script, y entonces lleva su caso de self-test
    escrito a mano.
-5. **El self-test genera sus casos desde el config.** Por cada regla reduce su regex a una muestra
-   concreta y verifica que el freno la bloquee, más casos fijos de que **no** bloquee lo inocente.
-   Así una regla nueva queda cubierta sin que nadie se acuerde de mantener el self-test: es lo que
-   permite que el arnés crezca sin degradarse.
-6. **Lo que no se puede verificar se declara omitido**, nunca pasado. Un patrón que el generador de
-   muestras no puede reducir, una herramienta que no está instalada, una señal saltada en modo
-   rápido: todas se imprimen aparte y ninguna cuenta como verde.
-7. **Sin dependencias.** Sólo `node` y `bash`. Es lo que permite copiar el arnés a un repo de
-   cualquier ecosistema sin negociar un `package.json`.
+
+Tres decisiones que se tomaron junto con estas tienen su propio ADR, porque tienen alternativas
+propias y se pueden revisar por separado: [0002](0002-sin-dependencias.md) (sin dependencias),
+[0003](0003-selftest-generado.md) (el self-test se genera desde el config) y
+[0004](0004-contrato-de-hooks.md) (el contrato de los hooks y qué pasa cuando el arnés está roto).
 
 ## Alternativas consideradas
 
-- **Un paquete instalable.** Descartado por ahora: el valor del arnés está en que el equipo lo lea
-  y lo edite en el repo donde corre, no en que sea una caja negra actualizable. Un paquete además
-  impone un ecosistema sobre repos que no lo tienen.
 - **Un `gate.sh` escrito a mano por repo.** Es lo habitual y es lo que vuelve el gate intransferible.
   Peor: invita a copiar señales de otro proyecto sin preguntarse qué atrapa cada una, que es
   exactamente lo que el campo `why` obliga a contestar.
@@ -70,11 +63,12 @@ otro proyecto sin preguntarse qué atrapa cada una.
 - Portar el arnés es **una tarde**, y el trabajo real es contestar preguntas sobre el repo destino
   (¿cuáles son tus señales? ¿qué capa tiene que quedar limpia? ¿qué comando no tiene ctrl-Z?), que
   es donde está el valor.
-- El self-test se volvió más fuerte y más barato a la vez: cubre reglas que todavía no existen.
-- Aparece un límite nuevo: el generador de muestras no puede reducir todos los regex (lookbehind,
-  backreferences, clases anidadas). Esos casos se reportan omitidos y se prueban a mano — un hueco
-  declarado, no un falso verde.
-- El lint es regex sobre texto, sin AST. Alcanza para lo que cubre y no tiene dependencias; cuando
-  eso no alcance, la señal correcta es el linter del stack, no complicar este script.
+- **El config se vuelve el archivo más importante del repo** y también el más fácil de romper: un
+  regex mal escrito o una ruta que se movió desactivan un freno en silencio. Por eso el self-test
+  valida el config entero (cada ruta resuelve, cada regex compila) antes de probar cualquier freno.
+- **El lint es regex sobre texto, sin AST.** Alcanza para lo que cubre y no tiene dependencias; un
+  patrón dentro de un comentario o de un string cuenta igual. Cuando eso no alcance, la señal
+  correcta es el linter del stack, no complicar este script. No hubo alternativa evaluada de verdad:
+  es una consecuencia de [0002](0002-sin-dependencias.md), y ahí está el análisis.
 - Queda una deuda explícita: el ruteo de trabajo informa y no bloquea, porque la intención no es
   verificable por máquina. Lo cuida el subagente `reviewer`.

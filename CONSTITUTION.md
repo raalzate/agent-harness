@@ -58,7 +58,8 @@ decisión: no bloquea nada y pasa desapercibido. Un config ausente o inválido *
 humano.
 
 *Mecanismo:* regla `INVARIANTE` del lint sobre `.claude/hooks/harness.mjs` (exige `process.exit(2)` y
-`process.exit(0)`, prohíbe `process.exit(1)`).
+`process.exit(0)`, prohíbe `process.exit(1)`) y regla `CONSOLE` sobre los hooks. El porqué de fallar
+abierto está en `docs/decisions/0004-contrato-de-hooks.md`.
 
 ## P6 — Cada señal del gate declara qué error atrapa · BLOCKING
 

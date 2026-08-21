@@ -92,7 +92,7 @@ fuerte disponible —test > hook/lint > comando > markdown— y esa mejora pasa 
 | copiar una config que ya funciona | [examples/](examples/README.md) |
 | ver el arnés de este repo, señal por señal | [docs/arnes.md](docs/arnes.md) |
 | resolver algo concreto | [docs/recetas.md](docs/recetas.md) |
-| saber por qué está hecho así | [docs/decisions/0001-arnes-portable.md](docs/decisions/0001-arnes-portable.md) |
+| saber por qué está hecho así | los ADR en [docs/decisions/](docs/decisions) — especificidad en JSON · sin dependencias · self-test generado · contrato de hooks |
 
 ## Cómo se trabaja en este repo
 
