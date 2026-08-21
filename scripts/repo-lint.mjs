@@ -83,7 +83,7 @@ const underDir = (relPath, dir) => relPath === dir || relPath.startsWith(dir.end
 /**
  * PUREZA — una capa no importa lo que no le corresponde.
  *
- * Es la regla de mayor retorno del arnés original: mantiene una capa de lógica pura,
+ * Es la regla de mayor retorno del arnés: mantiene una capa de lógica pura,
  * testeable y estable mientras el resto del proyecto cambia de framework.
  */
 function checkPurity(relPath, content) {

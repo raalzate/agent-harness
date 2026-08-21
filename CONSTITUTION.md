@@ -78,7 +78,7 @@ quedaron temporales en la raíz.
 
 ## P8 — Rutas protegidas · BLOCKING
 
-Secretos, lockfiles, `.git/`, dependencias y derivados no los edita el agente. La guía origen
+Secretos, lockfiles, `.git/`, dependencias y derivados no los edita el agente. La guía de fondo
 (`docs/buenas-practicas.md`) se enmienda en su propio commit, no como efecto colateral de otra
 tarea. Excepción legítima: la pide el humano y el cambio lo hace él.
 
@@ -131,4 +131,4 @@ es un hallazgo de review.
 
 | Versión | Fecha | Cambio |
 |---|---|---|
-| 1.0.0 | 2026-08-21 | Primera versión, al extraer el arnés a su propio repo (ver `docs/decisions/0001-arnes-portable.md`). |
+| 1.0.0 | 2026-08-21 | Primera versión (ver `docs/decisions/0001-arnes-portable.md`). |

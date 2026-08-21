@@ -86,7 +86,7 @@ fuerte disponible —test > hook/lint > comando > markdown— y esa mejora pasa 
 
 | Si querés… | Leé |
 |---|---|
-| entender la idea completa | [docs/buenas-practicas.md](docs/buenas-practicas.md) — la guía origen, agnóstica |
+| entender la idea completa | [docs/buenas-practicas.md](docs/buenas-practicas.md) — la guía de fondo, agnóstica de stack |
 | instalarlo hoy | [docs/portar.md](docs/portar.md) |
 | saber qué hace cada clave del config | [docs/config-reference.md](docs/config-reference.md) |
 | copiar una config que ya funciona | [examples/](examples/README.md) |
@@ -117,4 +117,4 @@ Las reglas de este repo están en [`CONSTITUTION.md`](CONSTITUTION.md); el estad
 
 ## Licencia
 
-Apache-2.0, igual que el proyecto del que se extrajo (`docs/buenas-practicas.md` viene de ahí).
+Apache-2.0. Ver [`LICENSE`](LICENSE).

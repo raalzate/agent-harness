@@ -3,7 +3,7 @@
  * PreToolUse Write|Edit|MultiEdit — boilerplate que ya tiene abstracción.
  *
  * Evita el fallo más caro y más silencioso: reimplementar algo que el repo ya resuelve
- * (el registro de notaciones, el puente de preload, el cliente de nube del main).
+ * (el registro único de tipos, el cliente HTTP con timeout, el puente entre procesos).
  * El catálogo vive en `docs/architecture/reuse-patterns.md`; las reglas en la config.
  */
 import { readInput, loadConfig, deny, allow, targetPath, proposedContent } from "./harness.mjs";

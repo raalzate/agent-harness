@@ -6,8 +6,8 @@ Cuatro capas, de la teoría al copiar y pegar. Si tenés diez minutos, leé la p
 
 | Documento | Qué contesta |
 |---|---|
-| [buenas-practicas.md](buenas-practicas.md) | La guía origen, agnóstica de stack: qué es un arnés, las cinco decisiones del bucle, los pilares, los niveles de madurez L0–L4, el ciclo RHO. **Es el documento que hay que leer.** |
-| [decisions/0001-arnes-portable.md](decisions/0001-arnes-portable.md) | Por qué este repo existe separado del proyecto donde nació, y por qué la especificidad va en un JSON y no en el código. |
+| [buenas-practicas.md](buenas-practicas.md) | La guía de fondo, agnóstica de stack: qué es un arnés, las cinco decisiones del bucle, los pilares, los niveles de madurez L0–L4, el ciclo RHO. **Es el documento que hay que leer.** |
+| [decisions/0001-arnes-portable.md](decisions/0001-arnes-portable.md) | Por qué la especificidad va en un JSON y no en el código, y por qué el gate es declarativo. |
 
 ## 2. Cómo (la práctica)
 

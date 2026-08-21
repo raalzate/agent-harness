@@ -34,7 +34,7 @@
     {
       "pattern": "^docs/buenas-practicas\\.md$",
       "agentOnly": true,
-      "reason": "guía origen: se enmienda a conciencia, en su propio commit, no como efecto colateral de otra tarea."
+      "reason": "guía de fondo: se enmienda a conciencia, en su propio commit, no como efecto colateral de otra tarea."
     }
   ],
 
@@ -67,7 +67,7 @@
 
   "purity": [
     {
-      "$comment": "Ejemplo real de este repo. En tu proyecto esto suele ser «src/lib/ no importa React/Electron/Next»: la capa de lógica pura es lo único con cobertura exigida y lo que da estabilidad.",
+      "$comment": "Ejemplo real de este repo. En un proyecto con framework esto suele ser «la capa de dominio no importa el framework ni la red»: es lo único con cobertura exigida y lo que da estabilidad.",
       "dir": ".claude/hooks",
       "forbiddenImports": ["node:child_process", "child_process"],
       "except": [".claude/hooks/post-edit-check.mjs", ".claude/hooks/session-start.mjs"],
@@ -84,7 +84,7 @@
 
   "singleSource": [
     {
-      "$comment": "Generalización de la regla NOTACION del proyecto origen: un registro es la única fuente de verdad y nadie cablea sus literales fuera de él. `allow` es DEUDA DECLARADA y sólo puede achicarse.",
+      "$comment": "Un registro es la única fuente de verdad y nadie cablea sus literales fuera de él (códigos de error, tipos de un dominio, feature flags). `allow` es DEUDA DECLARADA y sólo puede achicarse.",
       "id": "EVENTOS",
       "source": ".claude/settings.json",
       "literals": ["SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "Stop", "SubagentStop", "PreCompact"],
@@ -96,7 +96,7 @@
 
   "invariants": [
     {
-      "$comment": "Generalización de la regla WEBGPU: un archivo que TIENE que conservar ciertas líneas y no puede contener otras.",
+      "$comment": "Un archivo que TIENE que conservar ciertas líneas y no puede contener otras: arranque del proceso, flags del runtime, apagado ordenado.",
       "file": ".claude/hooks/harness.mjs",
       "required": ["process.exit(2)", "process.exit(0)"],
       "forbidden": ["process.exit(1)"],

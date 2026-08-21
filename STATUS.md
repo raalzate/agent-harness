@@ -39,4 +39,4 @@ Pre-commit instalado: sí (`core.hooksPath=.githooks`). CI corre **el mismo** `n
   un repo recién portado quede verde. Mecanismo candidato: un job de CI que instale el arnés en un
   repo de juguete y corra su gate.
 - **Sin `postCommit` ni `graph` configurados.** Las dos claves existen y están documentadas, pero
-  este repo no las usa: su comportamiento sólo está probado por el arnés de origen.
+  este repo no las usa, así que su comportamiento no está cubierto por ninguna señal de acá.

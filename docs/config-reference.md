@@ -156,9 +156,9 @@ justifica en `STATUS.md`.
 
 ```json
 [{ "file": "src/main.ts",
-   "required": ["enable-unsafe-webgpu"],
-   "forbidden": ["app.disableHardwareAcceleration()"],
-   "reason": "sin esos flags el motor no arranca en el binario empaquetado." }]
+   "required": ["signal.NotifyContext", "defer cancel()"],
+   "forbidden": ["log.Fatal(http.ListenAndServe"],
+   "reason": "el apagado ordenado evita cortar peticiones en vuelo en cada deploy." }]
 ```
 
 Para lo que se rompe **en silencio** cuando alguien "limpia" un archivo de arranque: flags del

@@ -1,72 +1,80 @@
-# ADR 0001 — El arnés vive en su propio repo, con la especificidad en un JSON
+# ADR 0001 — La especificidad del repo va en un JSON, y el gate es declarativo
 
 - **Fecha:** 2026-08-21
 - **Estado:** aceptado
-- **Contexto previo:** [`../buenas-practicas.md`](../buenas-practicas.md) (la guía agnóstica) y el
-  arnés del proyecto donde nació, un escritorio Electron + Next con IA local.
+- **Contexto previo:** [`../buenas-practicas.md`](../buenas-practicas.md) (la guía de fondo,
+  agnóstica de stack)
 
 ## Contexto
 
-El arnés se construyó dentro de un producto concreto y ahí funciona: hooks del ciclo del agente,
-un gate único que corren el humano, el agente y CI, self-test de los frenos, constitución
-versionada y un ciclo de incidentes que deja mecanismo. Lo que no existía era una forma de que
-**otro equipo lo tuviera sin leer ese producto**.
+Un arnés de agente que funciona termina, casi siempre, atado al repo donde se construyó: el gate
+enumera los comandos de ese stack en un script de shell, y las reglas del lint nombran los módulos,
+los tipos y los flags de ese producto. El resultado es correcto ahí y **intransferible** a
+cualquier otro lado.
 
-Dos hechos hicieron obvio que el arnés era portable:
+Mirando esas reglas de costado, la mayoría no son reglas distintas: son la misma **clase** de regla
+con otro contenido. "Esta capa no importa el framework", "este literal sale de un solo registro",
+"este archivo de arranque conserva estas líneas", "este texto no va en este ámbito". Cuatro clases
+cubren casi todo lo que un repo necesita verificar y que ningún linter estándar conoce.
 
-1. Los hooks ya eran genéricos. Toda la especificidad del producto —rutas protegidas, comandos
-   denegados, catálogo de reuso, allowlists de deuda— vivía en un único `harness.config.json`.
-2. Las reglas del lint, en cambio, **no** lo eran: `NOTACION`, `WEBGPU`, `IATASK`, `TOKENS` estaban
-   escritas contra el dominio de ese producto. Eran siete reglas distintas que, mirándolas de
-   costado, son cuatro **clases** de regla: "esta capa no importa X", "este literal sale de un solo
-   registro", "este archivo conserva estas líneas", "este texto no va en este ámbito".
+Lo otro que suele quedar atado es el gate. Un `gate.sh` con las señales escritas a mano en bash es
+un archivo que hay que reescribir en cada repo, y el que lo reescribe suele copiar las señales de
+otro proyecto sin preguntarse qué atrapa cada una.
 
 ## Decisión
 
-1. **Repo propio**, cuyo producto es el arnés y que se audita a sí mismo: su gate son el self-test,
-   el link-check y el lint de sus propias convenciones. Un repo de buenas prácticas que no las
-   cumple no convence a nadie.
+1. **Toda la especificidad vive en `.claude/harness.config.json`.** Hooks y scripts son genéricos:
+   leen ese archivo. Cambiar una regla es editar JSON; portar el arnés es reescribir un archivo.
 2. **El gate es declarativo.** `scripts/gate.sh` no sabe de stacks: ejecuta `gate.signals` del
-   config. Portar el gate a Go, Python o Terraform es editar JSON.
-3. **Las reglas del lint se generalizaron a clases** (`purity`, `singleSource`, `invariants`,
-   `patterns`, `forbiddenDeps`, `tests`, `incidents`), todas configurables. Las siete reglas del
-   proyecto origen se expresan con esas clases sin perder nada.
-4. **El self-test genera sus casos desde el config.** Antes cada freno tenía su caso escrito a
-   mano; ahora, por cada regla, el self-test reduce el patrón a una muestra concreta y verifica que
-   el freno la bloquee. Una regla nueva queda cubierta sin escribir código: eso es lo que hace que
-   el arnés crezca sin que nadie recuerde mantener el self-test.
-5. **Cada señal declara `why`.** Un campo obligatorio que dice qué error atrapa esa señal y ninguna
-   otra. Es lo único que va a defender a la señal el día que el gate tarde y alguien la quiera sacar.
-6. **Se separa lo que viaja de lo que no.** Viajan los principios, el método de portado y las clases
-   de regla. No viajan las reglas concretas: describen los incidentes de un repo y en otro son ruido.
+   config, en orden, con el argv de cada señal (sin shell y sin `eval` sobre datos del config).
+   Portarlo a Go, Python o Terraform es editar JSON.
+3. **Cada señal declara `why`:** qué clase de error atrapa que ninguna otra atrapa. Es un campo
+   obligatorio —el self-test rechaza una señal sin él— porque es lo único que va a defender a la
+   señal el día que el gate tarde y alguien la quiera sacar. Y si el `why` deja de ser cierto, la
+   señal se saca sin culpa.
+4. **Las reglas del lint son clases configurables**, no reglas cableadas: `purity`, `singleSource`,
+   `invariants`, `patterns`, `forbiddenDeps`, `tests`, `incidents`. Agregar una regla al proyecto es
+   editar JSON; agregar una *clase* nueva es tocar el script, y entonces lleva su caso de self-test
+   escrito a mano.
+5. **El self-test genera sus casos desde el config.** Por cada regla reduce su regex a una muestra
+   concreta y verifica que el freno la bloquee, más casos fijos de que **no** bloquee lo inocente.
+   Así una regla nueva queda cubierta sin que nadie se acuerde de mantener el self-test: es lo que
+   permite que el arnés crezca sin degradarse.
+6. **Lo que no se puede verificar se declara omitido**, nunca pasado. Un patrón que el generador de
+   muestras no puede reducir, una herramienta que no está instalada, una señal saltada en modo
+   rápido: todas se imprimen aparte y ninguna cuenta como verde.
+7. **Sin dependencias.** Sólo `node` y `bash`. Es lo que permite copiar el arnés a un repo de
+   cualquier ecosistema sin negociar un `package.json`.
 
 ## Alternativas consideradas
 
-- **Un paquete instalable (`npm i -D agent-harness`).** Descartado por ahora: el arnés tiene que ser
-  legible y editable en el repo donde corre — su valor está en que el equipo lo entienda y lo
-  cambie, no en que sea una caja negra actualizable. Un paquete además impone un ecosistema
-  (Node) sobre repos que no lo tienen; hoy sólo hacen falta `node` y `bash`.
-- **Config compartida a nivel organización.** Descartado: termina en reglas que no corresponden a la
-  mitad de los repos, y en equipos entrenados para ignorar los frenos. Lo que se comparte son los
-  principios y el método.
-- **Dejar el lint como ESLint/ruff/golangci-lint con reglas propias.** Complementario, no sustituto:
-  esas herramientas cubren estilo y bugs del lenguaje; las reglas de este lint son de arquitectura
-  y dominio (qué capa importa qué, qué registro es fuente única, qué invariante no se pierde), y
-  además tienen que correr en cualquier stack sin instalar nada.
-- **Publicar sólo la guía en markdown.** Es lo que había. Una guía sin mecanismos es exactamente el
-  anti-patrón que la guía denuncia.
+- **Un paquete instalable.** Descartado por ahora: el valor del arnés está en que el equipo lo lea
+  y lo edite en el repo donde corre, no en que sea una caja negra actualizable. Un paquete además
+  impone un ecosistema sobre repos que no lo tienen.
+- **Un `gate.sh` escrito a mano por repo.** Es lo habitual y es lo que vuelve el gate intransferible.
+  Peor: invita a copiar señales de otro proyecto sin preguntarse qué atrapa cada una, que es
+  exactamente lo que el campo `why` obliga a contestar.
+- **Config compartida a nivel organización.** Descartado: termina en reglas que no corresponden a
+  la mitad de los repos, y en equipos entrenados para ignorar los frenos. Lo que se comparte son
+  los principios y el método de portado; las reglas concretas describen los incidentes de **un**
+  repo.
+- **Reglas propias dentro de ESLint / ruff / golangci-lint.** Complementario, no sustituto: esas
+  herramientas cubren estilo y bugs del lenguaje. Estas reglas son de arquitectura y de dominio, y
+  tienen que correr en cualquier stack sin instalar nada.
+- **Dejar todo en markdown.** Es el punto de partida de casi todos los repos, y es exactamente el
+  anti-patrón que la guía de fondo denuncia: una regla sin un comando que la haga fallar es una
+  sugerencia.
 
 ## Consecuencias
 
 - Portar el arnés es **una tarde**, y el trabajo real es contestar preguntas sobre el repo destino
   (¿cuáles son tus señales? ¿qué capa tiene que quedar limpia? ¿qué comando no tiene ctrl-Z?), que
-  es exactamente donde está el valor.
-- El self-test se volvió más fuerte y más barato al mismo tiempo: cubre reglas que todavía no
-  existen.
-- Aparece un límite nuevo: `sampleFromPattern` no puede reducir todos los regex a un ejemplo. Los
-  casos que no puede se reportan **omitidos**, nunca pasados — un hueco declarado, no un falso verde.
-- El lint sigue siendo regex sobre texto, sin AST. Alcanza para lo que cubre y no tiene
-  dependencias; cuando eso no alcance, la señal correcta es el linter del stack, no complicar este
-  script.
+  es donde está el valor.
+- El self-test se volvió más fuerte y más barato a la vez: cubre reglas que todavía no existen.
+- Aparece un límite nuevo: el generador de muestras no puede reducir todos los regex (lookbehind,
+  backreferences, clases anidadas). Esos casos se reportan omitidos y se prueban a mano — un hueco
+  declarado, no un falso verde.
+- El lint es regex sobre texto, sin AST. Alcanza para lo que cubre y no tiene dependencias; cuando
+  eso no alcance, la señal correcta es el linter del stack, no complicar este script.
 - Queda una deuda explícita: el ruteo de trabajo informa y no bloquea, porque la intención no es
-  verificable por máquina. Lo cuida el `reviewer`.
+  verificable por máquina. Lo cuida el subagente `reviewer`.

@@ -104,7 +104,7 @@ Lo que no puede reducir a un ejemplo lo reporta como **omitido**, nunca como pas
 | `STATUS.md` | estado verificado + deuda conocida | `SessionStart` |
 | `docs/gotchas.md` | síntoma → causa → regla → mecanismo | bajo demanda / `/lesson` |
 | `docs/decisions/` | ADRs: por qué, no qué | bajo demanda |
-| `docs/buenas-practicas.md` | la guía origen, agnóstica de stack | bajo demanda / `/harness-audit` |
+| `docs/buenas-practicas.md` | la guía de fondo, agnóstica de stack | bajo demanda / `/harness-audit` |
 
 ## Conducta ante el error
 
