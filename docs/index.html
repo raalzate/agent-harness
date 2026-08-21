@@ -1,0 +1,623 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agent Harness</title>
+<meta name="description" content="Arnés de agente portable: hooks, gate declarativo y self-test de frenos para que las reglas de tu repo se hagan cumplir solas.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%94%A9%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=JetBrains+Mono:wght@400;500;700&display=swap">
+<style>
+/* ── Tokens: paleta clara completa en :root ────────────────────────────── */
+:root {
+  --paper:      #edeff3;
+  --surface:    #ffffff;
+  --surface-2:  #e3e7ee;
+  --ink:        #131922;
+  --ink-soft:   #47525f;
+  --ink-faint:  #7c8794;
+  --rule:       #ccd3dd;
+  --rule-soft:  #dde2ea;
+  --accent:     #0e6b72;
+  --accent-ink: #0a4f54;
+  --verde:      #1e7a3c;
+  --rojo:       #b3261e;
+  --ocre:       #8a6d2b;
+  --term-bg:    #10161d;
+  --term-ink:   #c9d3de;
+  --term-faint: #6b7885;
+  --term-rule:  #232d38;
+
+  --f-display: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --f-body:    "Source Serif 4", Georgia, "Times New Roman", serif;
+  --f-mono:    "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  --step--1: clamp(.78rem, .76rem + .1vw, .84rem);
+  --step-0:  clamp(1rem, .97rem + .15vw, 1.08rem);
+  --step-1:  clamp(1.2rem, 1.14rem + .3vw, 1.4rem);
+  --step-2:  clamp(1.5rem, 1.38rem + .6vw, 1.95rem);
+  --step-3:  clamp(2rem, 1.7rem + 1.5vw, 3.1rem);
+  --step-4:  clamp(2.6rem, 2rem + 3vw, 4.6rem);
+
+  --measure: 68ch;
+  --pad: clamp(1.15rem, 4vw, 2.5rem);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper:      #0f141a;
+    --surface:    #161d25;
+    --surface-2:  #1e262f;
+    --ink:        #e6ebf1;
+    --ink-soft:   #a7b2be;
+    --ink-faint:  #76818d;
+    --rule:       #2b343e;
+    --rule-soft:  #222a33;
+    --accent:     #5ecfd4;
+    --accent-ink: #8fe3e6;
+    --verde:      #5cc47c;
+    --rojo:       #ef8a80;
+    --ocre:       #d3ae5e;
+    --term-bg:    #0a0e13;
+    --term-ink:   #ccd6e0;
+    --term-faint: #6b7885;
+    --term-rule:  #1b232c;
+  }
+}
+:root[data-theme="dark"] {
+  --paper:      #0f141a;
+  --surface:    #161d25;
+  --surface-2:  #1e262f;
+  --ink:        #e6ebf1;
+  --ink-soft:   #a7b2be;
+  --ink-faint:  #76818d;
+  --rule:       #2b343e;
+  --rule-soft:  #222a33;
+  --accent:     #5ecfd4;
+  --accent-ink: #8fe3e6;
+  --verde:      #5cc47c;
+  --rojo:       #ef8a80;
+  --ocre:       #d3ae5e;
+  --term-bg:    #0a0e13;
+  --term-ink:   #ccd6e0;
+  --term-faint: #6b7885;
+  --term-rule:  #1b232c;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--f-body);
+  font-size: var(--step-0);
+  line-height: 1.62;
+  font-synthesis: none;
+}
+h1, h2, h3, .display { font-family: var(--f-display); font-weight: 700; line-height: 1.05; text-wrap: balance; letter-spacing: -.015em; margin: 0; }
+p { margin: 0; }
+a { color: var(--accent-ink); text-decoration-thickness: 1px; text-underline-offset: .18em; }
+a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 2px; }
+code, kbd, samp { font-family: var(--f-mono); font-size: .88em; }
+
+/* ── Estructura: columna de lectura + riel de marcas ───────────────────── */
+.wrap { max-width: 78rem; margin: 0 auto; padding-inline: var(--pad); }
+.col { max-width: var(--measure); }
+
+section { border-top: 1px solid var(--rule-soft); }
+.sec-inner { display: grid; grid-template-columns: 4.5rem minmax(0, 1fr); gap: clamp(1rem, 3vw, 2.75rem); padding-block: clamp(2.75rem, 6vw, 5rem); }
+.rail { font-family: var(--f-mono); font-size: var(--step--1); color: var(--ink-faint); border-right: 1px solid var(--rule-soft); padding-right: .75rem; text-align: right; line-height: 1.5; position: sticky; top: 1.25rem; align-self: start; }
+.rail b { display: block; font-weight: 700; color: var(--ink-soft); font-size: 1.35em; }
+@media (max-width: 46rem) {
+  .sec-inner { grid-template-columns: 1fr; gap: 1rem; }
+  .rail { position: static; border-right: 0; border-bottom: 1px solid var(--rule-soft); text-align: left; padding: 0 0 .5rem; }
+  .rail b { display: inline; font-size: 1em; }
+}
+
+.eyebrow { font-family: var(--f-mono); font-size: var(--step--1); letter-spacing: .1em; text-transform: uppercase; color: var(--ink-faint); }
+.lede { font-size: var(--step-1); color: var(--ink-soft); }
+.stack { display: flex; flex-direction: column; gap: 1.1rem; }
+.stack-tight { display: flex; flex-direction: column; gap: .55rem; }
+
+/* ── Encabezado / héroe ────────────────────────────────────────────────── */
+header { border-top: 4px solid var(--ink); }
+.masthead { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: .75rem 1.5rem; padding-block: 1rem; border-bottom: 1px solid var(--rule); font-family: var(--f-mono); font-size: var(--step--1); color: var(--ink-soft); }
+.masthead .name { font-family: var(--f-display); font-weight: 700; letter-spacing: -.01em; font-size: 1.15rem; color: var(--ink); }
+.masthead nav { display: flex; gap: 1.1rem; flex-wrap: wrap; }
+.masthead nav a { color: var(--ink-soft); text-decoration: none; }
+.masthead nav a:hover { color: var(--accent-ink); text-decoration: underline; }
+
+.hero { padding-block: clamp(2.5rem, 7vw, 5.5rem) clamp(2rem, 5vw, 3.5rem); display: grid; gap: clamp(2rem, 5vw, 3.5rem); grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 60rem) { .hero { grid-template-columns: minmax(0, 27rem) minmax(0, 1fr); align-items: start; } }
+h1 { font-size: var(--step-4); }
+h1 .sub { display: block; font-family: var(--f-mono); font-weight: 500; font-size: var(--step--1); letter-spacing: .14em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 1rem; letter-spacing: .14em; }
+.thesis { font-size: var(--step-1); margin-top: 1.25rem; }
+.thesis em { font-style: normal; box-shadow: inset 0 -.45em 0 color-mix(in srgb, var(--accent) 18%, transparent); }
+.hero-meta { margin-top: 1.75rem; display: flex; flex-wrap: wrap; gap: .5rem .75rem; font-family: var(--f-mono); font-size: var(--step--1); color: var(--ink-faint); }
+.chip { border: 1px solid var(--rule); padding: .18rem .5rem; border-radius: 2px; background: var(--surface); }
+
+/* ── Terminal ──────────────────────────────────────────────────────────── */
+.term { background: var(--term-bg); color: var(--term-ink); border-radius: 4px; overflow: hidden; box-shadow: 0 1px 0 var(--rule), 0 18px 40px -28px rgba(9,14,20,.55); }
+.term-tabs { display: flex; gap: 0; border-bottom: 1px solid var(--term-rule); flex-wrap: wrap; }
+.term-tabs button { flex: 1 1 auto; appearance: none; background: transparent; border: 0; border-bottom: 2px solid transparent; color: var(--term-faint); font-family: var(--f-mono); font-size: var(--step--1); letter-spacing: .06em; text-transform: uppercase; padding: .7rem .9rem; cursor: pointer; }
+.term-tabs button:hover { color: var(--term-ink); }
+.term-tabs button[aria-selected="true"] { color: var(--term-ink); border-bottom-color: currentColor; }
+.term-tabs button[data-v="verde"][aria-selected="true"] { color: #5cc47c; }
+.term-tabs button[data-v="rojo"][aria-selected="true"] { color: #ef8a80; }
+.term-tabs button[data-v="omitida"][aria-selected="true"] { color: #d3ae5e; }
+.term-body { padding: 1.1rem 1.15rem 1.35rem; overflow-x: auto; }
+.term-body pre { margin: 0; font-family: var(--f-mono); font-size: clamp(.72rem, .68rem + .25vw, .84rem); line-height: 1.75; white-space: pre; }
+.term-body .ln { display: block; }
+.term-body .dim { color: var(--term-faint); }
+.term-body .ok { color: #5cc47c; }
+.term-body .no { color: #ef8a80; }
+.term-body .sk { color: #d3ae5e; }
+.term-body .cmd { color: var(--term-ink); font-weight: 700; }
+.term-note { border-top: 1px solid var(--term-rule); padding: .8rem 1.15rem; font-family: var(--f-mono); font-size: var(--step--1); color: var(--term-faint); line-height: 1.55; }
+@media (prefers-reduced-motion: no-preference) {
+  .term-body[data-anim="on"] .ln { animation: rise .34s both; }
+  @keyframes rise { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
+}
+
+/* ── Piezas ────────────────────────────────────────────────────────────── */
+.pieces { display: grid; gap: 1px; background: var(--rule-soft); border: 1px solid var(--rule-soft); border-radius: 3px; grid-template-columns: minmax(0, 1fr); margin-top: 1.75rem; }
+@media (min-width: 48rem) { .pieces { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.piece { background: var(--surface); padding: 1.25rem 1.35rem 1.4rem; display: flex; flex-direction: column; gap: .5rem; }
+.piece h3 { font-size: var(--step-1); }
+.piece .mark { font-family: var(--f-mono); font-size: var(--step--1); color: var(--accent-ink); letter-spacing: .08em; text-transform: uppercase; }
+.piece .solves { font-family: var(--f-mono); font-size: var(--step--1); color: var(--ink-faint); border-top: 1px dashed var(--rule); padding-top: .6rem; margin-top: auto; line-height: 1.55; }
+
+/* ── Par config → bloqueo ──────────────────────────────────────────────── */
+.pair { display: grid; gap: 1rem; grid-template-columns: minmax(0, 1fr); margin-top: 1.75rem; align-items: stretch; }
+@media (min-width: 54rem) { .pair { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
+.panel { background: var(--surface); border: 1px solid var(--rule); border-radius: 3px; overflow: hidden; display: flex; flex-direction: column; }
+.panel > figcaption { font-family: var(--f-mono); font-size: var(--step--1); text-transform: uppercase; letter-spacing: .09em; color: var(--ink-faint); padding: .6rem .9rem; border-bottom: 1px solid var(--rule-soft); background: var(--surface-2); }
+.panel pre { margin: 0; padding: 1rem .9rem; overflow-x: auto; font-family: var(--f-mono); font-size: clamp(.72rem, .69rem + .2vw, .82rem); line-height: 1.7; }
+.panel .k { color: var(--accent-ink); }
+.panel .s { color: var(--ink-soft); }
+.panel.blocked pre { color: var(--ink); }
+.panel.blocked .hdr { color: var(--rojo); font-weight: 700; }
+
+/* ── Pasos ─────────────────────────────────────────────────────────────── */
+ol.steps { list-style: none; margin: 1.75rem 0 0; padding: 0; counter-reset: s -1; display: flex; flex-direction: column; }
+ol.steps li { counter-increment: s; display: grid; grid-template-columns: 3.25rem minmax(0, 1fr); gap: 1rem; padding: 1rem 0; border-top: 1px solid var(--rule-soft); }
+ol.steps li:last-child { border-bottom: 1px solid var(--rule-soft); }
+ol.steps li::before { content: "paso " counter(s); font-family: var(--f-mono); font-size: var(--step--1); color: var(--ink-faint); line-height: 1.7; }
+ol.steps h3 { font-size: var(--step-0); font-family: var(--f-display); font-weight: 600; }
+ol.steps p { color: var(--ink-soft); margin-top: .2rem; }
+
+/* ── Tabla ─────────────────────────────────────────────────────────────── */
+.table-scroll { overflow-x: auto; margin-top: 1.75rem; border: 1px solid var(--rule); border-radius: 3px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: var(--step--1); }
+th, td { text-align: left; padding: .7rem .9rem; border-bottom: 1px solid var(--rule-soft); vertical-align: top; }
+thead th { font-family: var(--f-mono); text-transform: uppercase; letter-spacing: .08em; font-size: .95em; color: var(--ink-faint); font-weight: 500; background: var(--surface-2); white-space: nowrap; }
+tbody tr:last-child td { border-bottom: 0; }
+td.mono, th.mono { font-family: var(--f-mono); }
+td:first-child { font-family: var(--f-display); font-weight: 600; white-space: nowrap; }
+
+/* ── Lista de negaciones ───────────────────────────────────────────────── */
+ul.nots { list-style: none; margin: 1.5rem 0 0; padding: 0; display: flex; flex-direction: column; gap: .9rem; }
+ul.nots li { padding-left: 2.4rem; position: relative; color: var(--ink-soft); }
+ul.nots li::before { content: "no"; position: absolute; left: 0; top: .1em; font-family: var(--f-mono); font-size: var(--step--1); color: var(--rojo); border: 1px solid currentColor; border-radius: 2px; padding: 0 .3rem; }
+ul.nots strong { color: var(--ink); }
+
+/* ── CTA + pie ─────────────────────────────────────────────────────────── */
+.cta-box { margin-top: 1.75rem; background: var(--surface); border: 1px solid var(--rule); border-left: 3px solid var(--accent); border-radius: 3px; padding: 1.15rem 1.25rem; }
+.cta-box pre { margin: .6rem 0 0; overflow-x: auto; font-family: var(--f-mono); font-size: clamp(.72rem, .69rem + .2vw, .82rem); line-height: 1.8; color: var(--ink); }
+footer { border-top: 4px solid var(--ink); }
+.foot { display: flex; flex-wrap: wrap; gap: 1rem 2rem; justify-content: space-between; padding-block: 1.5rem 3rem; font-family: var(--f-mono); font-size: var(--step--1); color: var(--ink-faint); }
+.foot a { color: var(--ink-soft); }
+.verdict-key { display: flex; gap: 1rem; flex-wrap: wrap; }
+.verdict-key span::before { content: ""; display: inline-block; width: .6rem; height: .6rem; border-radius: 50%; margin-right: .4rem; vertical-align: baseline; }
+.verdict-key .v1::before { background: var(--verde); }
+.verdict-key .v2::before { background: var(--rojo); }
+.verdict-key .v3::before { background: var(--ocre); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <div class="masthead">
+      <span class="name">Agent&nbsp;Harness</span>
+      <nav>
+        <a href="#tesis">Tesis</a>
+        <a href="#piezas">Piezas</a>
+        <a href="#freno">Un freno</a>
+        <a href="#portar">Portar</a>
+        <a href="#stacks">Stacks</a>
+        <a href="https://github.com/raalzate/agent-harness">Repo&nbsp;↗</a>
+      </nav>
+    </div>
+
+    <div class="hero">
+      <div>
+        <h1><span class="sub">Arnés de agente portable</span>El gate<br>es el<br>entregable.</h1>
+        <p class="thesis"><em>Una regla sin un comando que la haga fallar es una sugerencia.</em></p>
+        <p class="hero-meta">
+          <span class="chip">node + bash</span>
+          <span class="chip">cero dependencias</span>
+          <span class="chip">9 hooks</span>
+          <span class="chip">7 clases de regla</span>
+          <span class="chip">Apache-2.0</span>
+        </p>
+      </div>
+
+      <figure class="term" style="margin:0">
+        <div class="term-tabs" role="tablist" aria-label="Veredictos del gate">
+          <button role="tab" data-v="verde" aria-selected="true" aria-controls="term-out">✓ verde</button>
+          <button role="tab" data-v="rojo" aria-selected="false" aria-controls="term-out">✗ rojo</button>
+          <button role="tab" data-v="omitida" aria-selected="false" aria-controls="term-out">– omitida</button>
+        </div>
+        <div class="term-body" id="term-out" role="tabpanel" data-anim="on"><pre><code></code></pre></div>
+        <figcaption class="term-note" id="term-note"></figcaption>
+      </figure>
+    </div>
+  </div>
+</header>
+
+<main>
+
+<section id="tesis">
+  <div class="wrap sec-inner">
+    <p class="rail"><b>✓ ✗ –</b>tres veredictos, no dos</p>
+    <div class="col stack">
+      <p class="eyebrow">La tesis</p>
+      <h2 style="font-size:var(--step-2)">Un modelo no conoce tu repo. El arnés sí.</h2>
+      <p>Un agente de código no sabe qué archivo es regenerable y cuál es la llave de producción, no
+        recuerda qué rompió el build el mes pasado, y no tiene forma de comprobar si lo que escribió
+        funciona. Lo que convierte un modelo en un colaborador útil sobre <em>un</em> repo concreto es
+        la capa que lo envuelve: hooks que frenan donde el daño se hace, un gate que define qué
+        significa «terminado», y evidencia de qué está verificado.</p>
+      <p>La consecuencia práctica es incómoda y es el eje de todo lo demás: <strong>test verde ≠
+        compila ≠ entregable</strong>. Y una señal <span style="color:var(--ocre);font-weight:600">omitida
+        no es verde</span> — la distinción que casi todos los pipelines borran, y por la que un gate
+        puede reportar «listo» sin haber verificado nada.</p>
+      <p>Este repo no es una guía sobre eso. Es la infraestructura, y <strong>se audita a sí
+        misma</strong>: su propio gate son las señales del arnés. Un repo de buenas prácticas que no
+        las cumple no convence a nadie.</p>
+    </div>
+  </div>
+</section>
+
+<section id="piezas">
+  <div class="wrap sec-inner">
+    <p class="rail"><b>5</b>piezas, cada una con su falla que evita</p>
+    <div>
+      <div class="col stack">
+        <p class="eyebrow">Qué se instala</p>
+        <h2 style="font-size:var(--step-2)">Cinco piezas, cinco fallas concretas</h2>
+        <p>Ninguna es teórica: cada una existe porque su falla ya pasó, en este repo o en el equipo de
+          alguien.</p>
+      </div>
+
+      <div class="pieces">
+        <div class="piece">
+          <p class="mark">gate.sh · declarativo</p>
+          <h3>Un gate único</h3>
+          <p>La única definición de «entregable», declarada en JSON y corrida por tres actores con el
+            mismo comando: el humano, el agente y CI. Cada señal declara <code>why</code> — qué error
+            atrapa que ninguna otra atrapa.</p>
+          <p class="solves">Evita: «en mi máquina funciona», y que CI verifique algo distinto de lo que
+            verifica quien programa.</p>
+        </div>
+        <div class="piece">
+          <p class="mark">9 hooks · PreToolUse · Stop</p>
+          <h3>Frenos en el ciclo</h3>
+          <p>Antes de escribir (rutas protegidas, reuso), antes de un comando irreversible, después de
+            cada edición (el lint del archivo tocado, con el error real) y al cerrar la tarea.</p>
+          <p class="solves">Evita: el agente que borra lo que no debía, y el que dice «listo» sin
+            verificar.</p>
+        </div>
+        <div class="piece">
+          <p class="mark">harness-selftest.mjs</p>
+          <h3>Prueba de vida</h3>
+          <p>Por cada regla del config deriva una muestra concreta, ejecuta el freno real y exige el
+            bloqueo. Y prueba lo inverso: que no bloquee lo inocente. Los casos se generan solos.</p>
+          <p class="solves">Evita: «instalado y muerto» — archivos presentes cuyo eslabón activador
+            nunca corre.</p>
+        </div>
+        <div class="piece">
+          <p class="mark">CONSTITUTION.md · STATUS.md</p>
+          <h3>Principios y evidencia</h3>
+          <p>Cada principio declara su fuerza: <strong>BLOCKING</strong> nombra el comando que falla;
+            <strong>REVIEW</strong> lo juzga una persona. En <code>STATUS.md</code> va sólo lo
+            verificado por un comando; lo que se supone va en «deuda conocida».</p>
+          <p class="solves">Evita: la prosa aspiracional que nadie hace cumplir, y releer el repo
+            entero para saber si algo anda.</p>
+        </div>
+        <div class="piece" style="grid-column: 1 / -1">
+          <p class="mark">/lesson &lt;incidente&gt;</p>
+          <h3>El ciclo del incidente</h3>
+          <p>Un problema que costó tiempo termina en el mecanismo más fuerte disponible —test &gt;
+            hook/lint &gt; comando &gt; markdown— y esa mejora pasa el gate antes de quedar. Si el
+            incidente ya estaba registrado, el hallazgo es otro: <strong>la regla existía y no frenó
+            nada</strong>, así que hace falta un mecanismo más fuerte, no otra entrada de markdown.</p>
+          <p class="solves">Evita: tropezar dos veces con la misma piedra, y la «auto-mejora» del
+            agente reescribiendo sus propias reglas sin control.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="freno">
+  <div class="wrap sec-inner">
+    <p class="rail"><b>JSON</b>→ bloqueo, con el porqué</p>
+    <div>
+      <div class="col stack">
+        <p class="eyebrow">Anatomía de un freno</p>
+        <h2 style="font-size:var(--step-2)">Editás JSON. El agente lee el motivo.</h2>
+        <p>Toda la especificidad del repo vive en un archivo. Los hooks y los scripts son genéricos:
+          leen de ahí. Y el campo <code>reason</code> no es documentación — es lo único que el agente
+          ve cuando lo bloqueás, así que es la única oportunidad de que entienda en vez de
+          reintentar.</p>
+      </div>
+
+      <div class="pair">
+        <figure class="panel">
+          <figcaption>.claude/harness.config.json</figcaption>
+          <pre><code>{ <span class="k">"pattern"</span>: <span class="s">"git\\s+reset\\s+--hard"</span>,
+  <span class="k">"reason"</span>: <span class="s">"destruye trabajo sin
+     commitear. Usá `git stash` o pedí
+     confirmación al humano."</span> }</code></pre>
+        </figure>
+        <figure class="panel blocked">
+          <figcaption>lo que el agente recibe</figcaption>
+          <pre><code><span class="hdr">COMANDO BLOQUEADO:</span>
+  `git reset --hard HEAD~2`
+
+Motivo: destruye trabajo sin commitear.
+  Usá `git stash` o pedí confirmación
+  al humano.
+
+Reformulá el comando o pedí confirmación
+explícita. No lo reintentes igual.</code></pre>
+        </figure>
+      </div>
+
+      <div class="col stack" style="margin-top:1.75rem">
+        <h3 style="font-size:var(--step-1)">Siete clases de regla cubren casi todo</h3>
+        <p>Escribir una regla nueva es una línea de JSON, y el self-test la cubre sin código nuevo.</p>
+      </div>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>Clase</th><th>Lo que observa</th><th class="mono">Ejemplo real</th></tr></thead>
+          <tbody>
+            <tr><td>purity</td><td>una capa importa lo que no le corresponde</td><td class="mono">el dominio no importa el framework ni la red</td></tr>
+            <tr><td>patterns</td><td>texto prohibido en un ámbito</td><td class="mono">un secreto leído desde código de cliente</td></tr>
+            <tr><td>singleSource</td><td>un literal se cablea fuera de su registro</td><td class="mono">códigos de error duplicados a mano</td></tr>
+            <tr><td>invariants</td><td>un archivo perdió una línea que lo hacía andar</td><td class="mono">el apagado ordenado del servidor</td></tr>
+            <tr><td>forbiddenDeps</td><td>una dependencia vetada entró al manifiesto</td><td class="mono">un paquete sin mantenimiento</td></tr>
+            <tr><td>tests</td><td>un <code>.only(</code> olvidado</td><td class="mono">apaga la suite y el gate sale verde igual</td></tr>
+            <tr><td>incidents</td><td>un incidente registrado sin su mecanismo</td><td class="mono">todo gotcha declara <code>Mecanismo:</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="portar">
+  <div class="wrap sec-inner">
+    <p class="rail"><b>0→5</b>una tarde, en este orden</p>
+    <div>
+      <div class="col stack">
+        <p class="eyebrow">Instalarlo en tu repo</p>
+        <h2 style="font-size:var(--step-2)">Copiar archivos son cinco minutos. El resto es la parte que sirve.</h2>
+        <p>El instalador copia lo genérico y no sobreescribe nada. Lo que ninguna herramienta puede
+          hacer por vos —decidir cuáles son las señales reales de tu repo y traducir sus convenciones a
+          reglas— es exactamente donde está el valor. El orden importa: cada paso hace verificable al
+          siguiente.</p>
+      </div>
+
+      <ol class="steps">
+        <li><div><h3>Instalar los archivos</h3><p><code>node scripts/harness-init.mjs &lt;repo&gt;</code> en dry-run, después <code>--apply</code>. Y <code>git config core.hooksPath .githooks</code>: un hook en <code>.git/hooks/</code> existe, se ve bien y nunca corre.</p></div></li>
+        <li><div><h3>Definir el gate</h3><p>Para cada señal candidata, una pregunta: ¿qué clase de error atrapa que ninguna otra atrapa? Esa respuesta va en <code>why</code>. Después rompé algo a propósito y confirmá que el gate se pone rojo — un gate que nunca falló no es un gate, es una esperanza.</p></div></li>
+        <li><div><h3>Rutas y comandos</h3><p>Qué nunca edita el agente (secretos, lockfiles, derivados, generados, config de producción) y qué comandos no tienen ctrl-Z <em>en tu stack</em>. Media hora, y es el mejor retorno de todo el arnés.</p></div></li>
+        <li><div><h3>Las reglas de tu arquitectura</h3><p>¿Qué capa tiene que quedar limpia? ¿Qué registro es fuente única de verdad? ¿Qué archivo tiene invariantes que nadie debe romper? ¿Qué texto no debería existir nunca en cierto ámbito?</p></div></li>
+        <li><div><h3>Memoria y evidencia</h3><p>Cuatro archivos con un trabajo cada uno. En la constitución, la disciplina que sostiene todo: un principio BLOCKING <strong>nombra su comando</strong>; si no podés nombrarlo, es REVIEW.</p></div></li>
+        <li><div><h3>Cerrar el bucle</h3><p>CI corre el mismo gate. El hook <code>Stop</code> activo. <code>/harness-audit</code> una vez para la línea base, y <code>/lesson</code> cada vez que algo cueste tiempo.</p></div></li>
+      </ol>
+
+      <div class="col cta-box">
+        <p class="eyebrow">Empezar</p>
+        <pre><code>git clone https://github.com/raalzate/agent-harness
+node scripts/harness-init.mjs /ruta/a/tu/repo          <span style="color:var(--ink-faint)"># dry-run</span>
+node scripts/harness-init.mjs /ruta/a/tu/repo --apply</code></pre>
+        <p style="margin-top:.9rem;color:var(--ink-soft)">El self-test va a estar rojo recién
+          instalado, y está bien: el config de arranque trae placeholders a propósito. Ese rojo es el
+          mapa de lo que falta — cada línea nombra la clave que todavía apunta a la nada.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="stacks">
+  <div class="wrap sec-inner">
+    <p class="rail"><b>5</b>configs completas, no plantillas vacías</p>
+    <div>
+      <div class="col stack">
+        <p class="eyebrow">Configs de ejemplo</p>
+        <h2 style="font-size:var(--step-2)">La señal que en tu stack no se puede omitir</h2>
+        <p>Cada ejemplo es el resultado de hacer las preguntas del paso 2 en ese stack. Copiá el que
+          más se parezca al tuyo y <strong>borrá lo que no aplique</strong>: una regla que no
+          corresponde a tu repo es peor que ninguna — entrena al equipo a ignorar los frenos.</p>
+      </div>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>Stack</th><th>Lo que casi todos olvidan</th></tr></thead>
+          <tbody>
+            <tr><td>TypeScript</td><td>El runner de tests transpila por archivo y <strong>no</strong> verifica tipos: un import inválido pasa la suite y rompe el build. <code>tsc --noEmit</code> es irremplazable.</td></tr>
+            <tr><td>Python</td><td><code>ruff</code> y <code>mypy</code> son señales distintas. Y el chequeo de migraciones pendientes atrapa el fallo que ningún test ve: un modelo cambiado sin su migración.</td></tr>
+            <tr><td>Go</td><td>Sin <code>-race</code> las condiciones de carrera aparecen en producción; sin <code>-count=1</code> la caché de tests reporta un verde viejo.</td></tr>
+            <tr><td>Monorepo</td><td>La rotura cara es <em>entre</em> paquetes: sólo el build de proyectos la ve. Un gate por paquete la deja pasar.</td></tr>
+            <tr><td>Terraform</td><td>Acá el arnés se invierte: el freno más valioso no es el lint, es <code>bash.deny</code>. El agente puede planear todo y aplicar nada.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="limites">
+  <div class="wrap sec-inner">
+    <p class="rail"><b>–</b>lo que no es</p>
+    <div class="col stack">
+      <p class="eyebrow">Límites declarados</p>
+      <h2 style="font-size:var(--step-2)">Tres cosas que este arnés no hace</h2>
+      <ul class="nots">
+        <li><strong>No es un sandbox.</strong> La lista de comandos denegados sube el costo del error
+          accidental; un agente puede reformular un comando. Para aislamiento real hacen falta
+          contenedores o permisos del sistema operativo.</li>
+        <li><strong>No es un linter de estilo.</strong> Convive con ESLint, ruff o golangci-lint y
+          cubre lo que ellos no: arquitectura y dominio. El lint propio es regex sobre texto, sin AST
+          — cuando la precisión importe, la señal correcta es el linter de tu stack.</li>
+        <li><strong>No reemplaza el criterio.</strong> La intención no es verificable por máquina: por
+          eso hay principios REVIEW y un subagente que revisa el diff. Lo que el arnés logra es que lo
+          verificable <strong>no dependa de que alguien se acuerde</strong>.</li>
+      </ul>
+      <p style="margin-top:.5rem">Los tres están escritos en el repo, con su mecanismo candidato,
+        junto al resto de la deuda conocida.</p>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <div class="wrap foot">
+    <span>Agent Harness · Apache-2.0 · <a href="https://github.com/raalzate/agent-harness">github.com/raalzate/agent-harness</a></span>
+    <span class="verdict-key"><span class="v1">verde: entregable</span><span class="v2">rojo: leé el error real</span><span class="v3">omitida: no es verde</span></span>
+  </div>
+</footer>
+
+<script>
+(function () {
+  // Los tres transcripts son salida real del gate de este repo. La pestaña «omitida»
+  // existe porque es la distinción que el resto de los pipelines borra.
+  var L = function (t, c) { return { t: t, c: c || "" }; };
+  var salidas = {
+    verde: {
+      nota: "Las tres señales corrieron. El marcador `.git/gate-dirty` se borra: el hook Stop ya deja cerrar la tarea.",
+      lineas: [
+        L("$ npm run gate", "cmd"),
+        L("Gate (modo: full) — agent-harness", "dim"),
+        L(""),
+        L("──▶ self-test del arnés"),
+        L("  ✓ 58 regex del config compilan", "ok"),
+        L("  ✓ 27 rutas del config resuelven", "ok"),
+        L("  ✓ protected-paths bloquea `.env`", "ok"),
+        L("  ✓ bash-guard bloquea `git reset --hard`", "ok"),
+        L("  ✓ bash-guard deja pasar `git status`", "ok"),
+        L("  ✓ lint INCIDENTE exige `Mecanismo:` en cada gotcha", "ok"),
+        L("  – fases SDD instaladas (omitido: sin kit declarado)", "sk"),
+        L("SELF-TEST VERDE — cada regla del config tiene un", "dim"),
+        L("comando que falla si se la viola.", "dim"),
+        L("    ✓ self-test del arnés", "ok"),
+        L(""),
+        L("──▶ link-check de docs"),
+        L("docs-linkcheck: ok", "dim"),
+        L("    ✓ link-check de docs", "ok"),
+        L(""),
+        L("──▶ lint de convenciones"),
+        L("repo-lint: OK", "dim"),
+        L("    ✓ lint de convenciones", "ok"),
+        L(""),
+        L("GATE VERDE — entregable.", "ok")
+      ]
+    },
+    rojo: {
+      nota: "Un gotcha sin la línea `Mecanismo:` es prosa que se va a volver a pagar. El error viene con archivo, línea y regla: presupuesto de 2 intentos sobre el mismo error.",
+      lineas: [
+        L("$ npm run gate", "cmd"),
+        L("Gate (modo: full) — agent-harness", "dim"),
+        L(""),
+        L("──▶ self-test del arnés"),
+        L("    ✓ self-test del arnés", "ok"),
+        L(""),
+        L("──▶ link-check de docs"),
+        L("    ✓ link-check de docs", "ok"),
+        L(""),
+        L("──▶ lint de convenciones"),
+        L("repo-lint: 1 problema(s)", "dim"),
+        L(""),
+        L("  docs/gotchas.md:86  [INCIDENTE]  el gotcha", "no"),
+        L("  «cebo temporal» no declara `Mecanismo:`.", "no"),
+        L("  Formato fijo: Síntoma: · Causa: · Regla: ·", "no"),
+        L("  Mecanismo:", "no"),
+        L(""),
+        L("Cada regla vive en `.claude/harness.config.json`.", "dim"),
+        L("Si la regla está mal, se discute y se cambia ahí", "dim"),
+        L("— no se ignora.", "dim"),
+        L("    ✗ lint de convenciones", "no"),
+        L(""),
+        L("GATE ROJO — señales fallidas: lint de convenciones", "no"),
+        L("Leé el error real (archivo, línea, mensaje) antes", "dim"),
+        L("de reintentar.", "dim")
+      ]
+    },
+    omitida: {
+      nota: "Omitida ≠ pasó. Se imprime aparte, siempre. Y si NINGUNA señal llegó a correr, el gate es rojo: pasó una vez —un separador de campos mal elegido— y reportó «entregable».",
+      lineas: [
+        L("$ npm run gate", "cmd"),
+        L("Gate (modo: full) — proyecto-portado", "dim"),
+        L(""),
+        L("──▶ typecheck"),
+        L("    ✓ typecheck", "ok"),
+        L(""),
+        L("──▶ tests con cobertura"),
+        L("    ✓ tests con cobertura", "ok"),
+        L(""),
+        L("──▶ e2e de la app web"),
+        L("    – OMITIDA: no existe `apps/web`", "sk"),
+        L("      (omitido ≠ pasó)", "sk"),
+        L(""),
+        L("──▶ política (OPA/conftest)"),
+        L("    – OMITIDA: no existe `policy`", "sk"),
+        L("      (omitido ≠ pasó)", "sk"),
+        L(""),
+        L("Señales omitidas (NO son verde):", "sk"),
+        L("  e2e de la app web · política (OPA/conftest)", "sk"),
+        L(""),
+        L("GATE VERDE — entregable.", "ok"),
+        L("…con dos huecos declarados. Un hueco escrito se", "dim"),
+        L("puede cerrar; uno tácito, no.", "dim")
+      ]
+    }
+  };
+
+  var out = document.querySelector("#term-out code");
+  var nota = document.getElementById("term-note");
+  var tabs = Array.prototype.slice.call(document.querySelectorAll(".term-tabs button"));
+  var quieto = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  function pintar(v, animar) {
+    var d = salidas[v];
+    out.textContent = "";
+    d.lineas.forEach(function (l, i) {
+      var s = document.createElement("span");
+      s.className = "ln" + (l.c ? " " + l.c : "");
+      s.textContent = l.t === "" ? " " : l.t;
+      if (animar && !quieto) s.style.animationDelay = (i * 38) + "ms";
+      else s.style.animation = "none";
+      out.appendChild(s);
+    });
+    nota.textContent = d.nota;
+  }
+
+  tabs.forEach(function (b) {
+    b.addEventListener("click", function () {
+      tabs.forEach(function (o) { o.setAttribute("aria-selected", String(o === b)); });
+      pintar(b.dataset.v, true);
+    });
+  });
+
+  pintar("verde", true);
+})();
+</script>
+
+</body>
+</html>
