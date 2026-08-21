@@ -6,6 +6,9 @@ comandos y el ciclo que convierte cada incidente en un mecanismo.
 
 Agnóstico de lenguaje y framework. Corre con **node y bash**, sin instalar dependencias.
 
+**→ [raalzate.github.io/agent-harness](https://raalzate.github.io/agent-harness/)** — la versión de una
+pasada, con el transcript del gate y sus tres veredictos.
+
 > **La frase que resume todo:** una regla sin un comando que la haga fallar es una sugerencia.
 
 Este repo se audita a sí mismo: su propio gate son las señales del arnés. Un repo de buenas

@@ -38,5 +38,9 @@ Pre-commit instalado: sí (`core.hooksPath=.githooks`). CI corre **el mismo** `n
 - **El instalador no se prueba end-to-end en CI.** Se verifica en dry-run a mano; nada garantiza que
   un repo recién portado quede verde. Mecanismo candidato: un job de CI que instale el arnés en un
   repo de juguete y corra su gate.
+- **La landing page (`docs/index.html`) no está en el gate.** Ninguna máquina juzga si una página se
+  ve bien, así que no hay señal que la cubra: se revisa a ojo cuando cambia, y el riesgo real es que
+  envejezca en silencio respecto del repo (los transcripts que muestra son salida real de hoy).
+  Mecanismo candidato: un check que compare los comandos citados en la página contra `gate.signals`.
 - **Sin `postCommit` ni `graph` configurados.** Las dos claves existen y están documentadas, pero
   este repo no las usa, así que su comportamiento no está cubierto por ninguna señal de acá.
