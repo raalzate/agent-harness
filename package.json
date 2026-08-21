@@ -1,0 +1,18 @@
+{
+  "name": "agent-harness",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Arnés de agente portable: hooks, gate, subagentes, comandos y docs para replicar buenas prácticas en cualquier repo.",
+  "type": "module",
+  "license": "Apache-2.0",
+  "scripts": {
+    "gate": "bash scripts/gate.sh",
+    "gate:fast": "bash scripts/gate.sh fast",
+    "lint": "node scripts/repo-lint.mjs",
+    "lint:rules": "node scripts/repo-lint.mjs --rules",
+    "selftest": "node scripts/harness-selftest.mjs",
+    "linkcheck": "node scripts/docs-linkcheck.mjs",
+    "hooks:install": "git config core.hooksPath .githooks && echo 'hooks de git instalados (core.hooksPath=.githooks)'",
+    "harness:install": "node scripts/harness-init.mjs"
+  }
+}

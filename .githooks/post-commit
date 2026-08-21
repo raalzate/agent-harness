@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# Post-commit: refresca lo derivado que el agente va a leer en la próxima sesión
+# (un índice de símbolos, un grafo del repo, un mapa de dependencias).
+#
+# Se configura en `.claude/harness.config.json` → `postCommit.command` (array argv).
+# Sin esa clave, este hook no hace nada y sale en 0: es opcional a propósito.
+#
+# Por qué vive acá y NO en `.git/hooks/`: este repo setea `core.hooksPath=.githooks`
+# (npm run hooks:install), así que git IGNORA `.git/hooks/post-commit`. Una herramienta
+# que "instala su hook" ahí lo deja escrito, se ve bien y nunca corre.
+#
+# Barato y silencioso: si falla, el commit YA ocurrió y no se toca. Lo derivado es una
+# ayuda de lectura, no parte del entregable (esa es scripts/gate.sh).
+set -uo pipefail
+
+CONFIG=".claude/harness.config.json"
+[ -f "$CONFIG" ] || exit 0
+command -v node >/dev/null 2>&1 || exit 0
+
+node -e '
+const fs = require("fs");
+const cp = require("node:child_process");
+const c = JSON.parse(fs.readFileSync(".claude/harness.config.json", "utf8"));
+const spec = c.postCommit;
+if (!spec || !Array.isArray(spec.command) || !spec.command.length) process.exit(0);
+// Sólo si cambió algo que el índice mira (spec.watch: array de extensiones).
+if (Array.isArray(spec.watch) && spec.watch.length) {
+  const out = cp.execSync("git diff-tree --no-commit-id --name-only -r HEAD", { encoding: "utf8" });
+  const tocado = out.split("\n").some(f => spec.watch.some(ext => f.endsWith(ext)));
+  if (!tocado) process.exit(0);
+}
+const r = cp.spawnSync(spec.command[0], spec.command.slice(1), { stdio: "ignore" });
+if (r.status === 0) console.log(`post-commit: ${spec.name || spec.command.join(" ")} actualizado.`);
+else console.log(`post-commit: ${spec.name || spec.command.join(" ")} falló (el commit está hecho; corrélo a mano).`);
+' || true
+
+exit 0

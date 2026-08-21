@@ -1,0 +1,165 @@
+{
+  "$comment": "Config DE ARRANQUE del arnés. Es el ÚNICO archivo específico del repo: los hooks y los scripts leen de acá. Llenar en este orden: gate.signals → protectedPaths → bash.deny → purity/patterns. Referencia completa de cada clave: docs/config-reference.md del repo agent-harness.",
+  "$arranque": "El self-test va a estar ROJO recién instalado: las claves con placeholders (`<ruta del registro>`, `<archivo>`, `src/lib`) apuntan a la nada a propósito. Ese rojo es el MAPA de lo que falta llenar — cada línea nombra su clave. Lo que no aplique a este repo se BORRA, no se deja con el placeholder: una regla que apunta a la nada es peor que ninguna.",
+
+  "gate": {
+    "$comment": "OBLIGATORIO Y VACÍO A PROPÓSITO. Nadie de afuera sabe cuáles son las señales reales de este repo: leé su manifiesto y su CI, y escribilas acá. Cada señal declara `why` (por qué NO la cubre otra señal): una señal sin motivo es una señal que nadie va a defender cuando moleste. `fastSkip: true` = se omite en modo fast (típicamente el build). `skipIfMissing` = ruta que, si no existe, hace que la señal se reporte OMITIDA en vez de fallar.",
+    "command": "npm run gate",
+    "fastCommand": "npm run gate:fast",
+    "marker": ".git/gate-dirty",
+    "codeGlobs": ["src/"],
+    "signals": [
+      {
+        "name": "self-test del arnés",
+        "command": ["node", "scripts/harness-selftest.mjs"],
+        "why": "un hook roto o un config que apunta a la nada fallan en silencio: ninguna otra señal los ve"
+      },
+      {
+        "name": "link-check de docs",
+        "command": ["node", "scripts/docs-linkcheck.mjs"],
+        "why": "mover un archivo rompe punteros de la memoria del agente que nadie más mira"
+      },
+      {
+        "name": "lint de convenciones",
+        "command": ["node", "scripts/repo-lint.mjs"],
+        "why": "las reglas de este repo que ningún compilador ve, con un comando que falla"
+      }
+    ]
+  },
+
+  "protectedPaths": [
+    { "pattern": "^\\.env", "reason": ".env* es la llave del reino: lo edita el humano, nunca el agente." },
+    { "pattern": "^(package-lock\\.json|yarn\\.lock|pnpm-lock\\.yaml|poetry\\.lock|go\\.sum|Cargo\\.lock)$", "reason": "los lockfiles se regeneran con el gestor de paquetes, no se editan a mano." },
+    { "pattern": "^\\.git/", "reason": "historia de git: fuera del alcance del agente." },
+    { "pattern": "^(node_modules|vendor|\\.venv)/", "reason": "dependencias: se cambian por manifiesto + install." },
+    { "pattern": "^(build|dist|out|target|coverage)/", "reason": "artefactos derivados: se regeneran, no se editan." }
+  ],
+
+  "bash": {
+    "$comment": "Comandos irreversibles o que saltan la verificación. Agregá los propios de este stack (terraform apply, kubectl delete, drop de base, deploy directo a producción).",
+    "deny": [
+      { "pattern": "--no-ver[i]fy", "reason": "saltarse los hooks de verificación está prohibido. Si el gate estorba, se arregla el gate." },
+      { "pattern": "git\\s+push\\s+.*--force(?!-with-lease)", "reason": "`--force` reescribe historia remota. Usá --force-with-lease y pedí confirmación." },
+      { "pattern": "git\\s+reset\\s+--hard", "reason": "destruye trabajo sin commitear. Usá `git stash` o pedí confirmación." },
+      { "pattern": "git\\s+clean\\s+-[a-z]*f", "reason": "borra archivos no rastreados. Dry-run primero: `git clean -n`." },
+      { "pattern": "git\\s+add\\s+(\\.|-A|--all)(\\s|$)", "reason": "arrastra artefactos y secretos. Agregá archivos por nombre." },
+      { "pattern": "\\bsed\\s+(-[a-zA-Z]*\\s+)*-i\\b.*\\b(src|lib|app)\\b", "reason": "edición masiva in-place sobre fuente. Usá el editor del agente, o commit + dry-run antes." },
+      { "pattern": "\\bfind\\b[^|;&]*-delete", "reason": "borra sin mostrar. Corré el find sin -delete y confirmá la lista." },
+      { "pattern": "\\bcurl\\b[^|;&]*\\|\\s*(ba)?sh", "reason": "ejecuta código remoto sin revisarlo. Bajá el script, leelo, después corrélo." }
+    ]
+  },
+
+  "reuse": [
+    {
+      "$comment": "Boilerplate que este repo YA resuelve. Una entrada por abstracción que se reimplementó al menos una vez. `see` tiene que existir: el self-test lo verifica.",
+      "pattern": "<regex del boilerplate>",
+      "appliesTo": "^src/",
+      "reason": "<esto ya existe en X; usalo en vez de reimplementarlo>",
+      "see": "<ruta del módulo que ya lo resuelve>"
+    }
+  ],
+
+  "lint": { "command": ["node", "scripts/repo-lint.mjs"], "fileFlag": "--file" },
+
+  "purity": [
+    {
+      "$comment": "La capa de lógica pura: sin framework, sin I/O, sin UI. Es lo único con cobertura exigida y lo que sobrevive al próximo cambio de framework.",
+      "dir": "src/lib",
+      "forbiddenImports": ["react", "react-dom", "next/", "express", "electron"],
+      "except": [],
+      "reason": "la lógica pura es testeable y estable; los componentes orquestan, lib decide."
+    }
+  ],
+
+  "forbiddenDeps": {
+    "$comment": "Dependencias que este proyecto decidió NO tener, con el motivo. Vacío = la regla no corre.",
+    "manifest": "package.json",
+    "packages": [],
+    "reason": ""
+  },
+
+  "singleSource": [
+    {
+      "$comment": "Un registro es la única fuente de verdad y nadie cablea sus literales fuera de él. `allow` es DEUDA DECLARADA: sólo puede achicarse, y crecer se justifica en STATUS.md.",
+      "id": "REGISTRO",
+      "source": "<ruta del registro>",
+      "literals": [],
+      "extract": "<regex con un grupo, alternativa a `literals`: saca los literales del propio registro>",
+      "appliesTo": "^src/",
+      "allow": [],
+      "reason": "<por qué la duplicación duele>"
+    }
+  ],
+
+  "invariants": [
+    {
+      "$comment": "Un archivo que TIENE que conservar ciertas líneas y no puede contener otras. Típico: flags de arranque, orden de inicialización, registros de scheme.",
+      "file": "<archivo>",
+      "required": [],
+      "forbidden": [],
+      "reason": "<qué se rompe si desaparece / si aparece>"
+    }
+  ],
+
+  "patterns": [
+    {
+      "$comment": "La clase de regla más usada al portar: texto prohibido en un ámbito, con su motivo. El mensaje lo lee el agente cuando lo bloqueás: explicá el PORQUÉ.",
+      "id": "IDENTIFICADOR",
+      "pattern": "<regex>",
+      "appliesTo": "^src/",
+      "allow": [],
+      "message": "<por qué está prohibido y qué hacer en su lugar>"
+    }
+  ],
+
+  "tests": {
+    "filePattern": "(^|/)(__tests__|tests?)/|\\.(test|spec)\\.[cm]?[jt]sx?$",
+    "onlyPattern": "\\b(describe|it|test)\\.only\\("
+  },
+
+  "incidents": {
+    "file": "docs/gotchas.md",
+    "heading": "### GOTCHA",
+    "requiredLines": ["Síntoma:", "Causa:", "Regla:", "Mecanismo:"]
+  },
+
+  "docs": {
+    "$comment": "`ignore` son directorios que el link-check no recorre; `ignoreFiles`, documentos cuyas rutas son ejemplos y no punteros; `externalPaths`, rutas que genera una herramienta externa y ninguna máquina puede verificar en el clon.",
+    "ignore": ["node_modules", ".git", "build", "dist", "out", "coverage", ".venv", "vendor", "target"],
+    "ignoreFiles": [],
+    "externalPaths": []
+  },
+
+  "status": { "file": "STATUS.md" },
+
+  "sdd": {
+    "$comment": "`phases` son las skills del kit SDD que tienen que estar instaladas (en CI se reporta omitido, nunca «pasó»). Sin kit, dejá `phases: []`: el valor está en `routes`, que pone el criterio delante del agente antes de que edite.",
+    "kit": "ninguno",
+    "skillRoots": ["~/.claude/skills", ".claude/skills"],
+    "phases": [],
+    "specsDir": "specs",
+    "activeFeaturePointer": "",
+    "routes": [
+      {
+        "route": "sdd",
+        "patterns": ["\\bnueva (feature|funcionalidad|pantalla)\\b", "\\b(feature|módulo|modulo) nuev[oa]\\b", "\\bepic\\b", "\\bmvp\\b", "\\bhistorias de usuario\\b", "\\breescrib(ir|e)\\b", "\\brearquitect", "\\bmigrar (el|la|todo)\\b"],
+        "message": "Pedido de tamaño FEATURE → ruta SDD: spec, plan y tareas antes de tocar producción. Si decidís saltarla, declaralo en una línea con el porqué."
+      },
+      {
+        "route": "bugfix",
+        "patterns": ["\\bbug\\b", "\\bfalla\\b", "\\bno funciona\\b", "\\bse rompe\\b", "\\berror en\\b", "\\bregresi[óo]n\\b"],
+        "message": "Falla sobre algo que ya existe → test rojo que la reproduzca ANTES de tocar producción."
+      },
+      {
+        "route": "clarify",
+        "patterns": ["\\bno s[ée] si\\b", "\\balgo as[íi]\\b", "\\bcomo veas\\b", "\\bmejorar (todo|esto)\\b"],
+        "message": "Pedido ambiguo → preguntá UNA sola cosa antes de tocar archivos."
+      },
+      {
+        "route": "none",
+        "patterns": ["\\btypo\\b", "\\bcopy\\b", "\\brenombrar\\b", "\\bformatear\\b", "\\bdocumentar\\b", "\\bexplicame\\b"],
+        "message": ""
+      }
+    ]
+  }
+}

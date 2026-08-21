@@ -1,0 +1,64 @@
+{
+  "$comment": "Servicio Python (FastAPI o Django) con pytest. Particularidades: `ruff` y `mypy` son señales distintas y ninguna reemplaza a la otra; una migración ya aplicada es inmutable; el chequeo de migraciones pendientes atrapa el fallo que ningún test ve.",
+  "gate": {
+    "command": "make gate",
+    "fastCommand": "make gate-fast",
+    "marker": ".git/gate-dirty",
+    "codeGlobs": ["app/", "scripts/"],
+    "signals": [
+      { "name": "self-test del arnés", "command": ["node", "scripts/harness-selftest.mjs"], "why": "un hook roto o un config que apunta a la nada fallan en silencio" },
+      { "name": "link-check de docs", "command": ["node", "scripts/docs-linkcheck.mjs"], "why": "mover un doc rompe punteros de la memoria del agente" },
+      { "name": "lint de convenciones", "command": ["node", "scripts/repo-lint.mjs"], "why": "las reglas de este repo que ruff no conoce" },
+      { "name": "ruff", "command": ["ruff", "check", "."], "why": "estilo y errores comunes; barato y atrapa clases enteras de error" },
+      { "name": "mypy", "command": ["mypy", "app"], "why": "ruff no verifica tipos: un contrato roto entre módulos pasa el lint entero" },
+      { "name": "pytest", "command": ["pytest", "-q", "--cov=app", "--cov-fail-under=80"], "why": "comportamiento, con el mismo umbral que exige CI" },
+      { "name": "migraciones al día", "command": ["python", "manage.py", "makemigrations", "--check", "--dry-run"], "skipIfMissing": "manage.py", "why": "un modelo cambiado sin su migración pasa todos los tests y revienta en el deploy" }
+    ]
+  },
+  "protectedPaths": [
+    { "pattern": "^\\.env", "reason": ".env* es la llave del reino: lo edita el humano." },
+    { "pattern": "^(poetry\\.lock|uv\\.lock|requirements\\.txt)$", "reason": "el lockfile lo genera el gestor; editarlo a mano desincroniza el entorno de todos." },
+    { "pattern": "^\\.git/", "reason": "historia de git: fuera del alcance del agente." },
+    { "pattern": "migrations/\\d{4}_.*\\.py$", "reason": "una migración ya aplicada es inmutable: se corrige con una migración NUEVA, no editando la vieja." },
+    { "pattern": "^(\\.venv|__pycache__|\\.pytest_cache|htmlcov)/", "reason": "derivados: se regeneran." }
+  ],
+  "bash": {
+    "deny": [
+      { "pattern": "--no-ver[i]fy", "reason": "saltarse la verificación está prohibido: si el gate estorba, se arregla el gate." },
+      { "pattern": "git\\s+reset\\s+--hard", "reason": "destruye trabajo sin commitear." },
+      { "pattern": "\\bpip\\s+install\\b(?![^|;&]*-r\\s)", "reason": "instalar suelto rompe la reproducibilidad: agregá la dependencia al manifiesto y reinstalá desde ahí." },
+      { "pattern": "manage\\.py\\s+(flush|sqlflush|reset_db)", "reason": "vacía la base. Backup y confirmación explícita del humano." },
+      { "pattern": "\\balembic\\s+downgrade\\b", "reason": "revertir migraciones puede perder datos. Confirmación explícita." },
+      { "pattern": "DROP\\s+(TABLE|DATABASE|SCHEMA)", "reason": "DDL destructivo desde el shell del agente: va por migración revisada, nunca a mano." }
+    ]
+  },
+  "reuse": [
+    {
+      "pattern": "(requests|httpx)\\.(get|post|put|delete)\\(",
+      "appliesTo": "^app/(?!clients/)",
+      "reason": "las llamadas HTTP salientes viven en `app/clients/` con timeout, reintentos y trazas. Una llamada suelta no tiene timeout y cuelga el worker.",
+      "see": "app/clients/__init__.py"
+    }
+  ],
+  "lint": { "command": ["node", "scripts/repo-lint.mjs"], "fileFlag": "--file" },
+  "purity": [
+    {
+      "dir": "app/domain",
+      "forbiddenImports": ["django", "fastapi", "sqlalchemy", "requests", "httpx"],
+      "except": [],
+      "reason": "el dominio no conoce framework ni red: así se testea sin base de datos y sobrevive al próximo framework."
+    }
+  ],
+  "forbiddenDeps": { "manifest": "pyproject.toml", "packages": [], "reason": "" },
+  "patterns": [
+    { "id": "PRINT", "pattern": "^\\s*print\\(", "appliesTo": "^app/(?!.*tests?/)", "message": "print() no llega a los logs estructurados en producción. Usá el logger del proyecto." },
+    { "id": "EXCEPT", "pattern": "except\\s*:|except\\s+Exception\\s*:\\s*(pass|\\.\\.\\.)", "appliesTo": "^app/", "message": "un except desnudo se traga errores de programación y los vuelve invisibles. Capturá la excepción concreta." },
+    { "id": "ASSERT", "pattern": "^\\s*assert\\s", "appliesTo": "^app/(?!.*tests?/)", "message": "los assert desaparecen con -O: no sirven como validación en producción. Levantá la excepción del dominio." },
+    { "id": "MUTABLE", "pattern": "def\\s+\\w+\\([^)]*=\\s*(\\[\\]|\\{\\})", "appliesTo": "^app/", "message": "un default mutable se comparte entre llamadas: el bug clásico que aparece recién en producción. Usá None y creá el valor dentro." }
+  ],
+  "tests": { "filePattern": "(^|/)tests?/|(^|/)test_[^/]*\\.py$|_test\\.py$", "onlyPattern": "@pytest\\.mark\\.only" },
+  "incidents": { "file": "docs/gotchas.md", "heading": "### GOTCHA", "requiredLines": ["Síntoma:", "Causa:", "Regla:", "Mecanismo:"] },
+  "docs": { "ignore": [".git", ".venv", "__pycache__", "htmlcov", "dist", "build"], "ignoreFiles": [], "externalPaths": [] },
+  "status": { "file": "STATUS.md" },
+  "sdd": { "kit": "ninguno", "skillRoots": ["~/.claude/skills", ".claude/skills"], "phases": [], "routes": [] }
+}

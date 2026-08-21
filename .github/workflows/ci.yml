@@ -1,0 +1,21 @@
+# CI corre EL MISMO gate que el humano y que el agente. Si CI verifica algo
+# distinto de lo que verifica el desarrollador, una de las dos señales miente.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      # Sin `npm ci`: el arnés no tiene dependencias a propósito (node + bash).
+      - name: gate
+        run: npm run gate

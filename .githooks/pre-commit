@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+# Pre-commit real (no .sample): si la integridad depende de disciplina humana, no es un gate.
+# Instalación: npm run hooks:install  (setea core.hooksPath=.githooks)
+#
+# Genérico: las rutas protegidas y el lint salen de `.claude/harness.config.json`.
+#
+# Barato a propósito — el gate completo vive en scripts/gate.sh y en CI. Aquí sólo lo que
+# no puede entrar al historial de ninguna manera.
+set -uo pipefail
+
+CONFIG=".claude/harness.config.json"
+[ -f "$CONFIG" ] && command -v node >/dev/null 2>&1 || exit 0
+
+STAGED=$(git diff --cached --name-only --diff-filter=ACM)
+[ -z "$STAGED" ] && exit 0
+
+FAILED=0
+
+# 1. Rutas protegidas: secretos y artefactos derivados nunca se commitean.
+#    Los patrones son los del arnés: una sola definición, dos ejecutores (hook del agente y git).
+#
+#    Excepción: las reglas con `agentOnly: true` protegen el archivo de la EDICIÓN por el
+#    agente, no de existir en el repo (una guía que se enmienda a conciencia, un documento
+#    de gobernanza). Bloquear su commit haría imposible crearlo.
+PROTECTED=$(node -e '
+const fs = require("fs");
+const c = JSON.parse(fs.readFileSync(".claude/harness.config.json", "utf8"));
+const rules = (c.protectedPaths || []).filter(r => !r.agentOnly).map(r => { try { return new RegExp(r.pattern); } catch { return null; } }).filter(Boolean);
+const staged = fs.readFileSync(0, "utf8").split("\n").filter(Boolean);
+for (const f of staged) if (rules.some(r => r.test(f))) console.log(f);
+' <<< "$STAGED")
+
+if [ -n "$PROTECTED" ]; then
+  echo "pre-commit: ruta protegida en el commit:"
+  echo "$PROTECTED" | sed 's/^/  - /'
+  FAILED=1
+fi
+
+# 2. Lint de convenciones sobre los archivos staged.
+LINT=$(node -p 'JSON.parse(require("fs").readFileSync(".claude/harness.config.json","utf8")).lint.command.join(" ")' 2>/dev/null)
+FILEFLAG=$(node -p 'JSON.parse(require("fs").readFileSync(".claude/harness.config.json","utf8")).lint.fileFlag || "--file"' 2>/dev/null)
+if [ -n "$LINT" ]; then
+  for file in $STAGED; do
+    [ -f "$file" ] || continue
+    # shellcheck disable=SC2086
+    $LINT "$FILEFLAG" "$file" >/dev/null || FAILED=1
+  done
+  if [ "$FAILED" -eq 1 ]; then
+    echo "pre-commit: corré \`$LINT\` para ver el detalle."
+  fi
+fi
+
+if [ "$FAILED" -ne 0 ]; then
+  echo ""
+  echo "Commit abortado. Saltarse la verificación está prohibido: si el gate estorba, se arregla el gate."
+  exit 1
+fi
+
+exit 0

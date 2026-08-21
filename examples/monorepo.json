@@ -1,0 +1,62 @@
+{
+  "$comment": "Monorepo con varios paquetes. Dos decisiones propias: (1) el gate corre las señales del workspace completo — un gate por paquete deja pasar las roturas entre paquetes, que son las caras; (2) `skipIfMissing` para las señales de paquetes opcionales, así el mismo config sirve en un clon parcial (sparse checkout).",
+  "gate": {
+    "command": "pnpm gate",
+    "fastCommand": "pnpm gate:fast",
+    "marker": ".git/gate-dirty",
+    "codeGlobs": ["packages/", "apps/", "scripts/", ".claude/hooks/"],
+    "signals": [
+      { "name": "self-test del arnés", "command": ["node", "scripts/harness-selftest.mjs"], "why": "un hook roto falla en silencio: ninguna otra señal lo ve" },
+      { "name": "link-check de docs", "command": ["node", "scripts/docs-linkcheck.mjs"], "why": "en un monorepo los docs se mueven de paquete y los punteros quedan colgando" },
+      { "name": "lint de convenciones", "command": ["node", "scripts/repo-lint.mjs"], "why": "las reglas de frontera entre paquetes que ningún linter conoce" },
+      { "name": "grafo de dependencias sin ciclos", "command": ["npx", "syncpack", "list-mismatches"], "why": "dos paquetes con versiones distintas de la misma dependencia rompen en runtime, no en build" },
+      { "name": "typecheck del workspace", "command": ["npx", "tsc", "--build"], "why": "la rotura cara del monorepo es entre paquetes: sólo el build de proyectos la ve" },
+      { "name": "tests del workspace", "command": ["pnpm", "-r", "test"], "why": "comportamiento de todos los paquetes; correr sólo el paquete tocado deja pasar a sus consumidores" },
+      { "name": "e2e de la app web", "command": ["pnpm", "--filter", "web", "test:e2e"], "skipIfMissing": "apps/web", "fastSkip": true, "why": "el flujo completo que ningún test unitario cubre; se omite si el clon no trajo la app" },
+      { "name": "build de todo", "command": ["pnpm", "-r", "build"], "fastSkip": true, "why": "un paquete publicable puede compilar en dev y fallar al empaquetar" }
+    ]
+  },
+  "protectedPaths": [
+    { "pattern": "^\\.env", "reason": ".env* es la llave del reino: lo edita el humano." },
+    { "pattern": "^pnpm-lock\\.yaml$", "reason": "el lockfile del workspace lo regenera pnpm; editarlo a mano rompe la resolución de todos los paquetes." },
+    { "pattern": "^pnpm-workspace\\.yaml$", "reason": "agregar o mover un paquete cambia la topología del repo: es decisión del equipo, con su PR." },
+    { "pattern": "^\\.git/", "reason": "historia de git: fuera del alcance del agente." },
+    { "pattern": "^(node_modules|dist|build|coverage)/|/(node_modules|dist|build)/", "reason": "derivados y dependencias en cualquier nivel del workspace." }
+  ],
+  "bash": {
+    "deny": [
+      { "pattern": "--no-ver[i]fy", "reason": "saltarse la verificación está prohibido: si el gate estorba, se arregla el gate." },
+      { "pattern": "git\\s+reset\\s+--hard", "reason": "destruye trabajo sin commitear." },
+      { "pattern": "pnpm\\s+(-r|--recursive)\\s+.*\\b(publish|exec\\s+rm)\\b", "reason": "una acción recursiva sobre todos los paquetes es irreversible: listá los paquetes afectados y pedí confirmación." },
+      { "pattern": "\\bchangeset\\s+publish\\b", "reason": "publicar es irreversible: lo hace CI desde un tag, no el agente." },
+      { "pattern": "\\bsed\\s+(-[a-zA-Z]*\\s+)*-i\\b.*\\b(packages|apps)\\b", "reason": "edición masiva in-place sobre varios paquetes a la vez: el incidente arquetípico." }
+    ]
+  },
+  "reuse": [
+    {
+      "pattern": "from\\s+['\"]\\.\\./\\.\\./(packages|apps)/",
+      "appliesTo": "^(packages|apps)/",
+      "reason": "un paquete no alcanza a otro por ruta relativa: se importa por su nombre de workspace, o el build de proyectos y el empaquetado se rompen.",
+      "see": "pnpm-workspace.yaml"
+    }
+  ],
+  "lint": { "command": ["node", "scripts/repo-lint.mjs"], "fileFlag": "--file" },
+  "purity": [
+    {
+      "dir": "packages/core",
+      "forbiddenImports": ["react", "next/", "express", "@repo/ui", "@repo/api"],
+      "except": [],
+      "reason": "core es la base de la que dependen los demás: si importa hacia arriba, el grafo de dependencias tiene un ciclo y el build deja de ser reproducible."
+    }
+  ],
+  "forbiddenDeps": { "manifest": "package.json", "packages": [], "reason": "" },
+  "patterns": [
+    { "id": "VERSIONFIJA", "pattern": "\"@repo/[a-z-]+\"\\s*:\\s*\"\\d", "appliesTo": "^(packages|apps)/[^/]+/package\\.json$", "message": "las dependencias internas se declaran con `workspace:*`. Una versión fija hace que el paquete resuelva contra el registro publicado en vez del código de este repo." },
+    { "id": "TESTEXTERNO", "pattern": "process\\.env\\.(CI|NODE_ENV)\\s*[!=]==?\\s*['\"]test", "appliesTo": "^(packages|apps)/(?!.*__tests__)", "message": "código que se comporta distinto en test hace que la suite verifique un programa que nunca corre en producción. Inyectá la dependencia en su lugar." }
+  ],
+  "tests": { "filePattern": "(^|/)__tests__/|\\.(test|spec)\\.[cm]?[jt]sx?$", "onlyPattern": "\\b(describe|it|test)\\.only\\(" },
+  "incidents": { "file": "docs/gotchas.md", "heading": "### GOTCHA", "requiredLines": ["Síntoma:", "Causa:", "Regla:", "Mecanismo:"] },
+  "docs": { "ignore": ["node_modules", ".git", "dist", "build", "coverage", ".turbo"], "ignoreFiles": [], "externalPaths": [] },
+  "status": { "file": "STATUS.md" },
+  "sdd": { "kit": "ninguno", "skillRoots": ["~/.claude/skills", ".claude/skills"], "phases": [], "routes": [] }
+}

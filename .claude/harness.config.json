@@ -1,0 +1,192 @@
+{
+  "$comment": "ÚNICO archivo específico del repo. Los hooks y los scripts de este arnés son genéricos: leen de aquí. Portar el arnés a otro proyecto = reescribir este archivo (ver docs/portar.md y examples/). Referencia de cada clave: docs/config-reference.md.",
+
+  "gate": {
+    "$comment": "El gate es la única definición de «entregable». `signals` lo hace declarativo: scripts/gate.sh no sabe de stacks, ejecuta esta lista en orden. `fastSkip: true` = la señal se omite en modo fast (típicamente el build). `skipIfMissing` = ruta que, si no existe, reporta OMITIDO en vez de fallar (herramienta local no instalada, CI sin índice).",
+    "command": "npm run gate",
+    "fastCommand": "npm run gate:fast",
+    "marker": ".git/gate-dirty",
+    "codeGlobs": ["scripts/", ".claude/hooks/"],
+    "signals": [
+      {
+        "name": "self-test del arnés",
+        "command": ["node", "scripts/harness-selftest.mjs"],
+        "why": "un hook roto o un config que apunta a la nada fallan en silencio: ninguna otra señal los ve"
+      },
+      {
+        "name": "link-check de docs",
+        "command": ["node", "scripts/docs-linkcheck.mjs"],
+        "why": "mover un archivo rompe punteros de la memoria del agente que nadie más mira"
+      },
+      {
+        "name": "lint de convenciones",
+        "command": ["node", "scripts/repo-lint.mjs"],
+        "why": "las reglas del repo que ningún compilador ve, con un comando que falla"
+      }
+    ]
+  },
+
+  "protectedPaths": [
+    { "pattern": "^\\.env", "reason": ".env* es la llave del reino: lo edita el humano, nunca el agente." },
+    { "pattern": "^package-lock\\.json$", "reason": "el lockfile se regenera con `npm install`, no se edita a mano." },
+    { "pattern": "^\\.git/", "reason": "historia de git: fuera del alcance del agente." },
+    { "pattern": "^node_modules/", "reason": "dependencias: se cambian por manifiesto + install." },
+    {
+      "pattern": "^docs/buenas-practicas\\.md$",
+      "agentOnly": true,
+      "reason": "guía origen: se enmienda a conciencia, en su propio commit, no como efecto colateral de otra tarea."
+    }
+  ],
+
+  "bash": {
+    "deny": [
+      { "pattern": "--no-ver[i]fy", "reason": "saltarse los hooks de verificación está prohibido. Si el gate estorba, se arregla el gate." },
+      { "pattern": "git\\s+push\\s+.*--force(?!-with-lease)", "reason": "`--force` reescribe historia remota. Usá --force-with-lease y pedí confirmación." },
+      { "pattern": "git\\s+reset\\s+--hard", "reason": "`reset --hard` destruye trabajo sin commitear. Usá `git stash` o pedí confirmación." },
+      { "pattern": "git\\s+checkout\\s+--\\s+\\.", "reason": "descarta todos los cambios del working tree. Pedí confirmación explícita." },
+      { "pattern": "git\\s+clean\\s+-[a-z]*f", "reason": "borra archivos no rastreados. Dry-run primero: `git clean -n`." },
+      { "pattern": "git\\s+add\\s+(\\.|-A|--all)(\\s|$)", "reason": "`git add .` arrastra artefactos y secretos. Agregá archivos por nombre." },
+      { "pattern": "\\bsed\\s+(-[a-zA-Z]*\\s+)*-i\\b.*\\b(src|lib|scripts|app)\\b", "reason": "edición masiva in-place sobre fuente: el incidente arquetípico. Usá Edit/Write, o commit + dry-run antes." },
+      { "pattern": "\\bperl\\s+-[a-zA-Z]*i\\b.*\\b(src|lib|scripts|app)\\b", "reason": "edición masiva in-place sobre fuente. Usá Edit/Write." },
+      { "pattern": "rm\\s+-[a-zA-Z]*r[a-zA-Z]*f?\\s+[^|;&]*\\b(src|lib|docs|scripts|app|tests)\\b", "reason": "borrado recursivo de un directorio fuente. Listá primero y pedí confirmación." },
+      { "pattern": "\\bfind\\b[^|;&]*-delete", "reason": "`find -delete` borra sin mostrar. Corré el find sin -delete y confirmá la lista." },
+      { "pattern": "\\bcurl\\b[^|;&]*\\|\\s*(ba)?sh", "reason": "`curl | sh` ejecuta código remoto sin revisarlo. Bajá el script, leelo, después corrélo." }
+    ]
+  },
+
+  "reuse": [
+    {
+      "pattern": "readFileSync\\([^)]*harness\\.config\\.json",
+      "appliesTo": "^\\.claude/hooks/(?!harness\\.mjs)",
+      "reason": "la carga de config y las decisiones allow/deny ya están en `.claude/hooks/harness.mjs`. Un hook que lee el JSON por su cuenta duplica el manejo de errores y se desincroniza.",
+      "see": ".claude/hooks/harness.mjs"
+    }
+  ],
+
+  "lint": { "command": ["node", "scripts/repo-lint.mjs"], "fileFlag": "--file" },
+
+  "purity": [
+    {
+      "$comment": "Ejemplo real de este repo. En tu proyecto esto suele ser «src/lib/ no importa React/Electron/Next»: la capa de lógica pura es lo único con cobertura exigida y lo que da estabilidad.",
+      "dir": ".claude/hooks",
+      "forbiddenImports": ["node:child_process", "child_process"],
+      "except": [".claude/hooks/post-edit-check.mjs", ".claude/hooks/session-start.mjs"],
+      "reason": "un hook que lanza procesos cuesta latencia en CADA edición o en CADA prompt. Las dos excepciones están declaradas: post-edit-check (corre el lint del archivo tocado) y session-start (lee el estado de git una vez por sesión)."
+    }
+  ],
+
+  "forbiddenDeps": {
+    "$comment": "Dependencias que este proyecto decidió NO tener. Acá la lista está vacía a propósito y el freno es el campo `dependencies`: el arnés corre con node y bash desnudos, que es lo que lo hace copiable en cualquier repo.",
+    "manifest": "package.json",
+    "packages": ["chalk", "commander", "yargs", "eslint", "glob"],
+    "reason": "el arnés debe correr con node y bash solamente: una dependencia lo vuelve inportable."
+  },
+
+  "singleSource": [
+    {
+      "$comment": "Generalización de la regla NOTACION del proyecto origen: un registro es la única fuente de verdad y nadie cablea sus literales fuera de él. `allow` es DEUDA DECLARADA y sólo puede achicarse.",
+      "id": "EVENTOS",
+      "source": ".claude/settings.json",
+      "literals": ["SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "Stop", "SubagentStop", "PreCompact"],
+      "appliesTo": "^\\.claude/hooks/.*\\.mjs$",
+      "allow": [],
+      "reason": "los nombres de evento de Claude Code se declaran en `.claude/settings.json`; un hook no decide en qué evento corre."
+    }
+  ],
+
+  "invariants": [
+    {
+      "$comment": "Generalización de la regla WEBGPU: un archivo que TIENE que conservar ciertas líneas y no puede contener otras.",
+      "file": ".claude/hooks/harness.mjs",
+      "required": ["process.exit(2)", "process.exit(0)"],
+      "forbidden": ["process.exit(1)"],
+      "reason": "el contrato de hooks de Claude Code: exit 0 = seguir, exit 2 = bloquear (stderr es lo que lee el agente). Un exit(1) es un error del hook, no una decisión, y no bloquea nada."
+    }
+  ],
+
+  "patterns": [
+    {
+      "$comment": "El marcador exige `:` o `(` justo después. Sin eso, la regla cazaba la palabra española «TODO» en los comentarios del propio arnés: el caso de manual de un freno que muerde de más (ver P3 y docs/gotchas.md).",
+      "id": "TODO",
+      "pattern": "\\b(TODO|FIXME|XXX)(:|\\((?!#))",
+      "appliesTo": "^(scripts|\\.claude/hooks)/.*\\.mjs$",
+      "message": "un TODO sin issue es deuda invisible. Escribí `TODO(#N)` o resolvelo: el arnés no acumula pendientes anónimos."
+    },
+    {
+      "id": "CONSOLE",
+      "pattern": "console\\.log\\(",
+      "appliesTo": "^\\.claude/hooks/.*\\.mjs$",
+      "message": "en un hook, stdout ES la interfaz con el agente (UserPromptSubmit y SessionStart inyectan su stdout al contexto). Usá `allow(mensaje)` / `deny(mensaje)` de harness.mjs."
+    }
+  ],
+
+  "tests": {
+    "$comment": "El freno clásico: un `.only(` olvidado apaga la suite entera en silencio y el gate sale verde.",
+    "filePattern": "(^|/)(__tests__|tests?)/|\\.(test|spec)\\.[cm]?[jt]sx?$",
+    "onlyPattern": "\\b(describe|it|test)\\.only\\("
+  },
+
+  "incidents": {
+    "$comment": "P12: cada incidente deja infraestructura. Lo verificable por máquina es que el registro no se degrade a anécdota: todo gotcha dice síntoma, causa, regla y —lo que importa— el MECANISMO que la hace cumplir.",
+    "file": "docs/gotchas.md",
+    "heading": "### GOTCHA",
+    "requiredLines": ["Síntoma:", "Causa:", "Regla:", "Mecanismo:"]
+  },
+
+  "docs": {
+    "$comment": "`proseRoots` son las raíces de este repo que el link-check verifica cuando aparecen citadas en prosa. Una raíz que NO está acá no se verifica — y por eso las guías pueden citar `src/lib/...` como EJEMPLO de otro repo sin que el gate mienta.",
+    "proseRoots": ["docs", "scripts", "examples", "plantillas", ".claude", ".github", ".githooks"],
+    "ignore": ["node_modules", ".git", "build", "dist", "coverage", "out"],
+    "ignoreFiles": ["docs/buenas-practicas.md", "plantillas/CONSTITUTION.md", "plantillas/CLAUDE.md", "plantillas/STATUS.md", "plantillas/gotchas.md", "plantillas/ADR.md"],
+    "externalPaths": []
+  },
+
+  "status": { "file": "STATUS.md" },
+
+  "sdd": {
+    "$comment": "Ruta SDD. `phases` son skills que tienen que existir en `skillRoots` (en CI se reporta omitido, nunca «pasó»). Si tu equipo no usa un kit SDD, dejá `phases: []` y quedate con `routes`: el valor está en el ruteo.",
+    "kit": "ninguno",
+    "skillPrefix": "",
+    "skillRoots": ["~/.claude/skills", ".claude/skills"],
+    "phases": [],
+    "specsDir": "specs",
+    "activeFeaturePointer": "",
+    "routes": [
+      {
+        "route": "sdd",
+        "patterns": [
+          "\\bnueva (feature|funcionalidad|pantalla|vista)\\b",
+          "\\b(feature|módulo|modulo) nuev[oa]\\b",
+          "\\bepic\\b",
+          "\\bmvp\\b",
+          "\\bhistorias de usuario\\b",
+          "\\breescrib(ir|e)\\b",
+          "\\brearquitect",
+          "\\bmigrar (el|la|todo)\\b",
+          "\\bnuevo (endpoint|servicio|comando)\\b"
+        ],
+        "message": "Pedido de tamaño FEATURE → ruta SDD (docs/sdd.md): spec, plan y tareas antes de tocar producción. Si decidís saltarla, declaralo en una línea con el porqué — el silencio es un hallazgo de review."
+      },
+      {
+        "route": "bugfix",
+        "patterns": ["\\bbug\\b", "\\bfalla\\b", "\\bno funciona\\b", "\\bse rompe\\b", "\\berror en\\b", "\\bregresi[óo]n\\b"],
+        "message": "Falla sobre algo que ya existe → test rojo que la reproduzca ANTES de tocar producción."
+      },
+      {
+        "route": "clarify",
+        "patterns": ["\\bno s[ée] si\\b", "\\balgo as[íi]\\b", "\\bcomo veas\\b", "\\bmejorar (todo|esto)\\b", "\\bhacelo mejor\\b"],
+        "message": "Pedido ambiguo → preguntá UNA sola cosa antes de tocar archivos."
+      },
+      {
+        "route": "arnes",
+        "patterns": ["\\bhook\\b", "\\bgate\\b", "\\barn[ée]s\\b", "\\bregla de lint\\b", "\\bsubagente\\b"],
+        "message": "Cambio del arnés → la especificidad va en `.claude/harness.config.json`, NO en el código de los hooks ni de los scripts. Si hace falta código nuevo, agregá también su caso al self-test: un freno sin prueba de vida es decorativo."
+      },
+      {
+        "route": "none",
+        "patterns": ["\\btypo\\b", "\\bcopy\\b", "\\brenombrar\\b", "\\bformatear\\b", "\\bdocumentar\\b", "\\bexplicame\\b", "\\bqu[ée] hace\\b", "\\bauditar?\\b"],
+        "message": ""
+      }
+    ]
+  }
+}
