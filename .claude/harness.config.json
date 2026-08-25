@@ -418,5 +418,13 @@
     "directRequestPatterns": [
       "\\b(pod[eé]s|puedes|podr[ií]as|te pido|por favor|necesito que|quiero que)\\b"
     ]
+  },
+  "branches": {
+    "$comment": "Ramas donde el trabajo entra por pull request. `.githooks/pre-push` falla ANTES de la red con el motivo y la salida; la protección del lado del servidor (GitHub/GitLab/Azure) es el freno fuerte y hay que activarla igual — este es el complemento local, que funciona con cualquier forja o sin ninguna.",
+    "protected": [
+      "main",
+      "master"
+    ],
+    "reason": "el trabajo entra por pull request, con su revisión y su gate en verde. Un push directo entra sin que nadie lo mire."
   }
 }

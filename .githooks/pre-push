@@ -1,0 +1,72 @@
+#!/usr/bin/env bash
+# pre-push — el trabajo entra a las ramas protegidas por PR, no de un empujón.
+#
+# Por qué existe: el flujo de PR suele ser una convención del equipo —se ve en el
+# historial, «Merge pull request #N»— y nada la hace cumplir del lado de quien
+# empuja. Un push directo a main entra sin revisión y sin que nadie se entere
+# hasta que aparece en el historial.
+#
+# La protección del lado del servidor (GitHub, GitLab, Azure) es el freno fuerte y
+# hay que activarla. Este hook es el complemento local: falla ANTES de la red, con
+# el motivo y el comando para salir del paso, y funciona igual con cualquier forja
+# o sin ninguna.
+#
+# Las ramas se declaran en `.claude/harness.config.json` → `branches.protected`.
+# Sin esa clave, el hook no hace nada.
+#
+# Instalación: git config core.hooksPath .githooks
+set -uo pipefail
+
+CONFIG=".claude/harness.config.json"
+[ -f "$CONFIG" ] || exit 0
+command -v node >/dev/null 2>&1 || exit 0
+
+# git pasa por stdin una línea por ref: <ref local> <sha local> <ref remoto> <sha remoto>
+ENTRADA=$(cat)
+[ -z "$ENTRADA" ] && exit 0
+
+SALIDA=$(node -e '
+const fs = require("fs");
+const c = JSON.parse(fs.readFileSync(".claude/harness.config.json", "utf8"));
+const protegidas = (c.branches && c.branches.protected) || [];
+if (!protegidas.length) process.exit(0);
+
+const lineas = fs.readFileSync(0, "utf8").split("\n").filter(Boolean);
+const chocan = [];
+for (const l of lineas) {
+  const [, , refRemoto] = l.split(/\s+/);
+  if (!refRemoto) continue;
+  const rama = refRemoto.replace(/^refs\/heads\//, "");
+  if (protegidas.includes(rama)) chocan.push(rama);
+}
+if (!chocan.length) process.exit(0);
+
+const motivo = (c.branches && c.branches.reason) || "el trabajo entra por pull request, con su revisión y su gate en verde.";
+process.stderr.write(
+  [
+    `pre-push: \`${[...new Set(chocan)].join(", ")}\` es una rama protegida y estás empujando directo.`,
+    "",
+    `Motivo: ${motivo}`,
+    "",
+    "Salida, sin perder lo que ya commiteaste:",
+    "",
+    "  git switch -c <rama-con-nombre>   # la rama se crea DONDE ESTÁS, con tus commits",
+    "  git push -u origin <rama-con-nombre>",
+    "  # y abrí el PR con el CLI de tu forja",
+    "",
+    "Si el commit ya está en la rama protegida local, moverlo es:",
+    "  git switch -c <rama>  &&  git switch -  &&  git reset --keep @{u}",
+    "",
+    "Saltear el hook está prohibido: si el freno estorba, se arregla el freno.",
+  ].join("\n") + "\n",
+);
+process.exit(1);
+' <<< "$ENTRADA" 2>&1)
+CODIGO=$?
+
+if [ "$CODIGO" -ne 0 ]; then
+  echo "$SALIDA" >&2
+  exit 1
+fi
+
+exit 0

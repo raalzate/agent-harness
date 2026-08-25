@@ -19,6 +19,7 @@ lo que se supone va en "deuda conocida".
 | Reglas activas | `node scripts/repo-lint.mjs --rules` | verde — 1 capa de pureza · 5 deps vetadas · 1 registro · 1 archivo con invariantes · 2 patrones · registro de incidentes |
 | Los scripts del arnés parsean | incluido en el self-test | verde — `node --check` sobre los 5 `.mjs` de `scripts/`; el instalador viajó roto dos releases porque sólo se verificaban los hooks |
 | No se actúa sobre una pregunta | incluido en el self-test | verde — 8 pedidos reales por las dos direcciones (interrogación, pregunta sin signos, verbo en pasado, reporte sin imperativo · imperativo, orden corta, pedido directo) + escribir fuera del repo sigue permitido |
+| El trabajo entra por PR | incluido en el self-test | verde — `pre-push` frena el empujón directo a `main` y a `master`, y deja pasar una rama de feature. La protección del lado del servidor **no la verifica el gate** (necesita red): se activa a mano |
 | El trabajo queda registrado | incluido en el self-test | verde — 6 casos de `.githooks/commit-msg` en un repo git temporal, derivados del config: código sin referencia, con referencia, con la fuga y su motivo, la fuga pelada, extensión ignorada, y un merge |
 | Artefactos donde se declaró | `node scripts/artifacts-check.mjs` | verde — sin `specs/` porque el trabajo vive en el gestor; el cebo del self-test lo pone en rojo |
 | Gate completo | `npm run gate` | verde — 4 señales, ninguna omitida |

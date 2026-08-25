@@ -400,6 +400,25 @@ if (config.askFirst?.marker && hookFiles.has("ask-first.mjs") && hookFiles.has("
   else fs.rmSync(marker, { force: true });
 }
 
+// 3e-ter. El trabajo entra a las ramas protegidas por PR. Se prueba con la entrada que git
+//     le pasa de verdad al hook: «<ref local> <sha> <ref remoto> <sha>».
+if ((config.branches?.protected ?? []).length && fs.existsSync(abs(".githooks/pre-push"))) {
+  const empujar = (rama) =>
+    spawnSync("bash", [abs(".githooks/pre-push")], {
+      cwd: REPO_ROOT,
+      input: `refs/heads/${rama} aaa refs/heads/${rama} bbb\n`,
+      encoding: "utf8",
+    });
+  for (const rama of config.branches.protected) {
+    const r = empujar(rama);
+    if (r.status === 1) ok(`pre-push frena el empujón directo a \`${rama}\``);
+    else bad(`pre-push frena \`${rama}\``, `exit ${r.status}: el push directo pasa`);
+  }
+  const libre = empujar("feat/rama-de-prueba");
+  if (libre.status === 0) ok("pre-push deja pasar una rama de feature");
+  else bad("pre-push deja pasar una rama de feature", `exit ${libre.status}: el freno bloquea de más`);
+}
+
 // 3f. El trabajo queda registrado: `.githooks/commit-msg` en un repo git DE VERDAD.
 //     El hook lee `git diff --cached`, así que probarlo con payloads falsos no probaría
 //     nada. Los casos se derivan del config: la ruta de código sale de `commitMsg.codePattern`
