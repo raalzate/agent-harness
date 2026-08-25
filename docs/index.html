@@ -161,6 +161,12 @@ h1 .sub { display: block; font-family: var(--f-mono); font-weight: 500; font-siz
   @keyframes rise { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
 }
 
+ol.leyes { list-style: none; margin: 1.75rem 0 0; padding: 0; counter-reset: l; display: grid; gap: 0; grid-template-columns: minmax(0,1fr); border-top: 1px solid var(--rule-soft); }
+@media (min-width: 54rem) { ol.leyes { grid-template-columns: repeat(2, minmax(0,1fr)); column-gap: clamp(1.5rem, 4vw, 3rem); } }
+ol.leyes li { counter-increment: l; padding: .85rem 0; border-bottom: 1px solid var(--rule-soft); display: grid; grid-template-columns: 1.9rem minmax(0,1fr); gap: .75rem; color: var(--ink-soft); font-size: calc(var(--step-0) * .96); }
+ol.leyes li::before { content: counter(l, decimal-leading-zero); font-family: var(--f-mono); font-size: var(--step--1); color: var(--accent-ink); line-height: 1.7; }
+ol.leyes b { color: var(--ink); font-weight: 600; }
+
 /* ── Piezas ────────────────────────────────────────────────────────────── */
 .pieces { display: grid; gap: 1px; background: var(--rule-soft); border: 1px solid var(--rule-soft); border-radius: 3px; grid-template-columns: minmax(0, 1fr); margin-top: 1.75rem; }
 @media (min-width: 48rem) { .pieces { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
@@ -224,6 +230,7 @@ footer { border-top: 4px solid var(--ink); }
       <span class="name">Agent&nbsp;Harness</span>
       <nav>
         <a href="#tesis">Tesis</a>
+        <a href="#leyes">Método</a>
         <a href="#piezas">Piezas</a>
         <a href="#freno">Un freno</a>
         <a href="#registro">Registro</a>
@@ -279,6 +286,53 @@ footer { border-top: 4px solid var(--ink); }
       <p>Este repo no es una guía sobre eso. Es la infraestructura, y <strong>se audita a sí
         misma</strong>: su propio gate son las señales del arnés. Un repo de buenas prácticas que no
         las cumple no convence a nadie.</p>
+    </div>
+  </div>
+</section>
+
+<section id="leyes">
+  <div class="wrap sec-inner">
+    <p class="rail"><b>10</b>leyes, cada una con su cicatriz</p>
+    <div>
+      <div class="col stack">
+        <p class="eyebrow">El método</p>
+        <h2 style="font-size:var(--step-2)">Diez leyes que salieron de aplicarlo, no de diseñarlo</h2>
+        <p>Ninguna es una opinión de diseño: cada una tiene un incidente detrás y un comando que la
+          hace cumplir. Las cuatro primeras son las que más seguido faltan.</p>
+      </div>
+
+      <ol class="leyes">
+        <li><b>Una regla sin un comando que la haga fallar es una sugerencia.</b> La mitad de la
+          documentación de un repo típico no son reglas: son deseos.</li>
+        <li><b>Toda señal declara qué error atrapa que ninguna otra atrapa.</b> Sin ese motivo
+          escrito, cuando el gate tarde se saca lo último que alguien agregó, no lo que menos vale.</li>
+        <li><b>Omitido no es verde.</b> La herramienta que no está instalada, el paso saltado: todos
+          tienen la misma tentación y producen la misma mentira.</li>
+        <li><b>Todo freno se prueba en dos direcciones:</b> que muerda, y que <em>no muerda de
+          más</em>. La segunda decide si el arnés sobrevive seis meses.</li>
+        <li><b>La especificidad va en datos, no en código.</b> Portar el arnés tiene que ser
+          reescribir un archivo, no reescribir scripts.</li>
+        <li><b>El freno se prueba con el eslabón real.</b> Hook ejecutado de verdad, repo git de
+          verdad — o es «instalado y muerto».</li>
+        <li><b>Lo que se decide, se declara; lo que se declara, se verifica.</b> Vale para la deuda,
+          las exenciones y dónde viven los artefactos.</li>
+        <li><b>El registro es un freno, no una convención.</b> El agente es rápido: termina cuatro
+          cambios antes de que nadie abra un ítem de trabajo.</li>
+        <li><b>La memoria del agente es infraestructura.</b> Un puntero roto gasta el turno; una
+          lista incompleta lo hace trabajar con información falsa sin que nada falle.</li>
+        <li><b>Cada incidente deja infraestructura.</b> El problema no termina cuando el síntoma
+          desaparece: termina cuando existe el comando que falla si alguien lo repite.</li>
+      </ol>
+
+      <div class="col cta-box">
+        <p class="eyebrow">Las dos lecturas que importan</p>
+        <p style="margin-top:.6rem"><a href="https://github.com/raalzate/agent-harness/blob/main/docs/metodo.md"><strong>El método</strong></a>
+          — el ciclo completo, las diez leyes con su mecanismo, y las tres preguntas con las que se
+          mide si se está aplicando.<br>
+          <a href="https://github.com/raalzate/agent-harness/blob/main/docs/caso-de-estudio.md"><strong>El caso de estudio</strong></a>
+          — el mismo método sobre un producto real y público: 8 señales del gate, 14 reglas de lint,
+          17 incidentes registrados… y los cuatro huecos que ese repo declara que no cubre.</p>
+      </div>
     </div>
   </div>
 </section>

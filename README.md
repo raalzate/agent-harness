@@ -11,6 +11,10 @@ pasada, con el transcript del gate y sus tres veredictos.
 
 > **La frase que resume todo:** una regla sin un comando que la haga fallar es una sugerencia.
 
+Este repo documenta **el método** de ingeniería de arnés ([docs/metodo.md](docs/metodo.md)), lo
+muestra aplicado sobre un producto real ([docs/caso-de-estudio.md](docs/caso-de-estudio.md)), y
+entrega los mecanismos listos para copiar.
+
 Este repo se audita a sí mismo: su propio gate son las señales del arnés. Un repo de buenas
 prácticas que no las cumple no convence a nadie.
 
@@ -89,7 +93,9 @@ fuerte disponible —test > hook/lint > comando > markdown— y esa mejora pasa 
 
 | Si querés… | Leé |
 |---|---|
-| entender la idea completa | [docs/buenas-practicas.md](docs/buenas-practicas.md) — la guía de fondo, agnóstica de stack |
+| entender el método | [docs/metodo.md](docs/metodo.md) — el ciclo y las diez leyes, cada una con su cicatriz |
+| ver el método aplicado, con números | [docs/caso-de-estudio.md](docs/caso-de-estudio.md) — un arnés real, incluida su deuda |
+| la teoría de fondo | [docs/buenas-practicas.md](docs/buenas-practicas.md) — agnóstica de stack |
 | instalarlo hoy | [docs/portar.md](docs/portar.md) |
 | saber qué hace cada clave del config | [docs/config-reference.md](docs/config-reference.md) |
 | copiar una config que ya funciona | [examples/](examples/README.md) |
