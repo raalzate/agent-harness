@@ -5,7 +5,7 @@
 método de trabajo**, las leyes que lo gobiernan, y cómo se sabe si se está aplicando o sólo se
 está hablando de él.
 
-Cada ley de acá salió de aplicar el método y ver qué pasaba cuando faltaba. No son opiniones de
+Cada una de las once leyes salió de aplicar el método y ver qué pasaba cuando faltaba. No son opiniones de
 diseño: tienen una cicatriz y un mecanismo. La evidencia está en dos lugares —el
 [caso de estudio](caso-de-estudio.md) de un producto real, y este repo, que se audita a sí mismo—
 y se nombra en cada ley.
@@ -53,7 +53,7 @@ fallido. Sin este paso, "auto-mejora" es el agente reescribiendo sus propias reg
 
 ---
 
-## Las diez leyes
+## Las once leyes
 
 ### 1. Una regla sin un comando que la haga fallar es una sugerencia
 
@@ -152,7 +152,27 @@ porque no tiene síntoma.
 contra el disco: eso deja pasar archivos ignorados, verde local y rojo en CI) y que los documentos
 que enumeran señales las nombren todas.
 
-### 10. Cada incidente deja infraestructura
+### 10. Una pregunta se contesta; una acción se pide
+
+El arnés puede tener frenos para **qué** se toca, **cómo**, cuándo se cierra y si queda
+registrado, y aun así no tener ninguno para **si correspondía actuar**. Es la laguna más fácil de
+pasar por alto porque todos los demás frenos asumen que hay un cambio por delante: te dicen *cómo*
+encararlo, nunca *que no lo encares*.
+
+*Cómo se ve cuando falta:* preguntás si algo se hizo y el agente, en vez de contestar, se va a
+reescribir archivos. Cuesta trabajo revisar un cambio que nadie pidió, y cuesta confianza.
+*Mecanismo:* un hook de prompt clasifica el pedido y marca el turno cuando es informativo; un hook
+previo a la escritura deniega toda edición **dentro del repo** mientras el marcador esté puesto. Lo
+limpia el siguiente mensaje del humano: la fuga es humana a propósito. Escribir **fuera** del repo
+sigue permitido, porque un borrador es parte de contestar.
+
+El clasificador es lo único que separa este freno de un estorbo, así que se prueba con pedidos
+reales y en las dos direcciones. Tres desempates que costaron encontrar: un verbo de acción **en
+pasado** pregunta por lo hecho («¿aplicaste eso?»), una pregunta que **arranca** con interrogativo
+nombra el verbo como tema («cómo se instala»), y lo que vuelve orden a una pregunta es un **pedido
+directo** («¿podés…?»), no la mera presencia del verbo.
+
+### 11. Cada incidente deja infraestructura
 
 El cierre del ciclo. Un problema que costó tiempo no termina cuando el síntoma desaparece: termina
 cuando existe el comando que falla si alguien lo repite.

@@ -9,6 +9,7 @@
     "UserPromptSubmit": [
       {
         "hooks": [
+          { "type": "command", "command": "node .claude/hooks/ask-first.mjs" },
           { "type": "command", "command": "node .claude/hooks/sdd-router.mjs" },
           { "type": "command", "command": "node .claude/hooks/graph-first.mjs" }
         ]
@@ -18,6 +19,7 @@
       {
         "matcher": "Write|Edit|MultiEdit|NotebookEdit",
         "hooks": [
+          { "type": "command", "command": "node .claude/hooks/action-guard.mjs" },
           { "type": "command", "command": "node .claude/hooks/protected-paths.mjs" },
           { "type": "command", "command": "node .claude/hooks/reuse-guard.mjs" }
         ]

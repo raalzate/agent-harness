@@ -93,7 +93,7 @@ fuerte disponible —test > hook/lint > comando > markdown— y esa mejora pasa 
 
 | Si querés… | Leé |
 |---|---|
-| entender el método | [docs/metodo.md](docs/metodo.md) — el ciclo y las diez leyes, cada una con su cicatriz |
+| entender el método | [docs/metodo.md](docs/metodo.md) — el ciclo y las once leyes, cada una con su cicatriz |
 | ver el método aplicado, con números | [docs/caso-de-estudio.md](docs/caso-de-estudio.md) — un arnés real, incluida su deuda |
 | la teoría de fondo | [docs/buenas-practicas.md](docs/buenas-practicas.md) — agnóstica de stack |
 | instalarlo hoy | [docs/portar.md](docs/portar.md) |

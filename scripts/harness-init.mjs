@@ -49,6 +49,8 @@ const COPIAR = [
   ".claude/hooks/gate-stop.mjs",
   ".claude/hooks/session-start.mjs",
   ".claude/hooks/sdd-router.mjs",
+  ".claude/hooks/ask-first.mjs",
+  ".claude/hooks/action-guard.mjs",
   ".claude/hooks/graph-first.mjs",
   ".claude/settings.json",
   ".claude/agents/explorer.md",
@@ -136,7 +138,7 @@ Falta lo que ninguna herramienta puede adivinar — y es donde está el valor:
   4b. .claude/harness.config.json → tracker
      El patrón de referencia de TU forja (#123, AB#123, PROJ-123…). Copiar el de otro
      equipo hace que el freno nunca encuentre la referencia y todos escriban
-     `sin-issue:` como ritual. Ver docs/trazabilidad.md.
+     \`sin-issue:\` como ritual. Ver docs/trazabilidad.md.
 
   5. CONSTITUTION.md y STATUS.md: principios que este repo puede hacer cumplir HOY.
      Un principio BLOCKING sin comando que falle es un principio REVIEW mal etiquetado.

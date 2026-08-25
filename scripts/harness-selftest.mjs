@@ -131,6 +131,26 @@ for (const d of declared) {
   else ok(`${d.event} → ${d.file}`);
 }
 
+// 1b. Los SCRIPTS del arnés también tienen que parsear. Los hooks se verificaban desde el
+//     principio; los scripts no, y `harness-init.mjs` viajó roto en dos releases: un
+//     backtick sin escapar dentro de un template literal. Nadie lo notó porque el
+//     instalador no corre en el gate — sólo lo corre quien porta el arnés, una vez.
+section("1b. scripts del arnés");
+{
+  const dir = abs("scripts");
+  const scripts = fs.existsSync(dir) ? fs.readdirSync(dir).filter((f) => f.endsWith(".mjs")) : [];
+  if (!scripts.length) bad("scripts/", "no hay scripts: el arnés no tiene con qué verificar nada");
+  let rotos = 0;
+  for (const f of scripts) {
+    const res = spawnSync("node", ["--check", path.join(dir, f)], { encoding: "utf8" });
+    if (res.status !== 0) {
+      rotos += 1;
+      bad(`scripts/${f}`, res.stderr.trim().split("\n").slice(0, 3).join(" · "));
+    }
+  }
+  if (!rotos) ok(`${scripts.length} script(s) del arnés parsean`);
+}
+
 // ── 2. El config no apunta a la nada ─────────────────────────────────────────
 section("2. harness.config.json → rutas y regex");
 
@@ -265,6 +285,50 @@ if (hookFiles.has("gate-stop.mjs") && config.gate?.marker) {
   } finally {
     if (!existia) fs.rmSync(marker, { force: true });
   }
+}
+
+// 3e-bis. «Una pregunta se contesta; una acción se pide». El clasificador de intención es
+//     lo único que separa a este freno de un estorbo, así que se prueba en las dos
+//     direcciones con pedidos REALES, no con muestras derivadas de sus propios patrones.
+if (config.askFirst?.marker && hookFiles.has("ask-first.mjs") && hookFiles.has("action-guard.mjs")) {
+  const marker = abs(config.askFirst.marker);
+  const existia = fs.existsSync(marker);
+  const respaldo = existia ? fs.readFileSync(marker, "utf8") : null;
+
+  const edicionEnRepo = writeInput("docs/ejemplo-selftest.md", "x");
+  const tras = (prompt) => {
+    runHook("ask-first.mjs", { hook_event_name: "UserPromptSubmit", prompt });
+    return runHook("action-guard.mjs", edicionEnRepo).status === 2;
+  };
+
+  const casos = [
+    ["¿por qué el gate salió verde?", true],
+    ["qué hace el hook de registro", true],
+    ["cómo se instala en otro repo", true],
+    ["pero aplicaste eso a la documentación?", true],
+    ["hay problemas reportados, no hay frenos", true],
+    ["arreglá el diseño de la página", false],
+    ["dale, hacelo", false],
+    ["¿podés arreglar el diseño?", false],
+  ];
+  for (const [prompt, debeFrenar] of casos) {
+    const frena = tras(prompt);
+    if (frena === debeFrenar) ok(`ask-first: «${prompt.slice(0, 38)}» ${debeFrenar ? "frena" : "deja actuar"}`);
+    else bad(`ask-first: «${prompt.slice(0, 38)}»`, `esperaba ${debeFrenar ? "bloqueo" : "paso libre"} y no fue así`);
+  }
+
+  // Escribir FUERA del repo es parte de contestar (un borrador en el scratchpad).
+  runHook("ask-first.mjs", { hook_event_name: "UserPromptSubmit", prompt: "¿qué hace esto?" });
+  const fuera = runHook("action-guard.mjs", {
+    hook_event_name: "PreToolUse",
+    tool_name: "Write",
+    tool_input: { file_path: path.join(os.tmpdir(), "borrador.md"), content: "x" },
+  });
+  if (fuera.status === 0) ok("ask-first: escribir fuera del repo sigue permitido");
+  else bad("ask-first: escribir fuera del repo", `exit ${fuera.status}: el freno bloquea de más`);
+
+  if (respaldo !== null) fs.writeFileSync(marker, respaldo);
+  else fs.rmSync(marker, { force: true });
 }
 
 // 3f. El trabajo queda registrado: `.githooks/commit-msg` en un repo git DE VERDAD.

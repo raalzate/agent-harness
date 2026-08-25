@@ -298,11 +298,11 @@ footer { border-top: 4px solid var(--ink); }
 
 <section id="leyes">
   <div class="wrap sec-inner">
-    <p class="rail"><b>10</b>leyes, cada una con su cicatriz</p>
+    <p class="rail"><b>11</b>leyes, cada una con su cicatriz</p>
     <div>
       <div class="col stack">
         <p class="eyebrow">El método</p>
-        <h2 style="font-size:var(--step-2)">Diez leyes que salieron de aplicarlo, no de diseñarlo</h2>
+        <h2 style="font-size:var(--step-2)">Once leyes que salieron de aplicarlo, no de diseñarlo</h2>
         <p>Ninguna es una opinión de diseño: cada una tiene un incidente detrás y un comando que la
           hace cumplir. Las cuatro primeras son las que más seguido faltan.</p>
       </div>
@@ -326,6 +326,8 @@ footer { border-top: 4px solid var(--ink); }
           cambios antes de que nadie abra un ítem de trabajo.</li>
         <li><b>La memoria del agente es infraestructura.</b> Un puntero roto gasta el turno; una
           lista incompleta lo hace trabajar con información falsa sin que nada falle.</li>
+        <li><b>Una pregunta se contesta; una acción se pide.</b> El agente que responde una
+          consulta editando archivos cuesta trabajo de revisión y cuesta confianza.</li>
         <li><b>Cada incidente deja infraestructura.</b> El problema no termina cuando el síntoma
           desaparece: termina cuando existe el comando que falla si alguien lo repite.</li>
       </ol>
@@ -333,7 +335,7 @@ footer { border-top: 4px solid var(--ink); }
       <div class="col cta-box">
         <p class="eyebrow">Las dos lecturas que importan</p>
         <p style="margin-top:.6rem"><a href="https://github.com/raalzate/agent-harness/blob/main/docs/metodo.md"><strong>El método</strong></a>
-          — el ciclo completo, las diez leyes con su mecanismo, y las tres preguntas con las que se
+          — el ciclo completo, las once leyes con su mecanismo, y las tres preguntas con las que se
           mide si se está aplicando.<br>
           <a href="https://github.com/raalzate/agent-harness/blob/main/docs/caso-de-estudio.md"><strong>El caso de estudio</strong></a>
           — el mismo método sobre un producto real y público: 8 señales del gate, 14 reglas de lint,
@@ -367,8 +369,9 @@ footer { border-top: 4px solid var(--ink); }
         <div class="piece">
           <p class="mark">9 hooks del agente · 3 de git</p>
           <h3>Frenos en el ciclo</h3>
-          <p>Antes de escribir (rutas protegidas, reuso), antes de un comando irreversible, después de
-            cada edición (el lint del archivo tocado, con el error real) y al cerrar la tarea. En git:
+          <p>Antes de escribir (¿te lo pidieron?, rutas protegidas, reuso), antes de un comando
+            irreversible, después de cada edición (el lint del archivo tocado, con el error real) y
+            al cerrar la tarea. En git:
             rutas protegidas al commitear y <strong>el registro del trabajo</strong>.</p>
           <p class="solves">Evita: el agente que borra lo que no debía, el que dice «listo» sin
             verificar, y el cambio que llega al historial sin que nadie sepa por qué se hizo.</p>

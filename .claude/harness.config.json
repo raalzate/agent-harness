@@ -384,5 +384,31 @@
         "message": ""
       }
     ]
+  },
+  "askFirst": {
+    "$comment": "«Una pregunta se contesta; una acción se pide». `ask-first.mjs` marca el turno cuando el pedido es interrogativo Y no trae verbo de acción; `action-guard.mjs` deniega toda edición DENTRO del repo mientras el marcador esté puesto. Lo limpia el siguiente pedido del usuario: la fuga es humana a propósito. `pastPatterns` desempata el caso que originó el hook: un verbo de acción EN PASADO («¿aplicaste eso?») pregunta por lo hecho, no pide que se haga. La detección es ANGOSTA (interrogación explícita) porque un clasificador ancho bloquearía instrucciones legítimas — y un freno que muerde de más se desactiva a mano. Lo que NO caza está declarado en STATUS.md.",
+    "marker": ".git/agent-answer-first",
+    "questionPatterns": [
+      "^\\s*¿",
+      "\\?\\s*$",
+      "^\\s*(qu[eé]|por\\s?qu[eé]|c[oó]mo|cu[aá]l(es)?|cu[aá]ndo|d[oó]nde|qui[eé]n|para\\s?qu[eé])(?=\\s|$|[,:])",
+      "^\\s*(hay|existe|sirve|conviene|se puede|pod[eé]s|sab[eé]s|vale la pena)(?=\\s|$|[,:])"
+    ],
+    "actionPatterns": [
+      "\\b(arregl|corrig|implement|agreg|a[ñn]ad|cambi|escrib|cre[aá]|aplic|instal|port|actualiz|borr|elimin|quit|refactor|migr|public|commit|push|generá|genera|hacelo|haz|dale|proced)"
+    ],
+    "message": "Esto es una **pregunta**: contestala con lo que ya sabés o leyendo lo que haga falta. **No edites archivos del repo**: el hook `action-guard` los va a bloquear hasta el próximo pedido del humano.",
+    "pastPatterns": [
+      "\\b\\w+(aste|iste|aron|ieron|abas|amos|imos)(?=\\s|$|[,.?!])",
+      "\\b\\w+(ó|ió)(?=\\s|$|[,.?!])",
+      "\\b(hab[ií]as|hiciste|dejaste|qued[oó])(?=\\s|$|[,.?!])"
+    ],
+    "strongQuestionPatterns": [
+      "^\\s*¿",
+      "^\\s*(qu[eé]|por\\s?qu[eé]|c[oó]mo|cu[aá]l(es)?|cu[aá]ndo|d[oó]nde|qui[eé]n|para\\s?qu[eé])(?=\\s|$|[,:])"
+    ],
+    "directRequestPatterns": [
+      "\\b(pod[eé]s|puedes|podr[ií]as|te pido|por favor|necesito que|quiero que)\\b"
+    ]
   }
 }

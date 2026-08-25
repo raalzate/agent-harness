@@ -71,6 +71,32 @@ Regla:   el arnés **no escribe en el árbol de fuentes**. Para probar un freno 
 Mecanismo: el modo `--stdin` de `scripts/repo-lint.mjs`, y un caso del self-test que falla si
          quedaron archivos temporales en la raíz del repo.
 
+### GOTCHA: el instalador viajó roto en dos releases
+
+Síntoma: `node scripts/harness-init.mjs <repo>` moría con `SyntaxError: missing ) after argument
+         list`. El gate estaba verde y el archivo llevaba dos releases publicado así.
+Causa:   un texto entre backticks —\`sin-issue:\`— se agregó DENTRO de un template literal, y
+         cerró la cadena a mitad de camino. Y el gate no lo veía por dos motivos que se sumaron:
+         el self-test verificaba la sintaxis de los **hooks** pero no la de los **scripts**, y el
+         instalador no corre en el gate (lo corre quien porta el arnés, una vez).
+Regla:   todo script del arnés parsea, se ejecute o no en el gate. Y al insertar texto dentro de un
+         template literal, los backticks van escapados.
+Mecanismo: paso 1b del self-test — `node --check` sobre cada `.mjs` de `scripts/`. Probado
+         rompiendo el instalador a propósito: el self-test se pone rojo y nombra el archivo.
+
+### GOTCHA: el patrón que no casaba porque la palabra terminaba en acento
+
+Síntoma: un clasificador con el patrón `^\\s*(qu[eé]|c[oó]mo)\\b` no reconocía «qué hace esto»
+         ni «cómo se instala». El regex se veía correcto y el freno no mordía.
+Causa:   `\\b` se define sobre `\\w`, que es `[A-Za-z0-9_]`. Después de «qué» hay una «é»
+         —no es carácter de palabra— y el espacio tampoco: entre dos no-palabra **no hay límite**,
+         así que `\\b` falla. Con «que» sin tilde el mismo patrón funciona, que es lo que vuelve
+         al bug tan difícil de ver.
+Regla:   en texto en español, un patrón no termina en `\\b` después de una vocal acentuada: se
+         cierra con un lookahead explícito, `(?=\\s|$|[,:])`.
+Mecanismo: los ocho casos de `ask-first` en el self-test están escritos **con acentos reales** y en
+         las dos direcciones. Un patrón que vuelva a `\\b` los pone en rojo.
+
 ### GOTCHA: una palabra por línea en la lista publicada
 
 Síntoma: la lista de leyes salió publicada con el texto de cada ítem en columna —una palabra por

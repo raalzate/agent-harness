@@ -242,6 +242,36 @@ contestar "¿esto anda?". Sólo lo verificado con un comando; lo que se supone v
 
 ---
 
+## `askFirst` — no actuar sobre una pregunta
+
+```json
+{ "marker": ".git/agent-answer-first",
+  "questionPatterns": ["^\\s*¿", "\\?\\s*$"],
+  "strongQuestionPatterns": ["^\\s*(qu[eé]|c[oó]mo|cu[aá]l(es)?)(?=\\s|$|[,:])"],
+  "actionPatterns": ["\\b(arregl|aplic|agreg|cambi|implement)"],
+  "pastPatterns": ["\\b\\w+(aste|iste)(?=\\s|$|[,.?!])"],
+  "directRequestPatterns": ["\\b(pod[eé]s|por favor)\\b"],
+  "message": "…" }
+```
+
+Lo leen `ask-first.mjs` (marca el turno cuando el pedido es informativo) y `action-guard.mjs`
+(deniega toda edición dentro del repo mientras el marcador esté). El marcador lo limpia el
+siguiente pedido del humano.
+
+Los cuatro conjuntos de patrones son un **desempate**, y el orden importa:
+
+| Clave | Para qué |
+|---|---|
+| `questionPatterns` | ¿tiene forma de pregunta o de reporte? |
+| `actionPatterns` | ¿nombra un verbo de cambio? |
+| `pastPatterns` | …¿pero **en pasado**? Entonces pregunta por lo hecho: sigue siendo consulta |
+| `strongQuestionPatterns` | ¿**arranca** con interrogativo? Entonces el verbo es el tema, no la orden |
+| `directRequestPatterns` | ¿hay pedido directo («¿podés…?», «por favor»)? Entonces sí es orden |
+
+Escribir **fuera** del repo nunca se bloquea: un borrador en el scratchpad es parte de contestar.
+
+---
+
 ## `tracker` — el gestor de trabajo, sea cual sea
 
 ```json
@@ -332,6 +362,7 @@ calla — que es lo correcto: un hook que habla sin tener nada que ofrecer sólo
 | `tracker` | `.githooks/commit-msg`, `scripts/artifacts-check.mjs`, self-test |
 | `commitMsg` | `.githooks/commit-msg`, self-test |
 | `sdd` | `sdd-router.mjs`, self-test |
+| `askFirst` | `ask-first.mjs`, `action-guard.mjs`, self-test |
 | `postCommit` | `.githooks/post-commit` |
 | `graph` | `graph-first.mjs` |
 

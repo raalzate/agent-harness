@@ -38,8 +38,10 @@ Los hooks son **genéricos**: toda la especificidad del repo vive en
 | Momento | Hook | Qué hace |
 |---|---|---|
 | `SessionStart` | `session-start.mjs` | imprime rama, HEAD, cambios sin commitear y `STATUS.md`; avisa si el pre-commit no está instalado o si hay gate pendiente |
+| `UserPromptSubmit` | `ask-first.mjs` | si el pedido es informativo (pregunta, reporte sin imperativo), marca el turno: **no se actúa sobre una pregunta** |
 | `UserPromptSubmit` | `sdd-router.mjs` | clasifica el pedido (feature → ruta SDD, falla → test rojo primero, ambiguo → preguntar una cosa); se calla en lo trivial |
 | `UserPromptSubmit` | `graph-first.mjs` | si hay índice del repo construido, empuja a consultarlo antes de abrir archivos; callado si no existe |
+| `PreToolUse` Write\|Edit | `action-guard.mjs` | deniega editar dentro del repo mientras el turno esté marcado como informativo; lo limpia el próximo pedido del humano |
 | `PreToolUse` Write\|Edit | `protected-paths.mjs` | deniega editar lo que declara `protectedPaths` |
 | `PreToolUse` Write\|Edit | `reuse-guard.mjs` | bloquea boilerplate que ya tiene abstracción (`reuse`) |
 | `PreToolUse` Bash | `bash-guard.mjs` | deniega los comandos de `bash.deny` |
