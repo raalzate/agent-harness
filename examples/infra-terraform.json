@@ -4,36 +4,149 @@
     "command": "make gate",
     "fastCommand": "make gate-fast",
     "marker": ".git/gate-dirty",
-    "codeGlobs": ["modules/", "envs/", "scripts/"],
+    "codeGlobs": [
+      "modules/",
+      "envs/",
+      "scripts/"
+    ],
     "signals": [
-      { "name": "self-test del arnés", "command": ["node", "scripts/harness-selftest.mjs"], "why": "acá los frenos son lo único que separa un cambio de un incidente: si uno está roto, hay que saberlo antes" },
-      { "name": "link-check de docs", "command": ["node", "scripts/docs-linkcheck.mjs"], "why": "los runbooks que apuntan a la nada se descubren durante el incidente" },
-      { "name": "lint de convenciones", "command": ["node", "scripts/repo-lint.mjs"], "why": "las reglas de este repo (tags obligatorios, versiones fijadas) que terraform validate no conoce" },
-      { "name": "formato", "command": ["terraform", "fmt", "-check", "-recursive"], "why": "un diff de formato en un plan de infra esconde el cambio real" },
-      { "name": "validate", "command": ["terraform", "validate"], "why": "sintaxis y tipos de las variables antes de mirar el plan" },
-      { "name": "tflint", "command": ["tflint", "--recursive"], "why": "atrapa configuraciones que son válidas y a la vez peligrosas (puertos abiertos, discos sin cifrar)" },
-      { "name": "política (OPA/conftest)", "command": ["conftest", "test", "--all-namespaces", "."], "skipIfMissing": "policy", "why": "las reglas de la organización (cifrado, tags de costo, sin IPs públicas) no las verifica ningún linter genérico" },
-      { "name": "plan del entorno de staging", "command": ["make", "plan-staging"], "fastSkip": true, "why": "un plan que no se puede generar es un cambio que no se puede revisar; y el plan es el único artefacto que dice qué se va a destruir" }
+      {
+        "name": "self-test del arnés",
+        "command": [
+          "node",
+          "scripts/harness-selftest.mjs"
+        ],
+        "why": "acá los frenos son lo único que separa un cambio de un incidente: si uno está roto, hay que saberlo antes"
+      },
+      {
+        "name": "link-check de docs",
+        "command": [
+          "node",
+          "scripts/docs-linkcheck.mjs"
+        ],
+        "why": "los runbooks que apuntan a la nada se descubren durante el incidente"
+      },
+      {
+        "name": "lint de convenciones",
+        "command": [
+          "node",
+          "scripts/repo-lint.mjs"
+        ],
+        "why": "las reglas de este repo (tags obligatorios, versiones fijadas) que terraform validate no conoce"
+      },
+      {
+        "name": "formato",
+        "command": [
+          "terraform",
+          "fmt",
+          "-check",
+          "-recursive"
+        ],
+        "why": "un diff de formato en un plan de infra esconde el cambio real"
+      },
+      {
+        "name": "validate",
+        "command": [
+          "terraform",
+          "validate"
+        ],
+        "why": "sintaxis y tipos de las variables antes de mirar el plan"
+      },
+      {
+        "name": "tflint",
+        "command": [
+          "tflint",
+          "--recursive"
+        ],
+        "why": "atrapa configuraciones que son válidas y a la vez peligrosas (puertos abiertos, discos sin cifrar)"
+      },
+      {
+        "name": "política (OPA/conftest)",
+        "command": [
+          "conftest",
+          "test",
+          "--all-namespaces",
+          "."
+        ],
+        "skipIfMissing": "policy",
+        "why": "las reglas de la organización (cifrado, tags de costo, sin IPs públicas) no las verifica ningún linter genérico"
+      },
+      {
+        "name": "plan del entorno de staging",
+        "command": [
+          "make",
+          "plan-staging"
+        ],
+        "fastSkip": true,
+        "why": "un plan que no se puede generar es un cambio que no se puede revisar; y el plan es el único artefacto que dice qué se va a destruir"
+      },
+      {
+        "name": "artefactos en su lugar",
+        "command": [
+          "node",
+          "scripts/artifacts-check.mjs"
+        ],
+        "why": "un plan suelto en el repo cuando el trabajo vive en el gestor parte el registro en dos, y ninguna otra señal lo mira"
+      }
     ]
   },
   "protectedPaths": [
-    { "pattern": "^\\.env|\\.tfvars$", "reason": "los tfvars llevan credenciales y endpoints reales: los edita el humano." },
-    { "pattern": "\\.tfstate(\\.backup)?$", "reason": "el estado es la única representación de lo que existe de verdad. Editarlo a mano es cómo se pierde un entorno entero." },
-    { "pattern": "^\\.terraform/|\\.terraform\\.lock\\.hcl$", "reason": "el lock de providers lo genera `terraform init -upgrade`, no se edita." },
-    { "pattern": "^\\.git/", "reason": "historia de git: fuera del alcance del agente." },
-    { "pattern": "^envs/prod/", "reason": "producción se cambia por PR revisado y aplicado desde CI, jamás por edición directa del agente." }
+    {
+      "pattern": "^\\.env|\\.tfvars$",
+      "reason": "los tfvars llevan credenciales y endpoints reales: los edita el humano."
+    },
+    {
+      "pattern": "\\.tfstate(\\.backup)?$",
+      "reason": "el estado es la única representación de lo que existe de verdad. Editarlo a mano es cómo se pierde un entorno entero."
+    },
+    {
+      "pattern": "^\\.terraform/|\\.terraform\\.lock\\.hcl$",
+      "reason": "el lock de providers lo genera `terraform init -upgrade`, no se edita."
+    },
+    {
+      "pattern": "^\\.git/",
+      "reason": "historia de git: fuera del alcance del agente."
+    },
+    {
+      "pattern": "^envs/prod/",
+      "reason": "producción se cambia por PR revisado y aplicado desde CI, jamás por edición directa del agente."
+    }
   ],
   "bash": {
     "$comment": "La mitad del valor del arnés en este repo está en esta lista. Regla: planear sí, aplicar no.",
     "deny": [
-      { "pattern": "--no-ver[i]fy", "reason": "saltarse la verificación está prohibido." },
-      { "pattern": "terraform\\s+(apply|destroy)", "reason": "apply y destroy no tienen ctrl-Z. Generá el plan, mostralo, y que lo aplique CI desde main o el humano con el plan en la mano." },
-      { "pattern": "terraform\\s+state\\s+(rm|mv|push)", "reason": "manipular el estado a mano puede huerfanar recursos reales o borrar su registro. Se hace acompañado, con backup del estado." },
-      { "pattern": "terraform\\s+import\\b", "reason": "importar escribe en el estado: mismo riesgo que un apply." },
-      { "pattern": "terraform\\s+.*-auto-approve", "reason": "-auto-approve es exactamente el paso de confirmación que el arnés existe para no perder." },
-      { "pattern": "kubectl\\s+delete\\b", "reason": "borrado directo en el clúster: fuera del flujo declarativo. Cambiá el manifiesto y aplicá por el pipeline." },
-      { "pattern": "aws\\s+.*(delete|terminate)-", "reason": "acción destructiva por CLI, fuera del estado de Terraform: deja el repo mintiendo sobre la realidad." },
-      { "pattern": "git\\s+reset\\s+--hard", "reason": "destruye trabajo sin commitear." }
+      {
+        "pattern": "--no-ver[i]fy",
+        "reason": "saltarse la verificación está prohibido."
+      },
+      {
+        "pattern": "terraform\\s+(apply|destroy)",
+        "reason": "apply y destroy no tienen ctrl-Z. Generá el plan, mostralo, y que lo aplique CI desde main o el humano con el plan en la mano."
+      },
+      {
+        "pattern": "terraform\\s+state\\s+(rm|mv|push)",
+        "reason": "manipular el estado a mano puede huerfanar recursos reales o borrar su registro. Se hace acompañado, con backup del estado."
+      },
+      {
+        "pattern": "terraform\\s+import\\b",
+        "reason": "importar escribe en el estado: mismo riesgo que un apply."
+      },
+      {
+        "pattern": "terraform\\s+.*-auto-approve",
+        "reason": "-auto-approve es exactamente el paso de confirmación que el arnés existe para no perder."
+      },
+      {
+        "pattern": "kubectl\\s+delete\\b",
+        "reason": "borrado directo en el clúster: fuera del flujo declarativo. Cambiá el manifiesto y aplicá por el pipeline."
+      },
+      {
+        "pattern": "aws\\s+.*(delete|terminate)-",
+        "reason": "acción destructiva por CLI, fuera del estado de Terraform: deja el repo mintiendo sobre la realidad."
+      },
+      {
+        "pattern": "git\\s+reset\\s+--hard",
+        "reason": "destruye trabajo sin commitear."
+      }
     ]
   },
   "reuse": [
@@ -44,26 +157,123 @@
       "see": "modules/storage/main.tf"
     }
   ],
-  "lint": { "command": ["node", "scripts/repo-lint.mjs"], "fileFlag": "--file" },
+  "lint": {
+    "command": [
+      "node",
+      "scripts/repo-lint.mjs"
+    ],
+    "fileFlag": "--file"
+  },
   "purity": [],
-  "forbiddenDeps": { "manifest": "", "packages": [], "reason": "" },
+  "forbiddenDeps": {
+    "manifest": "",
+    "packages": [],
+    "reason": ""
+  },
   "invariants": [
     {
       "file": "envs/prod/backend.tf",
-      "required": ["encrypt", "dynamodb_table"],
-      "forbidden": ["local"],
+      "required": [
+        "encrypt",
+        "dynamodb_table"
+      ],
+      "forbidden": [
+        "local"
+      ],
       "reason": "el estado de producción va cifrado y con lock distribuido. Un estado local en prod significa que dos personas pueden aplicar a la vez y partir el entorno."
     }
   ],
   "patterns": [
-    { "id": "VERSIONLIBRE", "pattern": "source\\s*=\\s*\"git::[^\"]*\"(?![^\\n]*ref=)", "appliesTo": "\\.tf$", "message": "un módulo sin `?ref=` apunta a la rama: el mismo plan da distinto la semana que viene. Fijá el tag o el commit." },
-    { "id": "SINTAGS", "pattern": "resource\\s+\"aws_(instance|db_instance|s3_bucket)\"(?![\\s\\S]{0,600}tags)", "appliesTo": "^modules/.*\\.tf$", "message": "un recurso sin tags no se puede atribuir a un equipo ni a un centro de costo, y nadie lo va a borrar nunca por miedo." },
-    { "id": "SECRETOPLANO", "pattern": "(password|secret|token)\\s*=\\s*\"[^\"$]{6,}\"", "appliesTo": "\\.tf$", "message": "un secreto en texto plano queda en el estado, en el plan y en el historial de git. Usá el gestor de secretos y referencialo." },
-    { "id": "ABIERTO", "pattern": "cidr_blocks\\s*=\\s*\\[\\s*\"0\\.0\\.0\\.0/0\"", "appliesTo": "\\.tf$", "message": "0.0.0.0/0 abre el recurso a internet. Si es intencional (un ALB público), declaralo en el módulo con un nombre que lo diga y documentá el porqué." }
+    {
+      "id": "VERSIONLIBRE",
+      "pattern": "source\\s*=\\s*\"git::[^\"]*\"(?![^\\n]*ref=)",
+      "appliesTo": "\\.tf$",
+      "message": "un módulo sin `?ref=` apunta a la rama: el mismo plan da distinto la semana que viene. Fijá el tag o el commit."
+    },
+    {
+      "id": "SINTAGS",
+      "pattern": "resource\\s+\"aws_(instance|db_instance|s3_bucket)\"(?![\\s\\S]{0,600}tags)",
+      "appliesTo": "^modules/.*\\.tf$",
+      "message": "un recurso sin tags no se puede atribuir a un equipo ni a un centro de costo, y nadie lo va a borrar nunca por miedo."
+    },
+    {
+      "id": "SECRETOPLANO",
+      "pattern": "(password|secret|token)\\s*=\\s*\"[^\"$]{6,}\"",
+      "appliesTo": "\\.tf$",
+      "message": "un secreto en texto plano queda en el estado, en el plan y en el historial de git. Usá el gestor de secretos y referencialo."
+    },
+    {
+      "id": "ABIERTO",
+      "pattern": "cidr_blocks\\s*=\\s*\\[\\s*\"0\\.0\\.0\\.0/0\"",
+      "appliesTo": "\\.tf$",
+      "message": "0.0.0.0/0 abre el recurso a internet. Si es intencional (un ALB público), declaralo en el módulo con un nombre que lo diga y documentá el porqué."
+    }
   ],
-  "tests": { "filePattern": "_test\\.go$|(^|/)tests?/", "onlyPattern": "//\\s*only\\b" },
-  "incidents": { "file": "docs/gotchas.md", "heading": "### GOTCHA", "requiredLines": ["Síntoma:", "Causa:", "Regla:", "Mecanismo:"] },
-  "docs": { "ignore": [".git", ".terraform", "plans"], "ignoreFiles": [], "externalPaths": [] },
-  "status": { "file": "STATUS.md" },
-  "sdd": { "kit": "ninguno", "skillRoots": ["~/.claude/skills", ".claude/skills"], "phases": [], "routes": [] }
+  "tests": {
+    "filePattern": "_test\\.go$|(^|/)tests?/",
+    "onlyPattern": "//\\s*only\\b"
+  },
+  "incidents": {
+    "file": "docs/gotchas.md",
+    "heading": "### GOTCHA",
+    "requiredLines": [
+      "Síntoma:",
+      "Causa:",
+      "Regla:",
+      "Mecanismo:"
+    ]
+  },
+  "docs": {
+    "ignore": [
+      ".git",
+      ".terraform",
+      "plans"
+    ],
+    "ignoreFiles": [],
+    "externalPaths": []
+  },
+  "status": {
+    "file": "STATUS.md"
+  },
+  "sdd": {
+    "kit": "ninguno",
+    "skillRoots": [
+      "~/.claude/skills",
+      ".claude/skills"
+    ],
+    "phases": [],
+    "routes": []
+  },
+  "tracker": {
+    "$comment": "Forja: gitea. Ningún script del arnés la conoce — lo único que se lee es `issuePattern`. Ver docs/trazabilidad.md.",
+    "kind": "gitea",
+    "issuePattern": "(^|[^A-Za-z0-9_])#[0-9]+",
+    "issueExample": "#123",
+    "newIssueHint": [
+      "tea issue create --title \"…\"",
+      "En infraestructura el registro pesa más: un cambio sin ticket es un cambio que nadie puede auditar después del incidente."
+    ],
+    "artifactsIn": "tracker",
+    "specsDir": "specs",
+    "allowedInRepo": [
+      "specs/README.md"
+    ]
+  },
+  "commitMsg": {
+    "$comment": "Qué cuenta como CÓDIGO para exigir registro. La documentación no pide ítem: es el registro, no el cambio.",
+    "codePattern": "^(modules/|envs/|policy/|scripts/)",
+    "ignoreExtensions": [
+      ".md",
+      ".png",
+      ".jpg",
+      ".svg"
+    ],
+    "skipSubjects": [
+      "Merge ",
+      "Revert ",
+      "fixup! ",
+      "squash! "
+    ],
+    "escapeLine": "sin-issue:"
+  }
 }

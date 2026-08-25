@@ -27,6 +27,11 @@ review — el `reviewer` lo busca explícitamente.
 | Pregunta, auditoría, explicación | sin SDD |
 | Cambio acotado y reversible sin superficie nueva | sin SDD, **declarando en una línea por qué no aplica** |
 
+Y una decisión anterior a todas, que se toma con el humano y no en soledad: **¿este cambio se
+registra?** El ruteo la pone delante (ruta `issue`) y el hook `commit-msg` la hace inevitable —
+un commit de código sin referencia ni declaración no entra al historial. El mecanismo completo, y
+cómo se configura en cada forja, está en [trazabilidad.md](trazabilidad.md).
+
 Ese cuadro es exactamente lo que codifica `sdd.routes` en el config: cada ruta tiene sus patrones y
 su mensaje. Un mensaje vacío significa "esta clase de pedido es trivial, callate" — un router que
 habla siempre deja de leerse, y ahí perdiste el freno.
@@ -48,21 +53,37 @@ ejecutable de "jamás se ajusta una aserción para que pase el test".
 
 ## Dónde viven los artefactos
 
-Dos opciones, y conviene elegir a conciencia:
+Dos casas posibles —el repo o el gestor de trabajo— con sus ventajas y sus costos enfrentados en
+[trazabilidad.md](trazabilidad.md). Acá importa una sola cosa: **elegí una y hacela verificable**.
+La señal existe y no toca la red, así que corre igual en tu máquina y en CI:
 
-**En el repo** (`specs/`): viajan con el clon, se versionan con el código, se revisan en el mismo
-PR. Cuesta: no se pueden asignar, no tienen estado propio, y los lee sólo quien ya clonó.
+```bash
+node scripts/artifacts-check.mjs
+```
 
-**En el gestor de issues:** la issue madre lleva el spec, cada tarea es su propio issue —
-asignable, cerrable, con historial— y el avance se ve sin `git pull`. Cuesta: hace falta red, y el
-artefacto ya no viaja con el código.
+Si el equipo eligió el gestor, la feature es un **árbol de ítems** — la forma es la misma en GitHub,
+GitLab, Azure Boards o Jira, sólo cambian los nombres:
 
-La regla que sirve en cualquiera de las dos: **elegí una y hacela verificable**. Si decidís que los
-specs no van al repo, agregá una señal al gate que se ponga roja cuando aparezca un archivo bajo
-`specs/` fuera de lo permitido. Sin ese freno, en tres meses tenés las dos cosas a medias.
+```
+<ítem MADRE>   spec en el cuerpo; plan · checklist · escenarios · análisis como comentarios
+ ├─ <tarea 1>  asignable, cerrable, con su verificación escrita
+ ├─ <tarea 2>
+ └─ …          etiquetas: «feature» | «tarea» + una que agrupe por feature
+```
 
-Lo que **siempre** se queda en el repo es lo que explica el código: decisiones (`docs/decisions/`),
-arnés (`docs/arnes.md`) e incidentes (`docs/gotchas.md`).
+El flujo de punta a punta, con el CLI que corresponda (`gh`, `glab`, `az boards`, `tea`…):
+
+```bash
+# 1. el skill de spec escribe el markdown en el SCRATCHPAD, no en el repo
+# 2. se abre el ítem madre con ese markdown como cuerpo
+# 3. plan, checklist y escenarios entran como comentarios del ítem madre
+# 4. una tarea = un ítem hijo, enlazado a la madre
+# 5. el puntero de la feature en curso guarda el NÚMERO del ítem madre
+```
+
+Automatizarlo es un script de una tarde y conviene que sea **el único** que habla con la forja: así
+cambiar de gestor toca un archivo. Ese script no va al gate —necesita red y credenciales—; lo que sí
+va es `artifacts-check`, que sólo mira el sistema de archivos.
 
 ## Cómo convive con las otras reglas
 
@@ -76,8 +97,10 @@ arnés (`docs/arnes.md`) e incidentes (`docs/gotchas.md`).
 
 | Regla | Mecanismo |
 |---|---|
+| Un commit de código queda registrado | `.githooks/commit-msg`: referencia del ítem o `sin-issue: <motivo>`. **Es el único freno BLOCKING de esta página** |
+| Los artefactos están donde el equipo decidió | `node scripts/artifacts-check.mjs` en el gate, sin red |
 | El pedido de tamaño feature se rutea o se declara | `sdd-router` inyecta el criterio en cada prompt que dispara — **informa, no bloquea**: la intención no es verificable por máquina |
 | El clasificador no se degrada | el self-test prueba una muestra por ruta, y que el router se calle en lo trivial |
 | El kit nombrado existe de verdad | el self-test exige cada fase en `skillRoots` (omitido en CI, nunca "pasó") |
 | El puntero de feature activa resuelve | el self-test: un puntero colgado es gate rojo |
-| Los artefactos no vuelven al repo (si esa fue la decisión) | una señal propia del gate; el arnés no la trae puesta porque la decisión es de cada equipo |
+| El registro es el *correcto* (issue madre con tareas y no un bug suelto) | ninguno: es criterio del agente y del `reviewer`. El freno pide *un* registro, no el adecuado |

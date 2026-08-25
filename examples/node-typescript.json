@@ -4,30 +4,119 @@
     "command": "npm run gate",
     "fastCommand": "npm run gate:fast",
     "marker": ".git/gate-dirty",
-    "codeGlobs": ["src/", "scripts/", ".claude/hooks/"],
+    "codeGlobs": [
+      "src/",
+      "scripts/",
+      ".claude/hooks/"
+    ],
     "signals": [
-      { "name": "self-test del arnés", "command": ["node", "scripts/harness-selftest.mjs"], "why": "un hook roto falla en silencio: ninguna otra señal lo ve" },
-      { "name": "link-check de docs", "command": ["node", "scripts/docs-linkcheck.mjs"], "why": "mover un doc rompe punteros de la memoria del agente" },
-      { "name": "lint de convenciones", "command": ["node", "scripts/repo-lint.mjs"], "why": "las reglas del repo que el compilador no ve" },
-      { "name": "typecheck", "command": ["npx", "tsc", "--noEmit"], "why": "vitest transpila por archivo y no type-checkea: un import inválido pasa los tests y rompe el build" },
-      { "name": "tests con cobertura", "command": ["npx", "vitest", "run", "--coverage"], "why": "comportamiento, con el mismo umbral que exige CI" },
-      { "name": "build de producción", "command": ["npm", "run", "build"], "fastSkip": true, "why": "dev y prod difieren: tree-shaking, resolución de módulos, empaquetado" }
+      {
+        "name": "self-test del arnés",
+        "command": [
+          "node",
+          "scripts/harness-selftest.mjs"
+        ],
+        "why": "un hook roto falla en silencio: ninguna otra señal lo ve"
+      },
+      {
+        "name": "link-check de docs",
+        "command": [
+          "node",
+          "scripts/docs-linkcheck.mjs"
+        ],
+        "why": "mover un doc rompe punteros de la memoria del agente"
+      },
+      {
+        "name": "lint de convenciones",
+        "command": [
+          "node",
+          "scripts/repo-lint.mjs"
+        ],
+        "why": "las reglas del repo que el compilador no ve"
+      },
+      {
+        "name": "typecheck",
+        "command": [
+          "npx",
+          "tsc",
+          "--noEmit"
+        ],
+        "why": "vitest transpila por archivo y no type-checkea: un import inválido pasa los tests y rompe el build"
+      },
+      {
+        "name": "tests con cobertura",
+        "command": [
+          "npx",
+          "vitest",
+          "run",
+          "--coverage"
+        ],
+        "why": "comportamiento, con el mismo umbral que exige CI"
+      },
+      {
+        "name": "build de producción",
+        "command": [
+          "npm",
+          "run",
+          "build"
+        ],
+        "fastSkip": true,
+        "why": "dev y prod difieren: tree-shaking, resolución de módulos, empaquetado"
+      },
+      {
+        "name": "artefactos en su lugar",
+        "command": [
+          "node",
+          "scripts/artifacts-check.mjs"
+        ],
+        "why": "un plan suelto en el repo cuando el trabajo vive en el gestor parte el registro en dos, y ninguna otra señal lo mira"
+      }
     ]
   },
   "protectedPaths": [
-    { "pattern": "^\\.env", "reason": ".env* es la llave del reino: lo edita el humano." },
-    { "pattern": "^(package-lock\\.json|pnpm-lock\\.yaml)$", "reason": "el lockfile se regenera con el gestor, no se edita a mano." },
-    { "pattern": "^\\.git/", "reason": "historia de git: fuera del alcance del agente." },
-    { "pattern": "^(node_modules|dist|build|coverage|\\.next)/", "reason": "derivados y dependencias: se regeneran." }
+    {
+      "pattern": "^\\.env",
+      "reason": ".env* es la llave del reino: lo edita el humano."
+    },
+    {
+      "pattern": "^(package-lock\\.json|pnpm-lock\\.yaml)$",
+      "reason": "el lockfile se regenera con el gestor, no se edita a mano."
+    },
+    {
+      "pattern": "^\\.git/",
+      "reason": "historia de git: fuera del alcance del agente."
+    },
+    {
+      "pattern": "^(node_modules|dist|build|coverage|\\.next)/",
+      "reason": "derivados y dependencias: se regeneran."
+    }
   ],
   "bash": {
     "deny": [
-      { "pattern": "--no-ver[i]fy", "reason": "saltarse la verificación está prohibido: si el gate estorba, se arregla el gate." },
-      { "pattern": "git\\s+reset\\s+--hard", "reason": "destruye trabajo sin commitear." },
-      { "pattern": "git\\s+add\\s+(\\.|-A|--all)(\\s|$)", "reason": "arrastra artefactos y secretos: agregá archivos por nombre." },
-      { "pattern": "npm\\s+(install|i|ci)\\b[^|;&]*\\s(--force|-f)\\b", "reason": "instalar con --force rompe la reproducibilidad del lockfile." },
-      { "pattern": "npm\\s+publish\\b", "reason": "publicar es irreversible: lo hace CI desde un tag, no el agente." },
-      { "pattern": "\\bsed\\s+(-[a-zA-Z]*\\s+)*-i\\b.*\\bsrc\\b", "reason": "edición masiva in-place sobre el árbol de fuentes." }
+      {
+        "pattern": "--no-ver[i]fy",
+        "reason": "saltarse la verificación está prohibido: si el gate estorba, se arregla el gate."
+      },
+      {
+        "pattern": "git\\s+reset\\s+--hard",
+        "reason": "destruye trabajo sin commitear."
+      },
+      {
+        "pattern": "git\\s+add\\s+(\\.|-A|--all)(\\s|$)",
+        "reason": "arrastra artefactos y secretos: agregá archivos por nombre."
+      },
+      {
+        "pattern": "npm\\s+(install|i|ci)\\b[^|;&]*\\s(--force|-f)\\b",
+        "reason": "instalar con --force rompe la reproducibilidad del lockfile."
+      },
+      {
+        "pattern": "npm\\s+publish\\b",
+        "reason": "publicar es irreversible: lo hace CI desde un tag, no el agente."
+      },
+      {
+        "pattern": "\\bsed\\s+(-[a-zA-Z]*\\s+)*-i\\b.*\\bsrc\\b",
+        "reason": "edición masiva in-place sobre el árbol de fuentes."
+      }
     ]
   },
   "reuse": [
@@ -38,28 +127,124 @@
       "see": "src/lib/db.ts"
     }
   ],
-  "lint": { "command": ["node", "scripts/repo-lint.mjs"], "fileFlag": "--file" },
+  "lint": {
+    "command": [
+      "node",
+      "scripts/repo-lint.mjs"
+    ],
+    "fileFlag": "--file"
+  },
   "purity": [
     {
       "dir": "src/lib",
-      "forbiddenImports": ["react", "react-dom", "next/", "express", "@/components", "@/hooks"],
+      "forbiddenImports": [
+        "react",
+        "react-dom",
+        "next/",
+        "express",
+        "@/components",
+        "@/hooks"
+      ],
       "except": [],
       "reason": "src/lib es lógica pura y testeable: los componentes orquestan, lib decide. Es lo único con cobertura exigida."
     }
   ],
   "forbiddenDeps": {
     "manifest": "package.json",
-    "packages": ["moment", "request"],
+    "packages": [
+      "moment",
+      "request"
+    ],
     "reason": "moment y request están sin mantenimiento: migrar, no agregar. Si aparece una en el manifiesto, es que alguien copió un snippet viejo."
   },
   "patterns": [
-    { "id": "SECRETO", "pattern": "process\\.env\\.[A-Z_]*(KEY|TOKEN|SECRET|PASSWORD)", "appliesTo": "^src/(app|components|pages)/", "message": "un secreto leído desde código de cliente termina en el bundle público. Leelo en el servidor y pasá sólo el resultado." },
-    { "id": "CONSOLE", "pattern": "console\\.log\\(", "appliesTo": "^src/(?!.*__tests__)", "message": "console.log en producción ensucia los logs reales y a veces filtra datos. Usá el logger del proyecto." },
-    { "id": "ANY", "pattern": ":\\s*any\\b", "appliesTo": "^src/lib/", "message": "`any` en la capa de dominio apaga el type-checker justo donde más vale. Escribí el tipo, o `unknown` con validación en la frontera." }
+    {
+      "id": "SECRETO",
+      "pattern": "process\\.env\\.[A-Z_]*(KEY|TOKEN|SECRET|PASSWORD)",
+      "appliesTo": "^src/(app|components|pages)/",
+      "message": "un secreto leído desde código de cliente termina en el bundle público. Leelo en el servidor y pasá sólo el resultado."
+    },
+    {
+      "id": "CONSOLE",
+      "pattern": "console\\.log\\(",
+      "appliesTo": "^src/(?!.*__tests__)",
+      "message": "console.log en producción ensucia los logs reales y a veces filtra datos. Usá el logger del proyecto."
+    },
+    {
+      "id": "ANY",
+      "pattern": ":\\s*any\\b",
+      "appliesTo": "^src/lib/",
+      "message": "`any` en la capa de dominio apaga el type-checker justo donde más vale. Escribí el tipo, o `unknown` con validación en la frontera."
+    }
   ],
-  "tests": { "filePattern": "(^|/)__tests__/|\\.(test|spec)\\.[cm]?[jt]sx?$", "onlyPattern": "\\b(describe|it|test)\\.only\\(" },
-  "incidents": { "file": "docs/gotchas.md", "heading": "### GOTCHA", "requiredLines": ["Síntoma:", "Causa:", "Regla:", "Mecanismo:"] },
-  "docs": { "ignore": ["node_modules", ".git", "dist", "build", "coverage", ".next"], "ignoreFiles": [], "externalPaths": [] },
-  "status": { "file": "STATUS.md" },
-  "sdd": { "kit": "ninguno", "skillRoots": ["~/.claude/skills", ".claude/skills"], "phases": [], "routes": [] }
+  "tests": {
+    "filePattern": "(^|/)__tests__/|\\.(test|spec)\\.[cm]?[jt]sx?$",
+    "onlyPattern": "\\b(describe|it|test)\\.only\\("
+  },
+  "incidents": {
+    "file": "docs/gotchas.md",
+    "heading": "### GOTCHA",
+    "requiredLines": [
+      "Síntoma:",
+      "Causa:",
+      "Regla:",
+      "Mecanismo:"
+    ]
+  },
+  "docs": {
+    "ignore": [
+      "node_modules",
+      ".git",
+      "dist",
+      "build",
+      "coverage",
+      ".next"
+    ],
+    "ignoreFiles": [],
+    "externalPaths": []
+  },
+  "status": {
+    "file": "STATUS.md"
+  },
+  "sdd": {
+    "kit": "ninguno",
+    "skillRoots": [
+      "~/.claude/skills",
+      ".claude/skills"
+    ],
+    "phases": [],
+    "routes": []
+  },
+  "tracker": {
+    "$comment": "Forja: github. Ningún script del arnés la conoce — lo único que se lee es `issuePattern`. Ver docs/trazabilidad.md.",
+    "kind": "github",
+    "issuePattern": "(^|[^A-Za-z0-9_])#[0-9]+",
+    "issueExample": "#123 · Refs #123 · Closes #123",
+    "newIssueHint": [
+      "Bug o mejora acotada:  gh issue create --title \"…\"",
+      "Tamaño feature:        abrí el ítem madre y sus tareas"
+    ],
+    "artifactsIn": "tracker",
+    "specsDir": "specs",
+    "allowedInRepo": [
+      "specs/README.md"
+    ]
+  },
+  "commitMsg": {
+    "$comment": "Qué cuenta como CÓDIGO para exigir registro. La documentación no pide ítem: es el registro, no el cambio.",
+    "codePattern": "^(src/|scripts/|\\.claude/)",
+    "ignoreExtensions": [
+      ".md",
+      ".png",
+      ".jpg",
+      ".svg"
+    ],
+    "skipSubjects": [
+      "Merge ",
+      "Revert ",
+      "fixup! ",
+      "squash! "
+    ],
+    "escapeLine": "sin-issue:"
+  }
 }

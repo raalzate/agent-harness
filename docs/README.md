@@ -18,6 +18,7 @@ Cuatro capas, de la teoría al copiar y pegar. Si tenés diez minutos, leé la p
 |---|---|
 | [portar.md](portar.md) | **La receta.** Instalar el arnés en un repo cualquiera en una tarde, con la lista de preguntas que hay que contestar y el orden en que conviene contestarlas. |
 | [config-reference.md](config-reference.md) | Cada clave de `.claude/harness.config.json`: qué hace, qué la lee, qué pasa si falta. |
+| [trazabilidad.md](trazabilidad.md) | Que el trabajo quede registrado, en cualquier forja —GitHub, GitLab, Azure Boards, Jira, Gitea—: el hook que lo hace inevitable, cómo se configura el patrón de referencia, y dónde viven los artefactos de una feature. |
 | [recetas.md](recetas.md) | Recetas por situación: cómo se ve el gate en cada stack, cómo se agrega una señal, cómo se mide si el arnés está vivo. |
 
 ## 3. Este repo (el ejemplo trabajando)

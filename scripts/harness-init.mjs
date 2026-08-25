@@ -62,7 +62,9 @@ const COPIAR = [
   "scripts/repo-lint.mjs",
   "scripts/harness-selftest.mjs",
   "scripts/docs-linkcheck.mjs",
+  "scripts/artifacts-check.mjs",
   ".githooks/pre-commit",
+  ".githooks/commit-msg",
   ".githooks/post-commit",
 ];
 
@@ -74,7 +76,7 @@ const PLANTILLAS = [
   ["plantillas/harness.config.json", ".claude/harness.config.json"],
 ];
 
-const EJECUTABLES = new Set(["scripts/gate.sh", ".githooks/pre-commit", ".githooks/post-commit"]);
+const EJECUTABLES = new Set(["scripts/gate.sh", ".githooks/pre-commit", ".githooks/commit-msg", ".githooks/post-commit"]);
 
 const acciones = [];
 for (const rel of COPIAR) acciones.push({ tipo: "copia", desde: rel, hacia: rel });
@@ -129,7 +131,12 @@ Falta lo que ninguna herramienta puede adivinar — y es donde está el valor:
        gate       → bash scripts/gate.sh
        gate:fast  → bash scripts/gate.sh fast
 
-  4. git config core.hooksPath .githooks      (pre-commit real, no .sample)
+  4. git config core.hooksPath .githooks      (pre-commit y commit-msg reales, no .sample)
+
+  4b. .claude/harness.config.json → tracker
+     El patrón de referencia de TU forja (#123, AB#123, PROJ-123…). Copiar el de otro
+     equipo hace que el freno nunca encuentre la referencia y todos escriban
+     `sin-issue:` como ritual. Ver docs/trazabilidad.md.
 
   5. CONSTITUTION.md y STATUS.md: principios que este repo puede hacer cumplir HOY.
      Un principio BLOCKING sin comando que falle es un principio REVIEW mal etiquetado.

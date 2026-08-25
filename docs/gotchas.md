@@ -71,6 +71,20 @@ Regla:   el arnés **no escribe en el árbol de fuentes**. Para probar un freno 
 Mecanismo: el modo `--stdin` de `scripts/repo-lint.mjs`, y un caso del self-test que falla si
          quedaron archivos temporales en la raíz del repo.
 
+### GOTCHA: el patrón de referencia que cazaba «UTF-8»
+
+Síntoma: el freno de registro deja pasar commits sin ítem de trabajo, y el self-test está verde.
+Causa:   `tracker.issuePattern` quedó como `\\b[A-Z]{2,}-[0-9]+\\b` para un equipo con Jira. Ese
+         patrón caza `PROJ-123`… y también `UTF-8`, `SHA-256`, `HTTP-2` e `ISO-8601`: cualquier
+         commit que mencione un estándar «tiene referencia».
+Regla:   los patrones de referencia anclan los **prefijos reales** de los proyectos
+         (`\\b(PROJ|OPS|INFRA)-[0-9]+\\b`), y se prueban con un mensaje de commit de verdad, no
+         sólo con el self-test.
+Mecanismo: ninguno ejecutable, y el motivo importa: el self-test **deriva la muestra del propio
+         patrón**, así que un patrón que caza de más también caza su muestra y sale verde. Es el
+         límite estructural de generar casos desde el config (`docs/decisions/0003-selftest-generado.md`).
+         Queda como advertencia en `docs/trazabilidad.md` y en el paso 4 de `docs/portar.md`.
+
 ### GOTCHA: el gate verde que no probaba nada
 
 Síntoma: el gate sale verde en un repo recién portado, en dos segundos, y nadie sospecha.

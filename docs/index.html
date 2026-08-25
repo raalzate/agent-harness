@@ -226,6 +226,7 @@ footer { border-top: 4px solid var(--ink); }
         <a href="#tesis">Tesis</a>
         <a href="#piezas">Piezas</a>
         <a href="#freno">Un freno</a>
+        <a href="#registro">Registro</a>
         <a href="#portar">Portar</a>
         <a href="#stacks">Stacks</a>
         <a href="https://github.com/raalzate/agent-harness">Repo&nbsp;↗</a>
@@ -400,6 +401,70 @@ explícita. No lo reintentes igual.</code></pre>
   </div>
 </section>
 
+<section id="registro">
+  <div class="wrap sec-inner">
+    <p class="rail"><b>#123</b>o <code>sin-issue:</code>, pero algo</p>
+    <div>
+      <div class="col stack">
+        <p class="eyebrow">Trazabilidad</p>
+        <h2 style="font-size:var(--step-2)">Un cambio que nadie registró existe sólo en el diff</h2>
+        <p>Con un agente el problema se agrava por una razón concreta: <strong>es rápido</strong>.
+          Cuatro arreglos pueden estar terminados en una sesión sin que ninguno haya pasado por un
+          ítem de trabajo, y el registro se hace de memoria al final — o no se hace.</p>
+        <p>Por eso el registro no es una convención escrita: es un hook. Si el commit toca código, el
+          mensaje referencia el ítem <strong>o declara por qué no lo lleva</strong>, en su propia
+          línea y con motivo. Saltarse el registro queda firmado en el historial.</p>
+      </div>
+
+      <div class="pair">
+        <figure class="panel">
+          <figcaption>.claude/harness.config.json</figcaption>
+          <pre><code>{ <span class="k">"kind"</span>: <span class="s">"azure-devops"</span>,
+  <span class="k">"issuePattern"</span>: <span class="s">"\\bAB#[0-9]+\\b"</span>,
+  <span class="k">"issueExample"</span>: <span class="s">"AB#123"</span> }</code></pre>
+        </figure>
+        <figure class="panel blocked">
+          <figcaption>git commit -m "fix: algo"</figcaption>
+          <pre><code><span class="hdr">commit-msg:</span> este commit toca código
+y no queda registrado en ninguna parte.
+
+Elegí una de las dos, y que quede
+en el historial:
+
+  1) Referenciá el ítem: AB#123
+  2) sin-issue: &lt;por qué no hace falta&gt;</code></pre>
+        </figure>
+      </div>
+
+      <div class="col stack" style="margin-top:1.75rem">
+        <h3 style="font-size:var(--step-1)">Ningún script conoce tu forja</h3>
+        <p>Lo único que cambia entre un equipo y otro es qué cuenta como referencia. El mecanismo es
+          el mismo, y las cinco configs de ejemplo usan cinco gestores distintos a propósito.</p>
+      </div>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>Gestor</th><th class="mono">En el commit</th><th class="mono">issuePattern</th></tr></thead>
+          <tbody>
+            <tr><td>GitHub</td><td class="mono">#123 · Closes #123</td><td class="mono">(^|[^A-Za-z0-9_])#[0-9]+</td></tr>
+            <tr><td>GitLab</td><td class="mono">#123</td><td class="mono">igual que GitHub</td></tr>
+            <tr><td>Azure Boards</td><td class="mono">AB#123</td><td class="mono">\bAB#[0-9]+\b</td></tr>
+            <tr><td>Jira</td><td class="mono">PROJ-123</td><td class="mono">\b(PROJ|OPS)-[0-9]+\b</td></tr>
+            <tr><td>Gitea · Linear</td><td class="mono">#123 · ENG-123</td><td class="mono">el prefijo real, anclado</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="col cta-box" style="border-left-color:var(--ocre)">
+        <p class="eyebrow" style="color:var(--ocre)">La trampa</p>
+        <p style="margin-top:.5rem"><code>\b[A-Z]{2,}-[0-9]+\b</code> parece razonable para Jira y
+          caza <code>UTF-8</code>, <code>SHA-256</code> e <code>ISO-8601</code>: cualquier commit que
+          mencione un estándar pasaría el freno sin registrar nada. <strong>Anclá los prefijos
+          reales.</strong> El self-test no puede avisarte: deriva la muestra del propio patrón, así
+          que un patrón que caza de más también caza su muestra.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
 <section id="portar">
   <div class="wrap sec-inner">
     <p class="rail"><b>0→5</b>una tarde, en este orden</p>
@@ -513,6 +578,8 @@ node scripts/harness-init.mjs /ruta/a/tu/repo --apply</code></pre>
         L("  ✓ bash-guard bloquea `git reset --hard`", "ok"),
         L("  ✓ bash-guard deja pasar `git status`", "ok"),
         L("  ✓ lint INCIDENTE exige `Mecanismo:` en cada gotcha", "ok"),
+        L("  ✓ commit-msg: código sin referencia ni declaración", "ok"),
+        L("  ✓ artifacts-check caza un artefacto suelto", "ok"),
         L("  – fases SDD instaladas (omitido: sin kit declarado)", "sk"),
         L("SELF-TEST VERDE — cada regla del config tiene un", "dim"),
         L("comando que falla si se la viola.", "dim"),

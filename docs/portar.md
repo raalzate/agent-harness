@@ -157,7 +157,31 @@ legítimo se desactiva a mano en una semana, y se lleva puestos a los frenos que
 
 ---
 
-## Paso 4 — Memoria y evidencia
+## Paso 4 — Trazabilidad (quince minutos, y evita la pregunta imposible de después)
+
+Un cambio que nadie registró existe sólo en el diff. Con un agente el problema se agrava porque es
+rápido: cuatro arreglos pueden estar terminados en una sesión sin que ninguno haya pasado por un
+ítem de trabajo.
+
+Configurá `tracker` con **el patrón de referencia de tu forja** — no el de otro equipo: si tu
+gestor usa `PROJ-123` y quedó el `#123` de GitHub, el freno nunca encuentra la referencia y todos
+terminan escribiendo `sin-issue:` como ritual. Después decidí dónde viven los artefactos de una
+feature (`artifactsIn`) y dejá que `artifacts-check` lo verifique.
+
+La tabla por forja —GitHub, GitLab, Azure Boards, Jira, Gitea, Linear— y la trampa de los patrones
+que cazan `UTF-8` están en [trazabilidad.md](trazabilidad.md).
+
+Verificación del paso, en los dos sentidos:
+
+```bash
+node scripts/harness-selftest.mjs    # ¿frena un commit de código sin referencia?
+                                     # ¿deja pasar uno con la referencia REAL de tu forja?
+node scripts/artifacts-check.mjs     # ¿los artefactos están donde declaraste?
+```
+
+---
+
+## Paso 5 — Memoria y evidencia
 
 Cuatro archivos, cada uno con **un** trabajo. La plantilla de cada uno está en
 [`../plantillas/`](../plantillas).
@@ -178,7 +202,7 @@ La diferencia entre esas dos secciones es la diferencia entre un arnés y un des
 
 ---
 
-## Paso 5 — Cerrar el bucle
+## Paso 6 — Cerrar el bucle
 
 1. **CI corre el mismo gate.** No una versión parecida: el mismo comando. Si CI verifica algo
    distinto de lo que verifica el desarrollador, una de las dos señales miente y nadie sabe cuál.
@@ -201,6 +225,8 @@ Copiá esto a un issue del repo destino:
 [ ] protectedPaths: secretos, lockfiles, derivados, generados, config de producción
 [ ] bash.deny: los comandos sin ctrl-Z de ESTE stack
 [ ] purity: la capa que tiene que quedar limpia
+[ ] tracker: el patrón de referencia REAL de tu forja (probado en los dos sentidos)
+[ ] artifactsIn: dónde viven spec/plan/tareas, y artifacts-check verde
 [ ] al menos una regla de singleSource / invariants / patterns con cicatriz detrás
 [ ] selftest verde; lint verde; el lint NO bloquea trabajo legítimo
 [ ] CONSTITUTION.md: cada BLOCKING nombra su comando

@@ -4,31 +4,129 @@
     "command": "make gate",
     "fastCommand": "make gate-fast",
     "marker": ".git/gate-dirty",
-    "codeGlobs": ["internal/", "cmd/", "pkg/"],
+    "codeGlobs": [
+      "internal/",
+      "cmd/",
+      "pkg/"
+    ],
     "signals": [
-      { "name": "self-test del arnés", "command": ["node", "scripts/harness-selftest.mjs"], "why": "un hook roto falla en silencio: ninguna otra señal lo ve" },
-      { "name": "link-check de docs", "command": ["node", "scripts/docs-linkcheck.mjs"], "why": "mover un doc rompe punteros de la memoria del agente" },
-      { "name": "lint de convenciones", "command": ["node", "scripts/repo-lint.mjs"], "why": "las reglas de arquitectura de este repo que go vet no conoce" },
-      { "name": "formato", "command": ["sh", "-c", "test -z \"$(gofmt -l .)\" || { gofmt -l .; exit 1; }"], "why": "un diff de formato ensucia todos los reviews siguientes" },
-      { "name": "go vet", "command": ["go", "vet", "./..."], "why": "atrapa lo que el compilador acepta: formatos de Printf mal armados, locks copiados por valor" },
-      { "name": "tests con race", "command": ["go", "test", "-race", "-count=1", "./..."], "why": "sin -race las condiciones de carrera aparecen recién en producción; -count=1 evita que la caché de tests reporte verde viejo" },
-      { "name": "build", "command": ["go", "build", "./..."], "fastSkip": true, "why": "un paquete sin tests puede no compilar y la suite no lo nota" }
+      {
+        "name": "self-test del arnés",
+        "command": [
+          "node",
+          "scripts/harness-selftest.mjs"
+        ],
+        "why": "un hook roto falla en silencio: ninguna otra señal lo ve"
+      },
+      {
+        "name": "link-check de docs",
+        "command": [
+          "node",
+          "scripts/docs-linkcheck.mjs"
+        ],
+        "why": "mover un doc rompe punteros de la memoria del agente"
+      },
+      {
+        "name": "lint de convenciones",
+        "command": [
+          "node",
+          "scripts/repo-lint.mjs"
+        ],
+        "why": "las reglas de arquitectura de este repo que go vet no conoce"
+      },
+      {
+        "name": "formato",
+        "command": [
+          "sh",
+          "-c",
+          "test -z \"$(gofmt -l .)\" || { gofmt -l .; exit 1; }"
+        ],
+        "why": "un diff de formato ensucia todos los reviews siguientes"
+      },
+      {
+        "name": "go vet",
+        "command": [
+          "go",
+          "vet",
+          "./..."
+        ],
+        "why": "atrapa lo que el compilador acepta: formatos de Printf mal armados, locks copiados por valor"
+      },
+      {
+        "name": "tests con race",
+        "command": [
+          "go",
+          "test",
+          "-race",
+          "-count=1",
+          "./..."
+        ],
+        "why": "sin -race las condiciones de carrera aparecen recién en producción; -count=1 evita que la caché de tests reporte verde viejo"
+      },
+      {
+        "name": "build",
+        "command": [
+          "go",
+          "build",
+          "./..."
+        ],
+        "fastSkip": true,
+        "why": "un paquete sin tests puede no compilar y la suite no lo nota"
+      },
+      {
+        "name": "artefactos en su lugar",
+        "command": [
+          "node",
+          "scripts/artifacts-check.mjs"
+        ],
+        "why": "un plan suelto en el repo cuando el trabajo vive en el gestor parte el registro en dos, y ninguna otra señal lo mira"
+      }
     ]
   },
   "protectedPaths": [
-    { "pattern": "^\\.env", "reason": ".env* es la llave del reino: lo edita el humano." },
-    { "pattern": "^go\\.sum$", "reason": "go.sum lo mantiene `go mod tidy`, no se edita a mano." },
-    { "pattern": "^\\.git/", "reason": "historia de git: fuera del alcance del agente." },
-    { "pattern": "\\.pb\\.go$|_gen\\.go$|\\.gen\\.go$", "reason": "código generado: se regenera desde su fuente (.proto, plantilla), editarlo se pierde en el próximo generate." },
-    { "pattern": "^(bin|vendor|dist)/", "reason": "derivados y dependencias vendorizadas." }
+    {
+      "pattern": "^\\.env",
+      "reason": ".env* es la llave del reino: lo edita el humano."
+    },
+    {
+      "pattern": "^go\\.sum$",
+      "reason": "go.sum lo mantiene `go mod tidy`, no se edita a mano."
+    },
+    {
+      "pattern": "^\\.git/",
+      "reason": "historia de git: fuera del alcance del agente."
+    },
+    {
+      "pattern": "\\.pb\\.go$|_gen\\.go$|\\.gen\\.go$",
+      "reason": "código generado: se regenera desde su fuente (.proto, plantilla), editarlo se pierde en el próximo generate."
+    },
+    {
+      "pattern": "^(bin|vendor|dist)/",
+      "reason": "derivados y dependencias vendorizadas."
+    }
   ],
   "bash": {
     "deny": [
-      { "pattern": "--no-ver[i]fy", "reason": "saltarse la verificación está prohibido: si el gate estorba, se arregla el gate." },
-      { "pattern": "git\\s+reset\\s+--hard", "reason": "destruye trabajo sin commitear." },
-      { "pattern": "go\\s+mod\\s+vendor\\b", "reason": "vendorizar cambia miles de archivos: es una decisión del equipo, no un efecto colateral de otra tarea." },
-      { "pattern": "go\\s+clean\\s+-modcache", "reason": "borra la caché de módulos de toda la máquina y obliga a redescargar todo." },
-      { "pattern": "\\bsed\\s+(-[a-zA-Z]*\\s+)*-i\\b.*\\b(internal|cmd|pkg)\\b", "reason": "edición masiva in-place sobre el árbol de fuentes." }
+      {
+        "pattern": "--no-ver[i]fy",
+        "reason": "saltarse la verificación está prohibido: si el gate estorba, se arregla el gate."
+      },
+      {
+        "pattern": "git\\s+reset\\s+--hard",
+        "reason": "destruye trabajo sin commitear."
+      },
+      {
+        "pattern": "go\\s+mod\\s+vendor\\b",
+        "reason": "vendorizar cambia miles de archivos: es una decisión del equipo, no un efecto colateral de otra tarea."
+      },
+      {
+        "pattern": "go\\s+clean\\s+-modcache",
+        "reason": "borra la caché de módulos de toda la máquina y obliga a redescargar todo."
+      },
+      {
+        "pattern": "\\bsed\\s+(-[a-zA-Z]*\\s+)*-i\\b.*\\b(internal|cmd|pkg)\\b",
+        "reason": "edición masiva in-place sobre el árbol de fuentes."
+      }
     ]
   },
   "reuse": [
@@ -39,32 +137,128 @@
       "see": "internal/httpx/client.go"
     }
   ],
-  "lint": { "command": ["node", "scripts/repo-lint.mjs"], "fileFlag": "--file" },
+  "lint": {
+    "command": [
+      "node",
+      "scripts/repo-lint.mjs"
+    ],
+    "fileFlag": "--file"
+  },
   "purity": [
     {
       "dir": "internal/domain",
-      "forbiddenImports": ["net/http", "database/sql", "github.com/gin-gonic/gin"],
+      "forbiddenImports": [
+        "net/http",
+        "database/sql",
+        "github.com/gin-gonic/gin"
+      ],
       "except": [],
       "reason": "el dominio no conoce transporte ni persistencia: los adaptadores dependen del dominio, nunca al revés."
     }
   ],
-  "forbiddenDeps": { "manifest": "go.mod", "packages": [], "reason": "" },
+  "forbiddenDeps": {
+    "manifest": "go.mod",
+    "packages": [],
+    "reason": ""
+  },
   "invariants": [
     {
       "file": "cmd/server/main.go",
-      "required": ["signal.NotifyContext", "defer cancel()", "srv.Shutdown"],
-      "forbidden": ["log.Fatal(http.ListenAndServe"],
+      "required": [
+        "signal.NotifyContext",
+        "defer cancel()",
+        "srv.Shutdown"
+      ],
+      "forbidden": [
+        "log.Fatal(http.ListenAndServe"
+      ],
       "reason": "el apagado ordenado (señal + context + Shutdown) es lo que evita cortar peticiones en vuelo en cada deploy. Se perdió una vez en un refactor y nadie lo notó hasta el incidente."
     }
   ],
   "patterns": [
-    { "id": "PANIC", "pattern": "\\bpanic\\(", "appliesTo": "^(internal|pkg)/(?!.*_test\\.go)", "message": "un panic en una librería mata el proceso de quien la usa. Devolvé error y que el llamador decida." },
-    { "id": "ERRIGNORADO", "pattern": "^\\s*_\\s*=\\s*\\w+\\.(Close|Write|Exec)\\(", "appliesTo": "^(internal|cmd|pkg)/", "message": "descartar el error de Close/Write/Exec esconde corrupción de datos. Manejalo, o logueálo explicando por qué acá no importa." },
-    { "id": "CONTEXTOTODO", "pattern": "context\\.TODO\\(\\)", "appliesTo": "^(internal|cmd|pkg)/(?!.*_test\\.go)", "message": "context.TODO() rompe la cancelación en cascada: la petición muere y el trabajo sigue corriendo. Propagá el context del llamador." }
+    {
+      "id": "PANIC",
+      "pattern": "\\bpanic\\(",
+      "appliesTo": "^(internal|pkg)/(?!.*_test\\.go)",
+      "message": "un panic en una librería mata el proceso de quien la usa. Devolvé error y que el llamador decida."
+    },
+    {
+      "id": "ERRIGNORADO",
+      "pattern": "^\\s*_\\s*=\\s*\\w+\\.(Close|Write|Exec)\\(",
+      "appliesTo": "^(internal|cmd|pkg)/",
+      "message": "descartar el error de Close/Write/Exec esconde corrupción de datos. Manejalo, o logueálo explicando por qué acá no importa."
+    },
+    {
+      "id": "CONTEXTOTODO",
+      "pattern": "context\\.TODO\\(\\)",
+      "appliesTo": "^(internal|cmd|pkg)/(?!.*_test\\.go)",
+      "message": "context.TODO() rompe la cancelación en cascada: la petición muere y el trabajo sigue corriendo. Propagá el context del llamador."
+    }
   ],
-  "tests": { "filePattern": "_test\\.go$", "onlyPattern": "//\\s*only\\b" },
-  "incidents": { "file": "docs/gotchas.md", "heading": "### GOTCHA", "requiredLines": ["Síntoma:", "Causa:", "Regla:", "Mecanismo:"] },
-  "docs": { "ignore": [".git", "vendor", "bin", "dist"], "ignoreFiles": [], "externalPaths": [] },
-  "status": { "file": "STATUS.md" },
-  "sdd": { "kit": "ninguno", "skillRoots": ["~/.claude/skills", ".claude/skills"], "phases": [], "routes": [] }
+  "tests": {
+    "filePattern": "_test\\.go$",
+    "onlyPattern": "//\\s*only\\b"
+  },
+  "incidents": {
+    "file": "docs/gotchas.md",
+    "heading": "### GOTCHA",
+    "requiredLines": [
+      "Síntoma:",
+      "Causa:",
+      "Regla:",
+      "Mecanismo:"
+    ]
+  },
+  "docs": {
+    "ignore": [
+      ".git",
+      "vendor",
+      "bin",
+      "dist"
+    ],
+    "ignoreFiles": [],
+    "externalPaths": []
+  },
+  "status": {
+    "file": "STATUS.md"
+  },
+  "sdd": {
+    "kit": "ninguno",
+    "skillRoots": [
+      "~/.claude/skills",
+      ".claude/skills"
+    ],
+    "phases": [],
+    "routes": []
+  },
+  "tracker": {
+    "$comment": "Forja: jira. Ningún script del arnés la conoce — lo único que se lee es `issuePattern`. Ver docs/trazabilidad.md.",
+    "kind": "jira",
+    "issuePattern": "\\b(PROJ|OPS|INFRA)-[0-9]+\\b",
+    "issueExample": "PROJ-123",
+    "newIssueHint": [
+      "Jira no trae CLI oficial: abrí el ticket en la web y pegá su clave acá.",
+      "OJO: el patrón ancla los prefijos reales. `[A-Z]{2,}-[0-9]+` cazaría UTF-8 y SHA-256."
+    ],
+    "artifactsIn": "repo",
+    "specsDir": "docs/specs",
+    "allowedInRepo": []
+  },
+  "commitMsg": {
+    "$comment": "Qué cuenta como CÓDIGO para exigir registro. La documentación no pide ítem: es el registro, no el cambio.",
+    "codePattern": "^(internal/|cmd/|pkg/)",
+    "ignoreExtensions": [
+      ".md",
+      ".png",
+      ".jpg",
+      ".svg"
+    ],
+    "skipSubjects": [
+      "Merge ",
+      "Revert ",
+      "fixup! ",
+      "squash! "
+    ],
+    "escapeLine": "sin-issue:"
+  }
 }

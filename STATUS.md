@@ -17,7 +17,9 @@ lo que se supone va en "deuda conocida".
 | Link-check de docs | `node scripts/docs-linkcheck.mjs` | verde — enlaces y rutas citadas medidos contra `git ls-files`, con `docs.proseRoots` acotando qué raíces se verifican |
 | Lint de convenciones | `node scripts/repo-lint.mjs` | verde — PUREZA (hooks sin lanzar procesos, 2 excepciones declaradas) · EVENTOS (`singleSource`) · INVARIANTE (contrato de exit codes de `harness.mjs`) · TODO · CONSOLE · ONLY · INCIDENTE |
 | Reglas activas | `node scripts/repo-lint.mjs --rules` | verde — 1 capa de pureza · 5 deps vetadas · 1 registro · 1 archivo con invariantes · 2 patrones · registro de incidentes |
-| Gate completo | `npm run gate` | verde — 3 señales, ninguna omitida |
+| El trabajo queda registrado | incluido en el self-test | verde — 6 casos de `.githooks/commit-msg` en un repo git temporal, derivados del config: código sin referencia, con referencia, con la fuga y su motivo, la fuga pelada, extensión ignorada, y un merge |
+| Artefactos donde se declaró | `node scripts/artifacts-check.mjs` | verde — sin `specs/` porque el trabajo vive en el gestor; el cebo del self-test lo pone en rojo |
+| Gate completo | `npm run gate` | verde — 4 señales, ninguna omitida |
 | Instalador (dry-run) | `node scripts/harness-init.mjs <repo>` | verde — 23 archivos a copiar, no sobreescribe, imprime los 6 pasos que ninguna herramienta puede hacer sola |
 
 Pre-commit instalado: sí (`core.hooksPath=.githooks`). CI corre **el mismo** `npm run gate`.
@@ -28,6 +30,13 @@ Pre-commit instalado: sí (`core.hooksPath=.githooks`). CI corre **el mismo** `n
   backreferences o clases anidadas se reportan **omitidos** (nunca pasados) y hay que probarlos a
   mano. Mecanismo candidato: un campo `sample` opcional por regla, para que el autor dé el ejemplo
   cuando el generador no puede.
+- **El freno de registro pide *un* registro, no el *correcto*.** `commit-msg` exige una referencia
+  o una declaración firmada, pero que una feature vaya con ítem madre y tareas en vez de un bug
+  suelto sigue siendo criterio del agente y del `reviewer`. Mecanismo candidato: un check del
+  `reviewer` que marque diffs con archivos nuevos en la superficie pública sin ítem de tipo feature.
+- **Un `issuePattern` demasiado ancho pasa el self-test.** La muestra se deriva del propio patrón,
+  así que un patrón que caza de más también caza su muestra. Se prueba a mano con un mensaje real
+  del equipo. Está escrito como gotcha.
 - **El ruteo de trabajo informa, no bloquea.** Nada impide entregar una feature grande sin declarar
   la ruta salvo el criterio del agente y el `reviewer`: la intención no es verificable por máquina.
 - **`bash.deny` es un guardarraíl, no un sandbox.** Sube el costo del error accidental; un agente

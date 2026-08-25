@@ -1,6 +1,6 @@
 # Constitución — Agent Harness
 
-**Versión 1.0.0** · Principios que no se negocian **en este repo**. Las convenciones operativas
+**Versión 1.1.0** · Principios que no se negocian **en este repo**. Las convenciones operativas
 viven en `CLAUDE.md`; el arnés que hace cumplir estos principios, en `docs/arnes.md`.
 
 Cada principio dice su **fuerza**:
@@ -102,13 +102,24 @@ deja pasar punteros a archivos gitignored: verde local, rojo en CI, la peor vari
 
 *Mecanismo:* `node scripts/docs-linkcheck.mjs` en el gate.
 
-## P11 — Conducta ante el error · REVIEW
+## P11 — El trabajo queda registrado · BLOCKING
+
+Un commit que toca código referencia su ítem de trabajo, o declara en su propia línea por qué no lo
+lleva. Saltarse el registro es una decisión firmada que queda en el historial, no un silencio. La
+forja da igual: lo que cuenta como referencia lo declara `tracker.issuePattern`.
+
+*Mecanismo:* `.githooks/commit-msg` (seis casos del self-test en un repo git temporal) y
+`scripts/artifacts-check.mjs` en el gate para que los artefactos no queden partidos entre el repo y
+el gestor. Que el registro sea el *adecuado* —feature con ítem madre y tareas, no un bug suelto—
+sigue siendo juicio del `reviewer`.
+
+## P12 — Conducta ante el error · REVIEW
 
 Leer la salida real (archivo, línea, mensaje) antes de reintentar; reintentar sólo con hipótesis
 nueva; presupuesto de **2 intentos** sobre el mismo error, y al tercero se para y se escala con el
 diagnóstico. Fallar rápido y con causa vale más que degradar en silencio.
 
-## P12 — Cada incidente deja infraestructura · BLOCKING
+## P13 — Cada incidente deja infraestructura · BLOCKING
 
 Un problema que costó tiempo termina en el mecanismo más fuerte disponible (test > hook/lint >
 comando > markdown), y esa mejora pasa el gate antes de quedar. `/lesson <incidente>` es el ciclo.
@@ -119,7 +130,7 @@ que hace falta un mecanismo **más fuerte**, no otra entrada de markdown.
 **Síntoma / Causa / Regla / Mecanismo**. Que el mecanismo elegido sea el más fuerte posible sigue
 siendo juicio (`reviewer`); que un incidente quede sin mecanismo escrito, no.
 
-## P13 — Lo que viaja son los principios, no las reglas ajenas · REVIEW
+## P14 — Lo que viaja son los principios, no las reglas ajenas · REVIEW
 
 Las reglas concretas describen los incidentes de **un** repo; en otro son ruido bien intencionado
 que gasta contexto del agente y paciencia del equipo. Lo que se comparte entre repos es esta
@@ -133,3 +144,4 @@ es un hallazgo de review.
 | Versión | Fecha | Cambio |
 |---|---|---|
 | 1.0.0 | 2026-08-21 | Primera versión (ver `docs/decisions/0001-arnes-portable.md`). |
+| 1.1.0 | 2026-08-25 | P11 nuevo: el trabajo queda registrado (`commit-msg` + `artifacts-check`), agnóstico de forja. Los principios siguientes corren un número. |

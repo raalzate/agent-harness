@@ -3,13 +3,17 @@
 Cada archivo es una config **completa y realista**, no una plantilla vacía: es el resultado de
 hacer las preguntas de [`../docs/portar.md`](../docs/portar.md) en ese stack.
 
-| Archivo | Repo típico | Lo que muestra de particular |
-|---|---|---|
-| [`node-typescript.json`](node-typescript.json) | app o librería TS con vitest | `typecheck` como señal irremplazable; `purity` de la capa de dominio |
-| [`python.json`](python.json) | servicio FastAPI/Django con pytest | `ruff` + `mypy` + `pytest` son tres señales; migraciones aplicadas = inmutables |
-| [`go.json`](go.json) | servicio Go | `vet`/`build`/`test -race` no se reemplazan; `invariants` sobre el apagado ordenado |
-| [`monorepo.json`](monorepo.json) | workspace con varios paquetes | el gate corre el workspace completo; `skipIfMissing` para clones parciales |
-| [`infra-terraform.json`](infra-terraform.json) | repo de infraestructura | el arnés se invierte: `bash.deny` es la mitad del valor (planear sí, aplicar no) |
+| Archivo | Repo típico | Forja | Lo que muestra de particular |
+|---|---|---|---|
+| [`node-typescript.json`](node-typescript.json) | app o librería TS con vitest | GitHub `#123` | `typecheck` como señal irremplazable; `purity` de la capa de dominio |
+| [`python.json`](python.json) | servicio FastAPI/Django con pytest | GitLab `#123` | `ruff` + `mypy` + `pytest` son tres señales; migraciones aplicadas = inmutables |
+| [`go.json`](go.json) | servicio Go | Jira `PROJ-123` | `vet`/`build`/`test -race` no se reemplazan; artefactos **en el repo**, no en el gestor |
+| [`monorepo.json`](monorepo.json) | workspace con varios paquetes | Azure Boards `AB#123` | el gate corre el workspace completo; `skipIfMissing` para clones parciales |
+| [`infra-terraform.json`](infra-terraform.json) | repo de infraestructura | Gitea `#123` | el arnés se invierte: `bash.deny` es la mitad del valor (planear sí, aplicar no) |
+
+La columna **Forja** está a propósito: cinco gestores distintos con el mismo mecanismo. Ningún
+script del arnés conoce ninguno — lo único que cambia es `tracker.issuePattern`. Ver
+[trazabilidad.md](../docs/trazabilidad.md).
 
 ## Cómo se usan
 

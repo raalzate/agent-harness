@@ -23,6 +23,7 @@ borra `.git/gate-dirty`, que es lo que mira el hook `Stop`.
 |---|---|---|
 | `node scripts/harness-selftest.mjs` | que los frenos bloquean lo que dicen bloquear y que ninguna ruta ni regex del config apunta a la nada | un hook roto o un config inválido fallan en silencio: ninguna otra señal los ve |
 | `node scripts/docs-linkcheck.mjs` | que ninguna referencia a un doc o a una ruta del repo apunte a la nada | mover un archivo rompe punteros que ninguna otra señal mira |
+| `node scripts/artifacts-check.mjs` | que los artefactos de trabajo estén donde el equipo declaró (`tracker.artifactsIn`), sin tocar la red | tener spec y plan a medias en dos lugares no lo mira ninguna otra señal, y se descubre cuando alguien busca el plan |
 | `node scripts/repo-lint.mjs` | las convenciones del repo: pureza de los hooks, contrato de exit codes, literales de evento, TODOs sin issue, y que todo gotcha declare su `Mecanismo:` | son reglas de dominio: ninguna config estándar las conoce |
 
 **Test verde ≠ compila ≠ entregable.** Reportar "listo" sin gate verde es una violación, no un
@@ -50,9 +51,16 @@ por stdin; **exit 0** = seguir (y el stdout de `UserPromptSubmit`/`SessionStart`
 **exit 2** = bloquear, y stderr es lo único que el agente lee. Un `exit 1` es un error del hook, no
 una decisión — por eso hay un `invariants` que lo prohíbe en `harness.mjs`.
 
-En git, además: `.githooks/pre-commit` (rutas protegidas + lint de los archivos staged) y
-`.githooks/post-commit` (opcional, refresca lo derivado), instalados con `npm run hooks:install` —
-`core.hooksPath` debe valer `.githooks`; `.git/hooks/` sólo tiene `.sample` a propósito.
+En git, además:
+
+| Hook | Qué hace |
+|---|---|
+| `.githooks/pre-commit` | rutas protegidas + lint de los archivos staged |
+| `.githooks/commit-msg` | **el trabajo no entra al historial sin quedar registrado**: si el commit toca código, el mensaje referencia el ítem de trabajo (`tracker.issuePattern`) o declara `sin-issue: <motivo>`. Agnóstico de forja — ver `docs/trazabilidad.md` |
+| `.githooks/post-commit` | opcional: refresca lo derivado (un índice, un grafo) |
+
+Se instalan con `npm run hooks:install` — `core.hooksPath` debe valer `.githooks`; `.git/hooks/`
+sólo tiene `.sample` a propósito.
 
 ## El self-test: qué prueba exactamente
 
@@ -68,7 +76,10 @@ config**, así que una regla nueva queda cubierta sin escribir un caso a mano:
    nunca escribe archivos temporales dentro del árbol de fuentes;
 6. el clasificador de pedidos no se degrada, y se calla en lo trivial;
 7. las señales del gate existen, son ejecutables y **declaran su `why`**;
-8. los subagentes y comandos tienen frontmatter válido (sin él, Claude Code no los ofrece).
+8. **el registro no es opcional**: seis casos de `commit-msg` en un repo git temporal —código sin
+   referencia, con referencia, con la fuga y su motivo, la fuga pelada, extensión ignorada, un
+   merge— todos derivados del config, más un cebo para `artifacts-check`;
+9. los subagentes y comandos tienen frontmatter válido (sin él, Claude Code no los ofrece).
 
 Lo que no puede reducir a un ejemplo lo reporta como **omitido**, nunca como pasado.
 
@@ -104,6 +115,7 @@ Lo que no puede reducir a un ejemplo lo reporta como **omitido**, nunca como pas
 | `STATUS.md` | estado verificado + deuda conocida | `SessionStart` |
 | `docs/gotchas.md` | síntoma → causa → regla → mecanismo | bajo demanda / `/lesson` |
 | `docs/decisions/` | ADRs: por qué, no qué | bajo demanda |
+| `docs/trazabilidad.md` | cómo queda registrado el trabajo, en cualquier forja | bajo demanda |
 | `docs/buenas-practicas.md` | la guía de fondo, agnóstica de stack | bajo demanda / `/harness-audit` |
 
 ## Conducta ante el error
@@ -121,7 +133,10 @@ Lo que no puede reducir a un ejemplo lo reporta como **omitido**, nunca como pas
 ## Deuda conocida del arnés
 
 - **El ruteo informa, no bloquea.** Nada impide entregar una feature grande sin declarar la ruta
-  salvo el criterio del agente y el review: la intención no es verificable por máquina.
+  salvo el criterio del agente y el review: la intención no es verificable por máquina. Lo que sí
+  bloquea es `commit-msg`: el trabajo no llega al historial sin registro. Pero pide *un* registro,
+  no el *correcto* — que una feature vaya con ítem madre y tareas en vez de un bug suelto sigue
+  siendo criterio.
 - **`bash.deny` es un guardarraíl, no un sandbox.** Sube el costo del error accidental; un agente
   puede reformular el comando. Para aislamiento real hace falta contenedor o permisos del sistema.
 - **`sampleFromPattern` no reduce todos los regex.** Los patrones con lookbehind, backreferences o

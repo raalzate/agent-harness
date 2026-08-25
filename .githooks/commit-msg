@@ -1,0 +1,95 @@
+#!/usr/bin/env bash
+# commit-msg — el trabajo no entra al historial sin quedar registrado.
+#
+# Por qué existe: el ruteo de trabajo INFORMA, pero informar no es un mecanismo.
+# Sin este freno, un cambio de producción puede llegar a estar terminado sin que
+# exista un registro en ninguna parte, y el registro se hace de memoria al final
+# —o no se hace—. El criterio del agente no es un mecanismo; esto sí.
+#
+# Regla: si el commit toca CÓDIGO (no sólo documentación), el mensaje referencia
+# un ítem de trabajo, o declara por qué no lo lleva:
+#
+#     sin-issue: typo en el tooltip, sin superficie nueva
+#
+# La declaración va en su propia línea y queda en el historial: saltarse el
+# registro es una decisión firmada, no un silencio.
+#
+# AGNÓSTICO DE FORJA: qué cuenta como referencia lo decide `tracker.issuePattern`
+# en `.claude/harness.config.json`. GitHub y GitLab usan `#123`; Azure Boards,
+# `AB#123`; Jira, `PROJ-123`. El hook no conoce ninguna: aplica el regex.
+#
+# Instalación: git config core.hooksPath .githooks
+set -uo pipefail
+
+CONFIG=".claude/harness.config.json"
+MSG_FILE="${1:-}"
+[ -z "$MSG_FILE" ] && exit 0
+[ -f "$CONFIG" ] || exit 0
+command -v node >/dev/null 2>&1 || exit 0
+
+STAGED=$(git diff --cached --name-only --diff-filter=ACMR 2>/dev/null || true)
+
+# Toda la decisión en node: el config es JSON y bash no lo lee sin ayuda.
+# stdin = mensaje del commit; argv[1] = lista de archivos staged.
+SALIDA=$(node -e '
+const fs = require("fs");
+const c = JSON.parse(fs.readFileSync(".claude/harness.config.json", "utf8"));
+const cm = c.commitMsg || {};
+const tr = c.tracker || {};
+if (!cm.codePattern || !tr.issuePattern) process.exit(0);   // no configurado: el freno no corre
+
+const msg = fs.readFileSync(0, "utf8");
+const staged = (process.argv[1] || "").split("\n").filter(Boolean);
+
+// Merge, revert y los commits de arreglo los escribe git o los reescribe el
+// rebase: no hay decisión humana nueva que declarar.
+const salteables = cm.skipSubjects || ["Merge ", "Revert ", "fixup! ", "squash! "];
+if (salteables.some((p) => msg.startsWith(p))) process.exit(0);
+
+// Código = lo que puede romper el producto o el arnés. La documentación, las
+// notas de release y las capturas no piden registro: SON el registro.
+let codigo;
+try {
+  const re = new RegExp(cm.codePattern);
+  const ignoradas = cm.ignoreExtensions || [".md"];
+  codigo = staged.filter((f) => re.test(f) && !ignoradas.some((e) => f.endsWith(e)));
+} catch { process.exit(0); }                                 // regex inválido: lo caza el self-test
+if (!codigo.length) process.exit(0);
+
+try {
+  if (new RegExp(tr.issuePattern).test(msg)) process.exit(0);
+} catch { process.exit(0); }
+
+// La declaración explícita: en su propia línea y CON motivo (un `sin-issue:`
+// pelado sería la misma omisión con otro nombre).
+const fuga = cm.escapeLine || "sin-issue:";
+const reFuga = new RegExp("^" + fuga.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\s*\\S+", "im");
+if (reFuga.test(msg)) process.exit(0);
+
+const lineas = [
+  "commit-msg: este commit toca código y no queda registrado en ninguna parte.",
+  "",
+  "Archivos de código en el commit:",
+  ...codigo.map((f) => `  - ${f}`),
+  "",
+  "Elegí una de las dos, y que quede en el historial:",
+  "",
+  `  1) Referenciá el ítem de trabajo en el mensaje (${tr.issueExample || "#123"}).`,
+  ...(tr.newIssueHint || []).map((h) => `     ${h}`),
+  "",
+  `  2) Declaralo, con el motivo, en una línea del cuerpo:`,
+  `     ${fuga} <por qué este cambio no necesita registro>`,
+  "",
+  "Saltear el hook está prohibido: si el freno estorba, se arregla el freno.",
+];
+process.stderr.write(lineas.join("\n") + "\n");
+process.exit(1);
+' "$STAGED" < "$MSG_FILE" 2>&1)
+CODIGO=$?
+
+if [ "$CODIGO" -ne 0 ]; then
+  echo "$SALIDA" >&2
+  exit 1
+fi
+
+exit 0

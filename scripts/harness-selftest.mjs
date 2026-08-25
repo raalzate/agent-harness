@@ -263,6 +263,91 @@ if (hookFiles.has("gate-stop.mjs") && config.gate?.marker) {
   }
 }
 
+// 3f. El trabajo queda registrado: `.githooks/commit-msg` en un repo git DE VERDAD.
+//     El hook lee `git diff --cached`, así que probarlo con payloads falsos no probaría
+//     nada. Los casos se derivan del config: la ruta de código sale de `commitMsg.codePattern`
+//     y la referencia de ejemplo, de `tracker.issuePattern`.
+{
+  const hook = abs(".githooks/commit-msg");
+  const cm = config.commitMsg;
+  const tr = config.tracker;
+
+  if (!fs.existsSync(hook) || !cm?.codePattern || !tr?.issuePattern) {
+    skip("commit-msg exige registro", "el repo no configura `commitMsg` + `tracker`");
+  } else {
+    const rutaCodigo = sampleFromPattern(cm.codePattern);
+    const refIssue = sampleFromPattern(tr.issuePattern);
+    const fuga = cm.escapeLine ?? "sin-issue:";
+    const extIgnorada = (cm.ignoreExtensions ?? [".md"])[0];
+
+    if (!rutaCodigo || !refIssue) {
+      skip("commit-msg exige registro", "codePattern o issuePattern no se reducen a un ejemplo");
+    } else {
+      const archivoCodigo = `${rutaCodigo.endsWith("/") ? rutaCodigo : `${rutaCodigo}/`}ejemplo.mjs`;
+      const archivoDoc = `${rutaCodigo.endsWith("/") ? rutaCodigo : `${rutaCodigo}/`}ejemplo${extIgnorada}`;
+
+      // Repo git NUEVO por caso: los archivos staged de un caso anterior seguirían ahí
+      // (nada se commitea) y el caso "sólo documentación" vería código staged.
+      const correr = (archivos, mensaje) => {
+        const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "harness-commitmsg-"));
+        try {
+          const git = (...args) => spawnSync("git", args, { cwd: tmp, encoding: "utf8" });
+          git("init", "-q");
+          git("config", "user.email", "selftest@example.com");
+          git("config", "user.name", "selftest");
+          // El hook lee el config del CWD: se copia el de este repo al repo temporal.
+          fs.mkdirSync(path.join(tmp, ".claude"), { recursive: true });
+          fs.copyFileSync(abs(".claude/harness.config.json"), path.join(tmp, ".claude/harness.config.json"));
+          for (const [rel, contenido] of Object.entries(archivos)) {
+            const dest = path.join(tmp, rel);
+            fs.mkdirSync(path.dirname(dest), { recursive: true });
+            fs.writeFileSync(dest, contenido);
+          }
+          // Sólo los archivos del caso: un `git add -A` staged también el config copiado
+          // acá arriba, que cae bajo `codePattern` y ensuciaba el caso de documentación.
+          for (const rel of Object.keys(archivos)) git("add", rel);
+          const msgFile = path.join(tmp, "MSG");
+          fs.writeFileSync(msgFile, mensaje);
+          const res = spawnSync("bash", [hook, msgFile], { cwd: tmp, encoding: "utf8" });
+          return { status: res.status, stderr: res.stderr ?? "" };
+        } finally {
+          fs.rmSync(tmp, { recursive: true, force: true });
+        }
+      };
+
+      const casos = [
+        ["código sin referencia ni declaración", { [archivoCodigo]: "// x\n" }, "fix: algo", 1],
+        ["código con el ítem referenciado", { [archivoCodigo]: "// y\n" }, `fix: algo\n\nRefs ${refIssue.trim()}`, 0],
+        ["código con la fuga declarada y su motivo", { [archivoCodigo]: "// z\n" }, `chore: renombrar\n\n${fuga} renombre interno, sin cambio de comportamiento`, 0],
+        ["la fuga SIN motivo no alcanza", { [archivoCodigo]: "// w\n" }, `chore: algo\n\n${fuga}`, 1],
+        ["extensión ignorada no pide registro", { [archivoDoc]: "nota\n" }, "docs: notas", 0],
+        ["merge lo escribe git, no pide registro", { [archivoCodigo]: "// m\n" }, "Merge branch 'main'", 0],
+      ];
+      for (const [nombre, archivos, mensaje, esperado] of casos) {
+        const res = correr(archivos, mensaje);
+        if (res.status === esperado) ok(`commit-msg: ${nombre}`);
+        else bad(`commit-msg: ${nombre}`, `esperaba exit ${esperado}, salió ${res.status}. stderr: ${res.stderr.trim().slice(0, 160)}`);
+      }
+    }
+  }
+}
+
+// 3g. Los artefactos de trabajo, donde el equipo decidió. Se prueba con un CEBO en un
+//     directorio temporal: `--dir` existe justamente para no escribir en el repo.
+if (config.tracker?.artifactsIn === "tracker" && fs.existsSync(abs("scripts/artifacts-check.mjs"))) {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "harness-artifacts-"));
+  try {
+    const dir = path.join(tmp, config.tracker.specsDir ?? "specs");
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, "plan-suelto.md"), "# plan que debería vivir en el gestor\n");
+    const res = spawnSync("node", [abs("scripts/artifacts-check.mjs"), "--dir", tmp], { encoding: "utf8" });
+    if (res.status !== 0) ok("artifacts-check caza un artefacto suelto en el repo");
+    else bad("artifacts-check caza un artefacto suelto", `exit 0 con el cebo puesto: ${res.stdout.trim()}`);
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+}
+
 // ── 4. Las reglas del lint muerden (por stdin: no escribe archivos) ──────────
 section("4. reglas del lint");
 

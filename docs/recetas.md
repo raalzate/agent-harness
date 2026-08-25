@@ -77,6 +77,29 @@ El feedback que llega después del push llega cuando el contexto de la decisión
 
 ---
 
+## No usamos GitHub
+
+Mejor: así se nota si el arnés está sesgado. Nada acá depende de una forja — lo único que hay que
+configurar es qué cuenta como referencia a un ítem de trabajo:
+
+```json
+"tracker": { "kind": "azure-devops", "issuePattern": "\\bAB#[0-9]+\\b", "issueExample": "AB#123" }
+```
+
+La tabla completa (GitHub, GitLab, Azure Boards, Jira, Gitea, Linear) y la trampa de los patrones
+tipo Jira que cazan `UTF-8` están en [trazabilidad.md](trazabilidad.md).
+
+Lo que **sí** conviene revisar al portar a otra forja:
+
+1. `newIssueHint` — poné el comando real de tu CLI (`glab`, `az boards`, `tea`). Es lo que lee
+   quien quedó frenado a las 7 de la tarde.
+2. El CI: el gate es el mismo comando en GitHub Actions, GitLab CI, Azure Pipelines o Jenkins. Si tu
+   pipeline verifica algo distinto de lo que verifica quien programa, una de las dos señales miente.
+3. Si automatizás la creación de ítems, que sea **un solo script**: cambiar de gestor tiene que
+   tocar un archivo, y ese script no va al gate porque necesita red y credenciales.
+
+---
+
 ## Un incidente acaba de costar dos horas
 
 ```

@@ -94,6 +94,7 @@ fuerte disponible —test > hook/lint > comando > markdown— y esa mejora pasa 
 | saber qué hace cada clave del config | [docs/config-reference.md](docs/config-reference.md) |
 | copiar una config que ya funciona | [examples/](examples/README.md) |
 | ver el arnés de este repo, señal por señal | [docs/arnes.md](docs/arnes.md) |
+| que el trabajo quede registrado (en cualquier forja) | [docs/trazabilidad.md](docs/trazabilidad.md) |
 | resolver algo concreto | [docs/recetas.md](docs/recetas.md) |
 | saber por qué está hecho así | los ADR en [docs/decisions/](docs/decisions) — especificidad en JSON · sin dependencias · self-test generado · contrato de hooks |
 

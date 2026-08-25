@@ -241,6 +241,44 @@ contestar "¿esto anda?". Sólo lo verificado con un comando; lo que se supone v
 
 ---
 
+## `tracker` — el gestor de trabajo, sea cual sea
+
+```json
+{ "kind": "github",
+  "issuePattern": "(^|[^A-Za-z0-9_])#[0-9]+",
+  "issueExample": "#123 · Refs #123 · Closes #123",
+  "newIssueHint": ["Bug o mejora acotada:  gh issue create --title \"…\""],
+  "artifactsIn": "tracker", "specsDir": "specs", "allowedInRepo": ["specs/README.md"] }
+```
+
+| Clave | Qué hace |
+|---|---|
+| `kind` | informativo, para quien lee el config. Ninguna máquina lo interpreta |
+| `issuePattern` | qué cuenta como referencia a un ítem de trabajo en un mensaje de commit. GitHub y GitLab usan `#123`; Azure Boards, `AB#123`; Jira, `PROJ-123` |
+| `issueExample` | lo que se le muestra a quien quedó frenado |
+| `newIssueHint` | los comandos concretos para abrir el ítem, en el CLI de **tu** forja |
+| `artifactsIn` | `"tracker"` o `"repo"`: dónde viven spec, plan y tareas |
+| `specsDir`, `allowedInRepo` | qué directorio mira `artifacts-check` y qué se le permite tener |
+
+Ningún script de este arnés conoce una forja: aplican el regex. Detalle por gestor, y la trampa de
+los patrones tipo Jira que cazan `UTF-8`, en [trazabilidad.md](trazabilidad.md).
+
+---
+
+## `commitMsg` — qué commits piden registro
+
+```json
+{ "codePattern": "^(src/|scripts/)", "ignoreExtensions": [".md", ".png"],
+  "skipSubjects": ["Merge ", "Revert ", "fixup! ", "squash! "], "escapeLine": "sin-issue:" }
+```
+
+Lo lee `.githooks/commit-msg`. `codePattern` decide qué es **código**; la documentación no pide
+registro porque *es* el registro. `escapeLine` es la fuga declarada y exige motivo: un
+`sin-issue:` pelado sería la misma omisión con otro nombre. Sin `tracker.issuePattern`, el freno
+no corre — se configuran juntos.
+
+---
+
 ## `sdd` — ruteo del trabajo
 
 ```json
@@ -290,6 +328,8 @@ calla — que es lo correcto: un hook que habla sin tener nada que ofrecer sólo
 | `purity`, `forbiddenDeps`, `singleSource`, `invariants`, `patterns`, `tests`, `incidents` | `scripts/repo-lint.mjs`, self-test |
 | `docs` | `scripts/docs-linkcheck.mjs`, `scripts/repo-lint.mjs` (directorios a saltear) |
 | `status` | `session-start.mjs`, self-test |
+| `tracker` | `.githooks/commit-msg`, `scripts/artifacts-check.mjs`, self-test |
+| `commitMsg` | `.githooks/commit-msg`, self-test |
 | `sdd` | `sdd-router.mjs`, self-test |
 | `postCommit` | `.githooks/post-commit` |
 | `graph` | `graph-first.mjs` |
