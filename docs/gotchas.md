@@ -71,6 +71,40 @@ Regla:   el arnés **no escribe en el árbol de fuentes**. Para probar un freno 
 Mecanismo: el modo `--stdin` de `scripts/repo-lint.mjs`, y un caso del self-test que falla si
          quedaron archivos temporales en la raíz del repo.
 
+### GOTCHA: los hooks citaban tres documentos que no existían
+
+Síntoma: el hook imprimía «Criterio completo: `docs/harness/sdd.md`» en cada prompt <!-- linkcheck:ignora -->, y ese archivo
+         no existe en este repo. Otros dos punteros igual de muertos. Gate verde todo el tiempo.
+Causa:   dos capas. Los hooks se copiaron con la prosa de OTRA estructura de carpetas
+         (`docs/harness/`, `docs/architecture/`) <!-- linkcheck:ignora -->, y el link-check sólo recorría `*.md`: lo que un
+         hook le IMPRIME al agente es memoria igual que un markdown, pero vive en un `.mjs`.
+Regla:   un hook no cablea rutas de documentación: el documento que cita sale del config
+         (`sdd.doc`, `docs.reuseCatalog`) y se cita sólo si existe. Los docs del arnés **no
+         viajan** con la instalación, así que cablearlos garantiza un puntero muerto en el destino.
+Mecanismo: `docs.proseInSource` — el link-check también revisa la prosa de `.claude/hooks`,
+         `.githooks` y `scripts`. Al encenderlo cazó los tres punteros y cinco ejemplos mal
+         escritos en los propios scripts.
+
+### GOTCHA: el falso rojo con una ruta que nadie escribió
+
+Síntoma: el link-check reportaba `docs/mi` — un prefijo que no aparece en ningún documento. <!-- linkcheck:ignora -->
+Causa:   la ruta real tenía espacios (un PDF exportado de diseño) y el barrido de rutas en prosa la
+         cortaba en el primer espacio.
+Regla:   una ruta citada entre backticks se evalúa **completa**, espacios incluidos, y su prefijo
+         truncado no se vuelve a reportar.
+Mecanismo: el paso de backticks en `scripts/docs-linkcheck.mjs`, previo al barrido general. Un rojo
+         mentiroso es peor que el silencio: entrena al equipo a ignorar la señal.
+
+### GOTCHA: el self-test daba falso rojo con hooks que no eran «node archivo»
+
+Síntoma: `✗ el archivo del hook no existe` sobre dos hooks que existían y funcionaban: un binario
+         externo y uno declarado con `$CLAUDE_PROJECT_DIR` entre comillas.
+Causa:   el analizador era `/node\\s+(\\S+)/`: asumía que todo hook es `node <archivo>`, y `(\\S+)`
+         se tragaba la comilla y la variable.
+Regla:   se normaliza antes de analizar (comillas, `$CLAUDE_PROJECT_DIR`), y de un ejecutable
+         externo se afirma **sólo que existe** — no se le puede pedir `node --check`.
+Mecanismo: paso 1c del self-test, con cinco formas reales de declarar un hook.
+
 ### GOTCHA: el instalador viajó roto en dos releases
 
 Síntoma: `node scripts/harness-init.mjs <repo>` moría con `SyntaxError: missing ) after argument

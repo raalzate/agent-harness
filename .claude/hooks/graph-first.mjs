@@ -2,7 +2,7 @@
  * UserPromptSubmit — «consultá el índice antes de abrir archivos».
  *
  * El pedido «¿dónde está X?» o «¿quién usa Y?» se contesta con un subgrafo, no
- * leyendo el árbol: eso es lo que dice `docs/harness/buenas-practicas.md` §1 y lo
+ * leyendo el árbol: eso es lo que dice la guía de buenas prácticas del arnés y lo
  * que hasta ahora era sólo prosa. Este hook lo pone en el camino del agente.
  *
  * Callado a propósito en dos casos: si el grafo no está construido (no hay nada

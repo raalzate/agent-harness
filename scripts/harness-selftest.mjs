@@ -106,15 +106,51 @@ function sampleFromPattern(pattern) {
   return s;
 }
 
+/**
+ * Qué ejecuta un hook declarado en settings.json.
+ *
+ * NO todo hook es `node <archivo>`: un repo real declara binarios externos y usa
+ * `$CLAUDE_PROJECT_DIR` con comillas, como recomienda la documentación de Claude Code.
+ * Asumir `node <archivo>` daba falso rojo sobre hooks que existían y funcionaban — y un
+ * falso rojo enseña a ignorar la sección entera.
+ */
+function analizarComando(comando) {
+  const limpio = String(comando ?? "")
+    .replace(/["']/g, "")
+    .replace(/\$\{?CLAUDE_PROJECT_DIR\}?\/?/g, "")
+    .trim();
+  if (!limpio) return null;
+
+  const conNode = /(?:^|\s)node\s+(?:--\S+\s+)*(\S+)/.exec(limpio);
+  // Con `node` el archivo es del repo y se le puede exigir que parsee.
+  if (conNode) return { file: conNode[1], tipo: "script", etiqueta: conNode[1] };
+
+  // Sin `node`: un ejecutable. De un binario externo sólo se puede afirmar que EXISTE.
+  return { file: limpio.split(/\s+/)[0], tipo: "ejecutable", etiqueta: limpio.split(/\s+/)[0] };
+}
+
+/** ¿El ejecutable existe? Por ruta, o buscándolo en PATH si es un nombre suelto. */
+function existeEjecutable(cmd) {
+  if (cmd.includes("/")) return fs.existsSync(cmd) || fs.existsSync(abs(cmd));
+  const dirs = (process.env.PATH ?? "").split(path.delimiter).filter(Boolean);
+  return dirs.some((d) => {
+    try {
+      return fs.statSync(path.join(d, cmd)).isFile();
+    } catch {
+      return false;
+    }
+  });
+}
+
 // ── 1. Hooks declarados vs. hooks que existen ────────────────────────────────
 section("1. settings.json → hooks declarados");
 const declared = [];
 for (const [event, groups] of Object.entries(settings.hooks ?? {})) {
   for (const group of groups ?? []) {
     for (const hook of group.hooks ?? []) {
-      const file = /node\s+(\S+)/.exec(hook.command ?? "")?.[1];
-      declared.push({ event, command: hook.command, file });
-      if (file) hookFiles.add(path.basename(file));
+      const info = analizarComando(hook.command);
+      declared.push({ event, command: hook.command, ...(info ?? {}) });
+      if (info?.tipo === "script") hookFiles.add(path.basename(info.file));
     }
   }
 }
@@ -122,8 +158,20 @@ if (!declared.length) {
   bad("hay hooks declarados", "settings.json no declara ninguno: el arnés está instalado y muerto");
 }
 for (const d of declared) {
-  if (!d.file || !fs.existsSync(abs(d.file))) {
-    bad(`${d.event} → ${d.command}`, "el archivo del hook no existe");
+  if (!d.file) {
+    bad(`${d.event} → ${d.command}`, "el hook no declara ningún comando");
+    continue;
+  }
+
+  if (d.tipo === "ejecutable") {
+    // Un binario de fuera del repo no se puede parsear: se afirma sólo lo verificable.
+    if (existeEjecutable(d.file)) ok(`${d.event} → ${d.etiqueta} (ejecutable externo: sólo se verifica que exista)`);
+    else bad(`${d.event} → ${d.command}`, `no encontré el ejecutable \`${d.file}\` (ni por ruta ni en PATH)`);
+    continue;
+  }
+
+  if (!fs.existsSync(abs(d.file))) {
+    bad(`${d.event} → ${d.command}`, `el archivo del hook no existe: \`${d.file}\``);
     continue;
   }
   const syntax = spawnSync("node", ["--check", abs(d.file)], { encoding: "utf8" });
@@ -149,6 +197,27 @@ section("1b. scripts del arnés");
     }
   }
   if (!rotos) ok(`${scripts.length} script(s) del arnés parsean`);
+}
+
+// 1c. El analizador de comandos, contra formas reales de otros repos. Asumir «node <archivo>»
+//     daba FALSO ROJO sobre hooks que existían: un binario externo y `$CLAUDE_PROJECT_DIR`
+//     entre comillas (la forma que recomienda la documentación de Claude Code).
+{
+  const casos = [
+    ["node .claude/hooks/x.mjs", "script", ".claude/hooks/x.mjs"], // linkcheck:ignora (ficticio)
+    ['node "$CLAUDE_PROJECT_DIR/scripts/ado.mjs" hook edit', "script", "scripts/ado.mjs"], // linkcheck:ignora
+    ["node --experimental-strip-types scripts/x.ts", "script", "scripts/x.ts"], // linkcheck:ignora
+    ["/usr/local/bin/graphify hook-guard search", "ejecutable", "/usr/local/bin/graphify"],
+    ["graphify hook-guard search", "ejecutable", "graphify"],
+  ];
+  let malos = 0;
+  for (const [comando, tipo, file] of casos) {
+    const r = analizarComando(comando);
+    if (r?.tipo === tipo && r?.file === file) continue;
+    malos += 1;
+    bad(`analizarComando(${comando})`, `esperaba {${tipo}, ${file}} y dio {${r?.tipo}, ${r?.file}}`);
+  }
+  if (!malos) ok(`${casos.length} formas de declarar un hook se analizan bien (binario externo, \`$CLAUDE_PROJECT_DIR\`, flags de node)`);
 }
 
 // ── 2. El config no apunta a la nada ─────────────────────────────────────────
@@ -222,7 +291,7 @@ for (const regla of config.protectedPaths ?? []) {
 
 // 3b. Un archivo cualquiera NO protegido tiene que pasar: un freno que bloquea todo se desactiva.
 {
-  const r = runHook("protected-paths.mjs", writeInput("docs/borrador-de-prueba.md"));
+  const r = runHook("protected-paths.mjs", writeInput("archivo-normal-selftest.md"));
   if (r.status === 0) ok("protected-paths deja pasar un archivo normal");
   else bad("protected-paths deja pasar un archivo normal", `exit ${r.status}: el freno bloquea de más`);
 }
@@ -295,7 +364,7 @@ if (config.askFirst?.marker && hookFiles.has("ask-first.mjs") && hookFiles.has("
   const existia = fs.existsSync(marker);
   const respaldo = existia ? fs.readFileSync(marker, "utf8") : null;
 
-  const edicionEnRepo = writeInput("docs/ejemplo-selftest.md", "x");
+  const edicionEnRepo = writeInput("archivo-normal-selftest.md", "x");
   const tras = (prompt) => {
     runHook("ask-first.mjs", { hook_event_name: "UserPromptSubmit", prompt });
     return runHook("action-guard.mjs", edicionEnRepo).status === 2;

@@ -4,7 +4,8 @@
  *
  * No bloquea (la intención no es verificable por máquina): informa. La regla dura es que
  * saltarse SDD sea una decisión declarada, no un silencio. Reglas en
- * `.claude/harness.config.json` → `sdd`; criterio completo en `docs/harness/sdd.md`.
+ * `.claude/harness.config.json` → `sdd`; el documento con el criterio completo —si el repo lo
+ * tiene— se declara en `sdd.doc` y se cita sólo cuando existe.
  */
 import { readInput, loadConfig, allow } from "./harness.mjs";
 
@@ -32,7 +33,12 @@ for (const route of config.sdd?.routes ?? []) {
 if (!messages.length) allow();
 
 allow(
-  ["## Ruteo del arnés (hook sdd-router)", ...messages, "", "Criterio completo: `docs/harness/sdd.md`. El gate no cambia por tener o no spec."].join(
+  [
+    "## Ruteo del arnés (hook sdd-router)",
+    ...messages,
+    "",
+    config.sdd?.doc ? `Criterio completo: \`${config.sdd.doc}\`. El gate no cambia por tener o no spec.` : "El gate no cambia por tener o no spec.",
+  ].join(
     "\n",
   ),
 );

@@ -230,7 +230,7 @@
     ]
   },
   "docs": {
-    "$comment": "`mentionSignals` son los documentos que ENUMERAN las señales del gate: si entra una señal y el documento no la nombra, es rojo (pasó con la página del repo, que quedó mostrando el gate anterior). `proseRoots` son las raíces de este repo que el link-check verifica cuando aparecen citadas en prosa. Una raíz que NO está acá no se verifica — y por eso las guías pueden citar `src/lib/...` como EJEMPLO de otro repo sin que el gate mienta.",
+    "$comment": "`proseInSource` son las rutas cuyo CÓDIGO también se revisa: lo que un hook le imprime al agente es memoria igual que un markdown, y hasta hoy quedaba fuera del freno. `reuseCatalog` es el documento que cita `reuse-guard` (vacío = no lo cita). `ignoreMarker` exime UNA LÍNEA (un gotcha que cita la ruta muerta que causó el incidente, un caso de prueba con rutas ficticias): la exención queda a la vista y no silencia el archivo entero. `mentionSignals` son los documentos que ENUMERAN las señales del gate: si entra una señal y el documento no la nombra, es rojo (pasó con la página del repo, que quedó mostrando el gate anterior). `proseRoots` son las raíces de este repo que el link-check verifica cuando aparecen citadas en prosa. Una raíz que NO está acá no se verifica — y por eso las guías pueden citar `src/lib/...` como EJEMPLO de otro repo sin que el gate mienta.",
     "proseRoots": [
       "docs",
       "scripts",
@@ -260,7 +260,14 @@
     "mentionSignals": [
       "docs/index.html",
       "docs/arnes.md"
-    ]
+    ],
+    "reuseCatalog": "docs/config-reference.md",
+    "proseInSource": [
+      ".claude/hooks",
+      ".githooks",
+      "scripts"
+    ],
+    "ignoreMarker": "linkcheck:ignora"
   },
   "status": {
     "file": "STATUS.md"
@@ -383,7 +390,8 @@
         ],
         "message": ""
       }
-    ]
+    ],
+    "doc": "docs/sdd.md"
   },
   "askFirst": {
     "$comment": "«Una pregunta se contesta; una acción se pide». `ask-first.mjs` marca el turno cuando el pedido es interrogativo Y no trae verbo de acción; `action-guard.mjs` deniega toda edición DENTRO del repo mientras el marcador esté puesto. Lo limpia el siguiente pedido del usuario: la fuga es humana a propósito. `pastPatterns` desempata el caso que originó el hook: un verbo de acción EN PASADO («¿aplicaste eso?») pregunta por lo hecho, no pide que se haga. La detección es ANGOSTA (interrogación explícita) porque un clasificador ancho bloquearía instrucciones legítimas — y un freno que muerde de más se desactiva a mano. Lo que NO caza está declarado en STATUS.md.",
