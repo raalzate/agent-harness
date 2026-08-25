@@ -73,6 +73,31 @@ registrar nada. **Anclá los prefijos reales de tus proyectos** (`\b(PROJ|OPS|IN
 la diferencia entre un freno y un adorno, y el self-test no puede distinguirla por vos: un patrón
 demasiado ancho *también* caza su propia muestra.
 
+## Cómo entra el trabajo a la rama principal
+
+El registro contesta *por qué* se hizo un cambio. Falta la otra mitad: *cómo entró*. En casi todos
+los equipos «se trabaja por PR» es una convención que se ve en el historial —`Merge pull request
+#N`— y que **nada hace cumplir del lado de quien empuja**. Un push directo entra sin revisión y sin
+que nadie se entere hasta que aparece en el log.
+
+Dos frenos, y hacen falta los dos:
+
+| Freno | Dónde | Qué cubre |
+|---|---|---|
+| Protección de rama | en la forja (GitHub, GitLab, Azure) | el freno **fuerte**: el servidor rechaza el push y puede exigir que el gate esté verde antes del merge |
+| `.githooks/pre-push` | en tu máquina | falla **antes de la red**, con el motivo y el comando para mover los commits a una rama; funciona con cualquier forja, o sin ninguna |
+
+```json
+"branches": { "protected": ["main", "master"], "reason": "…" }
+```
+
+La protección del servidor no se puede verificar desde el gate (necesita red y permisos), así que
+**se activa a mano y se anota en `STATUS.md`** como lo que es: una señal verificada una vez. El
+hook local, en cambio, tiene su caso en el self-test.
+
+Al activar la protección conviene exigir también el check del gate: así el merge depende de la
+misma señal que corre en tu máquina, que es toda la idea.
+
 ## Dónde viven los artefactos de una feature
 
 Spec, plan, checklist y tareas tienen dos casas posibles, y las dos son defendibles:

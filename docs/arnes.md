@@ -59,6 +59,7 @@ En git, además:
 |---|---|
 | `.githooks/pre-commit` | rutas protegidas + lint de los archivos staged |
 | `.githooks/commit-msg` | **el trabajo no entra al historial sin quedar registrado**: si el commit toca código, el mensaje referencia el ítem de trabajo (`tracker.issuePattern`) o declara `sin-issue: <motivo>`. Agnóstico de forja — ver `docs/trazabilidad.md` |
+| `.githooks/pre-push` | **el trabajo entra a `main` por PR, no de un empujón**: falla antes de la red con el motivo y el comando para mover los commits. Complemento local de la protección de rama de la forja |
 | `.githooks/post-commit` | opcional: refresca lo derivado (un índice, un grafo) |
 
 Se instalan con `npm run hooks:install` — `core.hooksPath` debe valer `.githooks`; `.git/hooks/`

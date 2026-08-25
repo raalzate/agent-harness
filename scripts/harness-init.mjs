@@ -67,6 +67,7 @@ const COPIAR = [
   "scripts/artifacts-check.mjs",
   ".githooks/pre-commit",
   ".githooks/commit-msg",
+  ".githooks/pre-push",
   ".githooks/post-commit",
 ];
 
@@ -78,7 +79,13 @@ const PLANTILLAS = [
   ["plantillas/harness.config.json", ".claude/harness.config.json"],
 ];
 
-const EJECUTABLES = new Set(["scripts/gate.sh", ".githooks/pre-commit", ".githooks/commit-msg", ".githooks/post-commit"]);
+const EJECUTABLES = new Set([
+  "scripts/gate.sh",
+  ".githooks/pre-commit",
+  ".githooks/commit-msg",
+  ".githooks/pre-push",
+  ".githooks/post-commit",
+]);
 
 const acciones = [];
 for (const rel of COPIAR) acciones.push({ tipo: "copia", desde: rel, hacia: rel });
@@ -133,7 +140,9 @@ Falta lo que ninguna herramienta puede adivinar — y es donde está el valor:
        gate       → bash scripts/gate.sh
        gate:fast  → bash scripts/gate.sh fast
 
-  4. git config core.hooksPath .githooks      (pre-commit y commit-msg reales, no .sample)
+  4. git config core.hooksPath .githooks      (pre-commit, commit-msg y pre-push reales)
+     Y activá la protección de rama en tu forja: el hook local avisa antes de la red,
+     pero el freno fuerte es del lado del servidor.
 
   4b. .claude/harness.config.json → tracker
      El patrón de referencia de TU forja (#123, AB#123, PROJ-123…). Copiar el de otro

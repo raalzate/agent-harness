@@ -242,6 +242,18 @@ contestar "¿esto anda?". Sólo lo verificado con un comando; lo que se supone v
 
 ---
 
+## `branches` — cómo entra el trabajo
+
+```json
+{ "protected": ["main", "master"], "reason": "el trabajo entra por pull request…" }
+```
+
+Lo lee `.githooks/pre-push`, que falla antes de la red si empujás directo a una de esas ramas y te
+da el comando para mover los commits. Es el **complemento local** de la protección de rama de la
+forja, no su reemplazo: el freno fuerte vive en el servidor. Sin esta clave, el hook no hace nada.
+
+---
+
 ## `askFirst` — no actuar sobre una pregunta
 
 ```json
@@ -363,6 +375,7 @@ calla — que es lo correcto: un hook que habla sin tener nada que ofrecer sólo
 | `commitMsg` | `.githooks/commit-msg`, self-test |
 | `sdd` | `sdd-router.mjs`, self-test |
 | `askFirst` | `ask-first.mjs`, `action-guard.mjs`, self-test |
+| `branches` | `.githooks/pre-push`, self-test |
 | `postCommit` | `.githooks/post-commit` |
 | `graph` | `graph-first.mjs` |
 
