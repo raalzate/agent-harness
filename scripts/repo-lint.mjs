@@ -48,7 +48,7 @@ const lineOf = (content, index) => content.slice(0, index).split("\n").length;
 
 /** Extensiones que se consideran «fuente» al barrer el repo. Agnóstico: no asume un stack. */
 const SOURCE_EXT =
-  /\.(ts|tsx|js|jsx|mjs|cjs|py|go|rs|java|kt|kts|rb|php|cs|swift|scala|sh|bash|sql|vue|svelte)$/;
+  /\.(ts|tsx|js|jsx|mjs|cjs|py|go|rs|java|kt|kts|rb|php|cs|swift|scala|sh|bash|sql|vue|svelte|html)$/;
 
 /** Compila un regex del config sin reventar el turno del agente si está mal escrito. */
 function re(pattern, flags = "") {

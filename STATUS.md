@@ -49,7 +49,9 @@ Pre-commit instalado: sí (`core.hooksPath=.githooks`). CI corre **el mismo** `n
   repo de juguete y corra su gate.
 - **La landing page (`docs/index.html`): media deuda cerrada.** Que nombre **todas** las señales del
   gate ya lo verifica `docs-linkcheck` (`docs.mentionSignals`), porque envejeció en una sola sesión.
-  Lo que sigue sin cubrir es el contenido de los transcripts —que sean salida real de hoy— y si la
-  página se ve bien: eso no lo juzga ninguna máquina y se revisa a ojo cuando cambia.
+  Una clase de rotura visual sí tiene freno desde hoy: la regla `GRIDLI` (un `li` como contenedor
+  grid/flex parte el texto en una palabra por línea, y sólo se ve al publicar). Lo que sigue sin
+  cubrir es el resto del aspecto y que los transcripts sean salida real de hoy: eso no lo juzga
+  ninguna máquina y se revisa a ojo cuando cambia. **Mirá la página publicada después de tocarla.**
 - **Sin `postCommit` ni `graph` configurados.** Las dos claves existen y están documentadas, pero
   este repo no las usa, así que su comportamiento no está cubierto por ninguna señal de acá.

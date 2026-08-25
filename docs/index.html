@@ -163,8 +163,12 @@ h1 .sub { display: block; font-family: var(--f-mono); font-weight: 500; font-siz
 
 ol.leyes { list-style: none; margin: 1.75rem 0 0; padding: 0; counter-reset: l; display: grid; gap: 0; grid-template-columns: minmax(0,1fr); border-top: 1px solid var(--rule-soft); }
 @media (min-width: 54rem) { ol.leyes { grid-template-columns: repeat(2, minmax(0,1fr)); column-gap: clamp(1.5rem, 4vw, 3rem); } }
-ol.leyes li { counter-increment: l; padding: .85rem 0; border-bottom: 1px solid var(--rule-soft); display: grid; grid-template-columns: 1.9rem minmax(0,1fr); gap: .75rem; color: var(--ink-soft); font-size: calc(var(--step-0) * .96); }
-ol.leyes li::before { content: counter(l, decimal-leading-zero); font-family: var(--f-mono); font-size: var(--step--1); color: var(--accent-ink); line-height: 1.7; }
+/* El `li` es un BLOQUE con sangría, no un grid de dos columnas: el texto que sigue al
+   `<b>` es un nodo suelto, y en un grid se convierte en un ítem anónimo que cae en la
+   celda del número (1.9rem) — una palabra por línea. Con sangría + ::before absoluto,
+   el contenido en línea fluye como corresponde y el bug no puede volver a existir. */
+ol.leyes li { counter-increment: l; position: relative; padding: .85rem 0 .85rem 2.65rem; border-bottom: 1px solid var(--rule-soft); color: var(--ink-soft); font-size: calc(var(--step-0) * .96); }
+ol.leyes li::before { content: counter(l, decimal-leading-zero); position: absolute; left: 0; top: .85rem; font-family: var(--f-mono); font-size: var(--step--1); color: var(--accent-ink); line-height: 1.7; }
 ol.leyes b { color: var(--ink); font-weight: 600; }
 
 /* ── Piezas ────────────────────────────────────────────────────────────── */
@@ -188,9 +192,11 @@ ol.leyes b { color: var(--ink); font-weight: 600; }
 
 /* ── Pasos ─────────────────────────────────────────────────────────────── */
 ol.steps { list-style: none; margin: 1.75rem 0 0; padding: 0; counter-reset: s -1; display: flex; flex-direction: column; }
-ol.steps li { counter-increment: s; display: grid; grid-template-columns: 3.25rem minmax(0, 1fr); gap: 1rem; padding: 1rem 0; border-top: 1px solid var(--rule-soft); }
+/* Sangría + ::before absoluto, igual que ol.leyes: ningún `li` de esta página es
+   contenedor grid/flex, así el texto en línea nunca se convierte en ítem anónimo. */
+ol.steps li { counter-increment: s; position: relative; padding: 1rem 0 1rem 4.25rem; border-top: 1px solid var(--rule-soft); }
 ol.steps li:last-child { border-bottom: 1px solid var(--rule-soft); }
-ol.steps li::before { content: "paso " counter(s); font-family: var(--f-mono); font-size: var(--step--1); color: var(--ink-faint); line-height: 1.7; }
+ol.steps li::before { content: "paso " counter(s); position: absolute; left: 0; top: 1rem; font-family: var(--f-mono); font-size: var(--step--1); color: var(--ink-faint); line-height: 1.7; }
 ol.steps h3 { font-size: var(--step-0); font-family: var(--f-display); font-weight: 600; }
 ol.steps p { color: var(--ink-soft); margin-top: .2rem; }
 

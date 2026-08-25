@@ -203,6 +203,14 @@
       "pattern": "console\\.log\\(",
       "appliesTo": "^\\.claude/hooks/.*\\.mjs$",
       "message": "en un hook, stdout ES la interfaz con el agente (UserPromptSubmit y SessionStart inyectan su stdout al contexto). Usá `allow(mensaje)` / `deny(mensaje)` de harness.mjs."
+    },
+    {
+      "$comment": "Nace de un incidente: la lista de leyes de la página salió publicada con una palabra por línea. La construcción se eliminó de todo el HTML antes de instalar la regla, así que la regla no bloquea nada legítimo hoy.",
+      "id": "GRIDLI",
+      "pattern": "li \\{[^}]*display:\\s*(grid|flex)",
+      "appliesTo": "\\.html$",
+      "allow": [],
+      "message": "un `li` como contenedor grid/flex convierte el texto suelto que acompaña a un `<b>` o un `<code>` en un ítem anónimo, que cae en la celda del marcador: una palabra por línea, y sólo se ve al publicar. Usá sangría (`padding-left`) con el marcador en un `::before` absoluto."
     }
   ],
   "tests": {

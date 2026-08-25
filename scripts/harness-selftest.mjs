@@ -97,8 +97,12 @@ function sampleFromPattern(pattern) {
   s = s.replace(/[?*+]/g, "");
   s = s.replace(/[\^$]/g, "");
 
-  for (const [c, ph] of Object.entries(PH)) s = s.split(ph).join(c);
+  // La validación va ANTES de restaurar: lo que sobra acá es sintaxis que no se pudo
+  // reducir. Los metacaracteres que estaban ESCAPADOS son literales del ejemplo y siguen
+  // guardados como placeholders — validarlos como si fueran sintaxis reportaba «omitido»
+  // cualquier patrón con `\{` o `\[`, que es medio CSS.
   if (/[\\[\]{}]/.test(s) || !s.trim()) return null;
+  for (const [c, ph] of Object.entries(PH)) s = s.split(ph).join(c);
   return s;
 }
 

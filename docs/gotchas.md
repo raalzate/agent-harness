@@ -71,6 +71,22 @@ Regla:   el arnés **no escribe en el árbol de fuentes**. Para probar un freno 
 Mecanismo: el modo `--stdin` de `scripts/repo-lint.mjs`, y un caso del self-test que falla si
          quedaron archivos temporales en la raíz del repo.
 
+### GOTCHA: una palabra por línea en la lista publicada
+
+Síntoma: la lista de leyes salió publicada con el texto de cada ítem en columna —una palabra por
+         renglón— mientras el título del ítem ocupaba el ancho completo. En el editor el HTML se
+         veía bien.
+Causa:   el `<li>` era `display: grid` con dos columnas (marcador · contenido) y su contenido
+         mezclaba un `<b>` con texto suelto. En un contenedor grid, un nodo de texto suelto se
+         convierte en un **ítem anónimo** y ocupa la celda siguiente: la del marcador, de 1.9rem.
+Regla:   ningún `li` es contenedor grid o flex. El marcador va en un `::before` absoluto y el
+         contenido fluye en línea, con `padding-left` para la sangría.
+Mecanismo: regla `GRIDLI` del lint sobre los `.html` (la construcción se eliminó de toda la
+         página antes de instalarla, así que no bloquea nada legítimo), con su caso en el
+         self-test. El bug obligó además a arreglar el generador de muestras: validaba los
+         metacaracteres escapados como si fueran sintaxis y reportaba **omitido** cualquier patrón
+         con `\{` — medio CSS.
+
 ### GOTCHA: la página que mostraba el gate de ayer
 
 Síntoma: entró una señal nueva al gate y la página del repo siguió mostrando el transcript anterior,
