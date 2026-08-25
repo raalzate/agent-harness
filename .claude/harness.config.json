@@ -222,7 +222,7 @@
     ]
   },
   "docs": {
-    "$comment": "`proseRoots` son las raíces de este repo que el link-check verifica cuando aparecen citadas en prosa. Una raíz que NO está acá no se verifica — y por eso las guías pueden citar `src/lib/...` como EJEMPLO de otro repo sin que el gate mienta.",
+    "$comment": "`mentionSignals` son los documentos que ENUMERAN las señales del gate: si entra una señal y el documento no la nombra, es rojo (pasó con la página del repo, que quedó mostrando el gate anterior). `proseRoots` son las raíces de este repo que el link-check verifica cuando aparecen citadas en prosa. Una raíz que NO está acá no se verifica — y por eso las guías pueden citar `src/lib/...` como EJEMPLO de otro repo sin que el gate mienta.",
     "proseRoots": [
       "docs",
       "scripts",
@@ -248,7 +248,11 @@
       "plantillas/gotchas.md",
       "plantillas/ADR.md"
     ],
-    "externalPaths": []
+    "externalPaths": [],
+    "mentionSignals": [
+      "docs/index.html",
+      "docs/arnes.md"
+    ]
   },
   "status": {
     "file": "STATUS.md"

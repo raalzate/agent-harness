@@ -14,7 +14,7 @@ lo que se supone va en "deuda conocida".
 |---|---|---|
 | Self-test del arnés | `node scripts/harness-selftest.mjs` | verde — 9 hooks declarados y parseados, 58 regex del config compilan, 27 rutas resuelven, 22 frenos probados con muestras derivadas del propio config, 5 reglas del lint muerden, 5 casos de ruteo |
 | Los frenos no muerden de más | incluido en el self-test | verde — un archivo normal pasa `protected-paths`, `git status` pasa `bash-guard`, el router se calla en lo trivial |
-| Link-check de docs | `node scripts/docs-linkcheck.mjs` | verde — enlaces y rutas citadas medidos contra `git ls-files`, con `docs.proseRoots` acotando qué raíces se verifican |
+| Link-check de docs | `node scripts/docs-linkcheck.mjs` | verde — enlaces y rutas citadas medidos contra `git ls-files` (`docs.proseRoots` acota qué raíces), **y** que los documentos de `docs.mentionSignals` nombren las 4 señales del gate |
 | Lint de convenciones | `node scripts/repo-lint.mjs` | verde — PUREZA (hooks sin lanzar procesos, 2 excepciones declaradas) · EVENTOS (`singleSource`) · INVARIANTE (contrato de exit codes de `harness.mjs`) · TODO · CONSOLE · ONLY · INCIDENTE |
 | Reglas activas | `node scripts/repo-lint.mjs --rules` | verde — 1 capa de pureza · 5 deps vetadas · 1 registro · 1 archivo con invariantes · 2 patrones · registro de incidentes |
 | El trabajo queda registrado | incluido en el self-test | verde — 6 casos de `.githooks/commit-msg` en un repo git temporal, derivados del config: código sin referencia, con referencia, con la fuga y su motivo, la fuga pelada, extensión ignorada, y un merge |
@@ -47,9 +47,9 @@ Pre-commit instalado: sí (`core.hooksPath=.githooks`). CI corre **el mismo** `n
 - **El instalador no se prueba end-to-end en CI.** Se verifica en dry-run a mano; nada garantiza que
   un repo recién portado quede verde. Mecanismo candidato: un job de CI que instale el arnés en un
   repo de juguete y corra su gate.
-- **La landing page (`docs/index.html`) no está en el gate.** Ninguna máquina juzga si una página se
-  ve bien, así que no hay señal que la cubra: se revisa a ojo cuando cambia, y el riesgo real es que
-  envejezca en silencio respecto del repo (los transcripts que muestra son salida real de hoy).
-  Mecanismo candidato: un check que compare los comandos citados en la página contra `gate.signals`.
+- **La landing page (`docs/index.html`): media deuda cerrada.** Que nombre **todas** las señales del
+  gate ya lo verifica `docs-linkcheck` (`docs.mentionSignals`), porque envejeció en una sola sesión.
+  Lo que sigue sin cubrir es el contenido de los transcripts —que sean salida real de hoy— y si la
+  página se ve bien: eso no lo juzga ninguna máquina y se revisa a ojo cuando cambia.
 - **Sin `postCommit` ni `graph` configurados.** Las dos claves existen y están documentadas, pero
   este repo no las usa, así que su comportamiento no está cubierto por ninguna señal de acá.

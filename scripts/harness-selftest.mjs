@@ -348,6 +348,27 @@ if (config.tracker?.artifactsIn === "tracker" && fs.existsSync(abs("scripts/arti
   }
 }
 
+// 3h. Un documento que enumera las señales del gate y se queda corto es rojo. El cebo es
+//     un CONFIG temporal que declara un doc que no las nombra: no se escribe en el árbol.
+if ((config.docs?.mentionSignals ?? []).length && (config.gate?.signals ?? []).length) {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "harness-docsync-"));
+  try {
+    const cebo = JSON.parse(JSON.stringify(config));
+    // `incidents.file` existe y con seguridad NO enumera las señales del gate.
+    cebo.docs.mentionSignals = [config.incidents?.file ?? "docs/gotchas.md"];
+    const cfg = path.join(tmp, "cebo.json");
+    fs.writeFileSync(cfg, JSON.stringify(cebo));
+    const res = spawnSync("node", [abs("scripts/docs-linkcheck.mjs"), "--config", cfg], { encoding: "utf8" });
+    if (res.status !== 0 && `${res.stdout}${res.stderr}`.includes("señal sin mencionar")) {
+      ok("link-check caza un documento que no nombra todas las señales del gate");
+    } else {
+      bad("link-check caza un documento incompleto", `exit ${res.status}: ${(res.stdout + res.stderr).trim().slice(0, 160)}`);
+    }
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+}
+
 // ── 4. Las reglas del lint muerden (por stdin: no escribe archivos) ──────────
 section("4. reglas del lint");
 

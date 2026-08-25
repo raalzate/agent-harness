@@ -71,6 +71,21 @@ Regla:   el arnés **no escribe en el árbol de fuentes**. Para probar un freno 
 Mecanismo: el modo `--stdin` de `scripts/repo-lint.mjs`, y un caso del self-test que falla si
          quedaron archivos temporales en la raíz del repo.
 
+### GOTCHA: la página que mostraba el gate de ayer
+
+Síntoma: entró una señal nueva al gate y la página del repo siguió mostrando el transcript anterior,
+         con tres señales donde ya había cuatro. Nada falló: un documento que enumera de menos no
+         rompe nada, sólo miente.
+Causa:   el link-check verificaba que los punteros apunten a algo, no que las **listas** estén
+         completas. Y la deuda estaba declarada («ninguna máquina juzga si una página se ve bien»),
+         lo que tapó que sí hay una parte verificable: qué señales nombra.
+Regla:   todo documento que enumere las señales del gate se declara en `docs.mentionSignals`, y si
+         falta una, es rojo. Verifica hacia un solo lado a propósito: que **falte** una señal es
+         mentira; que sobre texto, no.
+Mecanismo: `node scripts/docs-linkcheck.mjs` en el gate, con su caso en el self-test (un config
+         cebo que declara un documento que no las nombra). El cebo vive en un temporal: el arnés no
+         escribe en el árbol de fuentes.
+
 ### GOTCHA: el patrón de referencia que cazaba «UTF-8»
 
 Síntoma: el freno de registro deja pasar commits sin ítem de trabajo, y el self-test está verde.

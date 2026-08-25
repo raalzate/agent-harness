@@ -221,6 +221,7 @@ motivo: un hueco declarado se puede cerrar, uno tácito no.
 | Clave | Para qué |
 |---|---|
 | `ignore` | directorios que el link-check no recorre |
+| `mentionSignals` | documentos que **enumeran** las señales del gate (la página, el doc del arnés). Si entra una señal y el documento no la nombra, es rojo. Verifica hacia un solo lado: que falte una señal es mentira, que sobre texto no |
 | `proseRoots` | raíces del repo que se verifican cuando aparecen citadas en prosa. Una raíz que **no** está acá no se verifica: es lo que permite que una guía cite `src/lib/...` como ejemplo de otro repo sin que el gate mienta |
 | `ignoreFiles` | documentos cuyas rutas son **ejemplos**, no punteros (una guía agnóstica, una plantilla) |
 | `externalPaths` | rutas que genera una herramienta externa y **ninguna máquina puede verificar en el clon**. Declararlas es la forma honesta de decir "esto no se verifica" |

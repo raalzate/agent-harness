@@ -305,12 +305,13 @@ footer { border-top: 4px solid var(--ink); }
             verifica quien programa.</p>
         </div>
         <div class="piece">
-          <p class="mark">9 hooks · PreToolUse · Stop</p>
+          <p class="mark">9 hooks del agente · 3 de git</p>
           <h3>Frenos en el ciclo</h3>
           <p>Antes de escribir (rutas protegidas, reuso), antes de un comando irreversible, después de
-            cada edición (el lint del archivo tocado, con el error real) y al cerrar la tarea.</p>
-          <p class="solves">Evita: el agente que borra lo que no debía, y el que dice «listo» sin
-            verificar.</p>
+            cada edición (el lint del archivo tocado, con el error real) y al cerrar la tarea. En git:
+            rutas protegidas al commitear y <strong>el registro del trabajo</strong>.</p>
+          <p class="solves">Evita: el agente que borra lo que no debía, el que dice «listo» sin
+            verificar, y el cambio que llega al historial sin que nadie sepa por qué se hizo.</p>
         </div>
         <div class="piece">
           <p class="mark">harness-selftest.mjs</p>
@@ -554,7 +555,7 @@ node scripts/harness-init.mjs /ruta/a/tu/repo --apply</code></pre>
 
 <footer>
   <div class="wrap foot">
-    <span>Agent Harness · Apache-2.0 · <a href="https://github.com/raalzate/agent-harness">github.com/raalzate/agent-harness</a></span>
+    <span>Agent Harness · Apache-2.0 · <a href="https://github.com/raalzate/agent-harness">github.com/raalzate/agent-harness</a> · sin dependencias</span>
     <span class="verdict-key"><span class="v1">verde: entregable</span><span class="v2">rojo: leé el error real</span><span class="v3">omitida: no es verde</span></span>
   </div>
 </footer>
@@ -566,7 +567,7 @@ node scripts/harness-init.mjs /ruta/a/tu/repo --apply</code></pre>
   var L = function (t, c) { return { t: t, c: c || "" }; };
   var salidas = {
     verde: {
-      nota: "Las tres señales corrieron. El marcador `.git/gate-dirty` se borra: el hook Stop ya deja cerrar la tarea.",
+      nota: "Las cuatro señales corrieron. El marcador `.git/gate-dirty` se borra: el hook Stop ya deja cerrar la tarea.",
       lineas: [
         L("$ npm run gate", "cmd"),
         L("Gate (modo: full) — agent-harness", "dim"),
@@ -593,6 +594,10 @@ node scripts/harness-init.mjs /ruta/a/tu/repo --apply</code></pre>
         L("repo-lint: OK", "dim"),
         L("    ✓ lint de convenciones", "ok"),
         L(""),
+        L("──▶ artefactos en su lugar"),
+        L("artifacts-check: OK — sin artefactos sueltos", "dim"),
+        L("    ✓ artefactos en su lugar", "ok"),
+        L(""),
         L("GATE VERDE — entregable.", "ok")
       ]
     },
@@ -607,6 +612,9 @@ node scripts/harness-init.mjs /ruta/a/tu/repo --apply</code></pre>
         L(""),
         L("──▶ link-check de docs"),
         L("    ✓ link-check de docs", "ok"),
+        L(""),
+        L("──▶ artefactos en su lugar"),
+        L("    ✓ artefactos en su lugar", "ok"),
         L(""),
         L("──▶ lint de convenciones"),
         L("repo-lint: 1 problema(s)", "dim"),
