@@ -161,6 +161,10 @@ Regla:   todo documento que enumere las señales del gate se declara en `docs.me
 Mecanismo: `node scripts/docs-linkcheck.mjs` en el gate, con su caso en el self-test (un config
          cebo que declara un documento que no las nombra). El cebo vive en un temporal: el arnés no
          escribe en el árbol de fuentes.
+         **Segunda vuelta:** el mismo agujero tenía otra cara —la página no enlazaba nueve de los
+         quince documentos, así que para quien llegaba de afuera no existían—. Se cierra con
+         `docs.mustLinkAll`: el índice enlaza TODO lo que hay bajo `from`, y lo que se deja afuera
+         se escribe en `except` en vez de olvidarse.
 
 ### GOTCHA: el patrón de referencia que cazaba «UTF-8»
 
