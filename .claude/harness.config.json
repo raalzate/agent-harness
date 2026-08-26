@@ -230,7 +230,7 @@
     ]
   },
   "docs": {
-    "$comment": "`proseInSource` son las rutas cuyo CÓDIGO también se revisa: lo que un hook le imprime al agente es memoria igual que un markdown, y hasta hoy quedaba fuera del freno. `reuseCatalog` es el documento que cita `reuse-guard` (vacío = no lo cita). `ignoreMarker` exime UNA LÍNEA (un gotcha que cita la ruta muerta que causó el incidente, un caso de prueba con rutas ficticias): la exención queda a la vista y no silencia el archivo entero. `mentionSignals` son los documentos que ENUMERAN las señales del gate: si entra una señal y el documento no la nombra, es rojo (pasó con la página del repo, que quedó mostrando el gate anterior). `proseRoots` son las raíces de este repo que el link-check verifica cuando aparecen citadas en prosa. Una raíz que NO está acá no se verifica — y por eso las guías pueden citar `src/lib/...` como EJEMPLO de otro repo sin que el gate mienta.",
+    "$comment": "`proseInSource` son las rutas cuyo CÓDIGO también se revisa: lo que un hook le imprime al agente es memoria igual que un markdown, y hasta hoy quedaba fuera del freno. `reuseCatalog` es el documento que cita `reuse-guard` (vacío = no lo cita). `ignoreMarker` exime UNA LÍNEA (un gotcha que cita la ruta muerta que causó el incidente, un caso de prueba con rutas ficticias): la exención queda a la vista y no silencia el archivo entero. `mustLinkAll` exige que un índice enlace TODO lo que hay bajo `from` (lo que se deja afuera se escribe en `except`). `mentionSignals` son los documentos que ENUMERAN las señales del gate: si entra una señal y el documento no la nombra, es rojo (pasó con la página del repo, que quedó mostrando el gate anterior). `proseRoots` son las raíces de este repo que el link-check verifica cuando aparecen citadas en prosa. Una raíz que NO está acá no se verifica — y por eso las guías pueden citar `src/lib/...` como EJEMPLO de otro repo sin que el gate mienta.",
     "proseRoots": [
       "docs",
       "scripts",
@@ -267,7 +267,17 @@
       ".githooks",
       "scripts"
     ],
-    "ignoreMarker": "linkcheck:ignora"
+    "ignoreMarker": "linkcheck:ignora",
+    "mustLinkAll": [
+      {
+        "$comment": "La página es la puerta de entrada: un documento que no aparezca ahí no existe para quien llega de afuera. Nueve documentos vivieron sin enlace hasta que alguien preguntó si la página tenía documentación.",
+        "file": "docs/index.html",
+        "from": [
+          "docs"
+        ],
+        "except": []
+      }
+    ]
   },
   "status": {
     "file": "STATUS.md"

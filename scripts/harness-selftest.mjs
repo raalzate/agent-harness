@@ -504,6 +504,29 @@ if (config.tracker?.artifactsIn === "tracker" && fs.existsSync(abs("scripts/arti
   }
 }
 
+// 3g-bis. Un índice de documentación al que le falta un documento es rojo. El cebo es un
+//     CONFIG temporal cuyo índice apunta a un archivo que no enlaza nada: no se escribe
+//     en el árbol.
+if ((config.docs?.mustLinkAll ?? []).length) {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "harness-indice-"));
+  try {
+    const cebo = JSON.parse(JSON.stringify(config));
+    // `incidents.file` existe y con seguridad no enlaza la documentación entera.
+    cebo.docs.mustLinkAll = [{ file: config.incidents?.file ?? "docs/gotchas.md", from: ["docs"], except: [] }];
+    cebo.docs.mentionSignals = [];
+    const cfg = path.join(tmp, "cebo.json");
+    fs.writeFileSync(cfg, JSON.stringify(cebo));
+    const res = spawnSync("node", [abs("scripts/docs-linkcheck.mjs"), "--config", cfg], { encoding: "utf8" });
+    if (res.status !== 0 && `${res.stdout}${res.stderr}`.includes("sin enlazar en el índice")) {
+      ok("link-check caza un documento que el índice no enlaza");
+    } else {
+      bad("link-check caza un documento sin enlazar", `exit ${res.status}: ${(res.stdout + res.stderr).trim().slice(0, 160)}`);
+    }
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+}
+
 // 3h. Un documento que enumera las señales del gate y se queda corto es rojo. El cebo es
 //     un CONFIG temporal que declara un doc que no las nombra: no se escribe en el árbol.
 if ((config.docs?.mentionSignals ?? []).length && (config.gate?.signals ?? []).length) {

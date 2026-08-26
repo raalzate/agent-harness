@@ -209,6 +209,8 @@ tbody tr:last-child td { border-bottom: 0; }
 td.mono, th.mono { font-family: var(--f-mono); }
 td:first-child { font-family: var(--f-display); font-weight: 600; white-space: nowrap; }
 
+td.grupo { font-family: var(--f-mono); font-size: var(--step--1); text-transform: uppercase; letter-spacing: .09em; color: var(--ink-faint); background: var(--surface-2); font-weight: 500; }
+
 /* ── Lista de negaciones ───────────────────────────────────────────────── */
 ul.nots { list-style: none; margin: 1.5rem 0 0; padding: 0; display: flex; flex-direction: column; gap: .9rem; }
 ul.nots li { padding-left: 2.4rem; position: relative; color: var(--ink-soft); }
@@ -242,6 +244,7 @@ footer { border-top: 4px solid var(--ink); }
         <a href="#registro">Registro</a>
         <a href="#portar">Portar</a>
         <a href="#stacks">Stacks</a>
+        <a href="#documentacion">Docs</a>
         <a href="https://github.com/raalzate/agent-harness">Repo&nbsp;↗</a>
       </nav>
     </div>
@@ -587,6 +590,57 @@ node scripts/harness-init.mjs /ruta/a/tu/repo --apply</code></pre>
           </tbody>
         </table>
       </div>
+    </div>
+  </div>
+</section>
+
+<section id="documentacion">
+  <div class="wrap sec-inner">
+    <p class="rail"><b>15</b>documentos, en cuatro capas</p>
+    <div>
+      <div class="col stack">
+        <p class="eyebrow">Documentación</p>
+        <h2 style="font-size:var(--step-2)">Todo lo que esta página resume, en largo</h2>
+        <p>Esta página es la versión de una pasada. Lo que sigue es la documentación completa, en el
+          orden que funciona: <strong>el método</strong> (qué se hace y por qué) → <strong>el
+          caso</strong> (cómo se ve aplicado) → <strong>la receta</strong> (cómo instalarlo) →
+          <strong>la referencia</strong> (qué significa cada clave).</p>
+      </div>
+
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>Documento</th><th>Qué contesta</th></tr></thead>
+          <tbody>
+            <tr><td colspan="2" class="grupo">Por qué — la teoría</td></tr>
+            <tr><td><a href="https://github.com/raalzate/agent-harness/blob/main/docs/metodo.md">metodo.md</a></td><td>El ciclo de trabajo y las once leyes, cada una con su cicatriz, cómo se ve cuando falta y el comando que la hace cumplir.</td></tr>
+            <tr><td><a href="https://github.com/raalzate/agent-harness/blob/main/docs/caso-de-estudio.md">caso-de-estudio.md</a></td><td>Un arnés real con números verificables, cuatro mecanismos contados desde el incidente que los creó, y los huecos que ese repo declara.</td></tr>
+            <tr><td><a href="https://github.com/raalzate/agent-harness/blob/main/docs/buenas-practicas.md">buenas-practicas.md</a></td><td>La guía de fondo, agnóstica de stack: qué es un arnés, las cinco decisiones del bucle, los niveles de madurez L0–L4.</td></tr>
+
+            <tr><td colspan="2" class="grupo">Cómo — la práctica</td></tr>
+            <tr><td><a href="https://github.com/raalzate/agent-harness/blob/main/docs/portar.md">portar.md</a></td><td>La receta: instalarlo en un repo cualquiera en una tarde, con las preguntas a contestar y en qué orden.</td></tr>
+            <tr><td><a href="https://github.com/raalzate/agent-harness/blob/main/docs/trazabilidad.md">trazabilidad.md</a></td><td>Que el trabajo quede registrado y cómo entra a la rama principal, en cualquier forja.</td></tr>
+            <tr><td><a href="https://github.com/raalzate/agent-harness/blob/main/docs/config-reference.md">config-reference.md</a></td><td>Cada clave del config: qué hace, qué la lee, qué se rompe si la tocás.</td></tr>
+            <tr><td><a href="https://github.com/raalzate/agent-harness/blob/main/docs/recetas.md">recetas.md</a></td><td>Situaciones concretas con el comando al lado: agregar una señal, medir si el arnés está vivo, el gate que tarda, «no usamos GitHub».</td></tr>
+
+            <tr><td colspan="2" class="grupo">Este repo — el ejemplo trabajando</td></tr>
+            <tr><td><a href="https://github.com/raalzate/agent-harness/blob/main/docs/arnes.md">arnes.md</a></td><td>Cómo está montado el arnés de este repo, señal por señal y hook por hook.</td></tr>
+            <tr><td><a href="https://github.com/raalzate/agent-harness/blob/main/docs/sdd.md">sdd.md</a></td><td>Cuándo el trabajo arranca con spec y cuándo no, y por qué saltarse la ruta se declara.</td></tr>
+            <tr><td><a href="https://github.com/raalzate/agent-harness/blob/main/docs/gotchas.md">gotchas.md</a></td><td>Los incidentes que costaron horas, en formato fijo: síntoma · causa · regla · mecanismo.</td></tr>
+            <tr><td><a href="https://github.com/raalzate/agent-harness/blob/main/docs/README.md">README.md</a></td><td>El índice de la documentación, con las cuatro capas y por dónde empezar.</td></tr>
+
+            <tr><td colspan="2" class="grupo">Decisiones — por qué está hecho así</td></tr>
+            <tr><td><a href="https://github.com/raalzate/agent-harness/blob/main/docs/decisions/0001-arnes-portable.md">0001</a></td><td>La especificidad va en un JSON y el gate es declarativo.</td></tr>
+            <tr><td><a href="https://github.com/raalzate/agent-harness/blob/main/docs/decisions/0002-sin-dependencias.md">0002</a></td><td>Sólo node y bash — y qué precisión se resigna a cambio.</td></tr>
+            <tr><td><a href="https://github.com/raalzate/agent-harness/blob/main/docs/decisions/0003-selftest-generado.md">0003</a></td><td>El self-test deriva sus casos del config en vez de tener uno escrito por freno.</td></tr>
+            <tr><td><a href="https://github.com/raalzate/agent-harness/blob/main/docs/decisions/0004-contrato-de-hooks.md">0004</a></td><td>El contrato de exit codes, y por qué un arnés roto <em>deja pasar</em>.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p class="col" style="margin-top:1.1rem;color:var(--ink-faint);font-family:var(--f-mono);font-size:var(--step--1)">
+        Un documento nuevo que no aparezca en esta tabla pone el gate en rojo: el índice no se
+        mantiene a mano.
+      </p>
     </div>
   </div>
 </section>
