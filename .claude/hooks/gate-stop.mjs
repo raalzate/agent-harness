@@ -22,6 +22,6 @@ if (!fs.existsSync(marker)) allow();
 
 deny(
   `GATE PENDIENTE: hay código editado en esta sesión y el gate no quedó verde.\n` +
-    `Corré \`${config.gate?.command ?? "npm run gate"}\` (o el subagente \`gate-runner\`) y arreglá lo que salga rojo.\n` +
+    `Corré \`${config.gate?.command ?? "bash scripts/gate.sh"}\` (o el subagente \`gate-runner\`) y arreglá lo que salga rojo.\n` +
     `Si el trabajo no es entregable todavía, decilo explícitamente en el mensaje final: reportar "listo" sin gate verde es una violación, no un descuido.`,
 );

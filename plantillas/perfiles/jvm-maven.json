@@ -1,0 +1,78 @@
+{
+  "$stack": "jvm-maven",
+  "$comment": "JVM con Maven (Java, Kotlin, Scala, Groovy). El layout estándar `src/main` · `src/test` es lo que hace reducibles los patrones de test y de código. `onlyPattern` vacío: `@Disabled` a veces es legítimo, y si en este repo no lo es se declara como `patterns`.",
+  "$detect": [
+    "pom.xml"
+  ],
+  "gate": {
+    "codeExtensions": [
+      ".java",
+      ".kt",
+      ".kts",
+      ".scala",
+      ".groovy"
+    ],
+    "installHooksCommand": "git config core.hooksPath .githooks",
+    "$signalHints": [
+      {
+        "name": "verify",
+        "command": [
+          "mvn",
+          "-q",
+          "-B",
+          "verify"
+        ],
+        "why": "compila, corre los tests y aplica los plugins de calidad en un solo paso"
+      },
+      {
+        "name": "tests",
+        "command": [
+          "mvn",
+          "-q",
+          "-B",
+          "test"
+        ],
+        "why": "señal de desarrollo más barata que el verify completo"
+      }
+    ]
+  },
+  "purityImportSyntax": [
+    "^\\s*import\\s+(?:static\\s+)?{mod}",
+    "^\\s*import\\s+{mod}\\b"
+  ],
+  "forbiddenDeps": {
+    "manifest": "pom.xml",
+    "matcher": "<artifactId>\\s*{pkg}\\s*</artifactId>"
+  },
+  "tests": {
+    "filePattern": "(^|/)src/test/|[Tt]ests?\\.(java|kt|scala|groovy)$",
+    "onlyPattern": ""
+  },
+  "commitMsg": {
+    "$codePattern": "El layout de código NO lo decide el lenguaje: en un repo puede ser `src/`, en otro `services/`. Lo confirma el equipo — si queda mal, `commit-msg` deja de exigir la referencia al ítem y P11 se apaga sin que nada se ponga rojo.",
+    "ignoreExtensions": [
+      ".md",
+      ".png",
+      ".jpg",
+      ".jpeg",
+      ".svg"
+    ]
+  },
+  "protectedPaths": [
+    {
+      "pattern": "^target/|/target/",
+      "reason": "salida de Maven: se regenera con `mvn package`, no se edita."
+    },
+    {
+      "pattern": "^\\.mvn/wrapper/maven-wrapper\\.jar$",
+      "reason": "binario del wrapper: se cambia actualizando el wrapper, no a mano."
+    }
+  ],
+  "docs": {
+    "ignore": [
+      "target",
+      ".mvn",
+      ".git"
+    ]
+  }
+}

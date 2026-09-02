@@ -3,12 +3,17 @@
   "$arranque": "El self-test va a estar ROJO recién instalado: las claves con placeholders (`<ruta del registro>`, `<archivo>`, `src/lib`) apuntan a la nada a propósito. Ese rojo es el MAPA de lo que falta llenar — cada línea nombra su clave. Lo que no aplique a este repo se BORRA, no se deja con el placeholder: una regla que apunta a la nada es peor que ninguna.",
   "gate": {
     "$comment": "OBLIGATORIO Y VACÍO A PROPÓSITO. Nadie de afuera sabe cuáles son las señales reales de este repo: leé su manifiesto y su CI, y escribilas acá. Cada señal declara `why` (por qué NO la cubre otra señal): una señal sin motivo es una señal que nadie va a defender cuando moleste. `fastSkip: true` = se omite en modo fast (típicamente el build). `skipIfMissing` = ruta que, si no existe, hace que la señal se reporte OMITIDA en vez de fallar.",
-    "command": "npm run gate",
-    "fastCommand": "npm run gate:fast",
+    "$command": "Lo que el agente y los mensajes de error le dicen al humano que corra. El default funciona en cualquier repo porque `scripts/gate.sh` viene copiado; si le pusiste un alias en el manifiesto (npm, make, just), escribilo acá.",
+    "command": "bash scripts/gate.sh",
+    "fastCommand": "bash scripts/gate.sh fast",
     "marker": ".git/gate-dirty",
     "codeGlobs": [
       "src/"
     ],
+    "$codeExtensions": "Qué extensión cuenta como CÓDIGO: con eso `post-edit-check` decide si marca el gate y corre el lint del archivo tocado. Si el instalador aplicó un perfil de stack, esta lista ya viene bien; si la dejás vacía, el hook usa un superconjunto agnóstico (todos los lenguajes que conoce).",
+    "codeExtensions": [],
+    "$installHooksCommand": "El comando que instala los hooks de git en ESTE repo. Un aviso que nombra un comando inexistente se ignora, y con él se ignora el resto del aviso.",
+    "installHooksCommand": "git config core.hooksPath .githooks",
     "signals": [
       {
         "name": "self-test del arnés",
@@ -134,9 +139,11 @@
       "reason": "la lógica pura es testeable y estable; los componentes orquestan, lib decide."
     }
   ],
+  "$purityImportSyntax": "Cómo se escribe «importar X» en este stack, como plantillas con `{mod}`. Ausente = el lint usa el superconjunto agnóstico (JS, Python, Java, C#, Rust, C/C++). Angostarlo por repo es opcional; ensancharlo NO se hace editando código.",
   "forbiddenDeps": {
-    "$comment": "Dependencias que este proyecto decidió NO tener, con el motivo. Vacío = la regla no corre.",
+    "$comment": "Dependencias que este proyecto decidió NO tener, con el motivo. Vacío = la regla no corre. `matcher` es una plantilla con `{pkg}`: el default entiende manifiestos clave-valor (package.json, requirements.txt). Un `.csproj`, un `pom.xml` o un `build.gradle` necesitan el suyo, o la regla sale VERDE con la dependencia prohibida presente (lo trae el perfil del stack).",
     "manifest": "package.json",
+    "matcher": "^\\s*[\"']?{pkg}[\"']?\\s*[:=]",
     "packages": [],
     "reason": ""
   },
@@ -198,11 +205,50 @@
       "vendor",
       "target"
     ],
-    "ignoreFiles": [],
+    "$ignoreFiles": "Documentos cuyas rutas son EJEMPLOS y no punteros. La guía de fondo (`docs/buenas-practicas.md`) es agnóstica: cita `docs/decisions/`, `src/lib/…` y otras rutas que este repo puede no tener.",
+    "ignoreFiles": [
+      "docs/buenas-practicas.md"
+    ],
     "externalPaths": []
   },
   "status": {
-    "file": "STATUS.md"
+    "file": "STATUS.md",
+    "$reminder": "Lo último que el agente lee al abrir la sesión. Nombrá el comando de gate REAL de este repo: un recordatorio que cita el comando de otro stack es ruido.",
+    "reminder": ""
+  },
+  "askFirst": {
+    "$comment": "«Una pregunta se contesta; una acción se pide». Estas claves ACTIVAN `ask-first.mjs` + `action-guard.mjs`: sin ellas los dos hooks quedan instalados y muertos. Los patrones son del idioma (español), no de este repo — ajustalos si tu equipo trabaja en otro. La detección es ANGOSTA a propósito: un clasificador ancho bloquea instrucciones legítimas, y un freno que muerde de más se desactiva a mano en una semana.",
+    "marker": ".git/agent-answer-first",
+    "questionPatterns": [
+      "^\\s*¿",
+      "\\?\\s*$",
+      "^\\s*(qu[eé]|por\\s?qu[eé]|c[oó]mo|cu[aá]l(es)?|cu[aá]ndo|d[oó]nde|qui[eé]n|para\\s?qu[eé])(?=\\s|$|[,:])",
+      "^\\s*(hay|existe|sirve|conviene|se puede|pod[eé]s|sab[eé]s|vale la pena)(?=\\s|$|[,:])"
+    ],
+    "actionPatterns": [
+      "\\b(arregl|corrig|implement|agreg|a[ñn]ad|cambi|escrib|cre[aá]|aplic|instal|port|actualiz|borr|elimin|quit|refactor|migr|public|commit|push|generá|genera|hacelo|haz|dale|proced)"
+    ],
+    "message": "Esto es una **pregunta**: contestala con lo que ya sabés o leyendo lo que haga falta. **No edites archivos del repo**: el hook `action-guard` los va a bloquear hasta el próximo pedido del humano.",
+    "pastPatterns": [
+      "\\b\\w+(aste|iste|aron|ieron|abas|amos|imos)(?=\\s|$|[,.?!])",
+      "\\b\\w+(ó|ió)(?=\\s|$|[,.?!])",
+      "\\b(hab[ií]as|hiciste|dejaste|qued[oó])(?=\\s|$|[,.?!])"
+    ],
+    "strongQuestionPatterns": [
+      "^\\s*¿",
+      "^\\s*(qu[eé]|por\\s?qu[eé]|c[oó]mo|cu[aá]l(es)?|cu[aá]ndo|d[oó]nde|qui[eé]n|para\\s?qu[eé])(?=\\s|$|[,:])"
+    ],
+    "directRequestPatterns": [
+      "\\b(pod[eé]s|puedes|podr[ií]as|te pido|por favor|necesito que|quiero que)\\b"
+    ]
+  },
+  "branches": {
+    "$comment": "Ramas donde el trabajo entra por pull request. Activa `.githooks/pre-push`, que sin esta clave queda instalado y muerto. La protección del lado del SERVIDOR es el freno fuerte y hay que activarla igual en tu forja: esto falla antes de la red, con el motivo.",
+    "protected": [
+      "main",
+      "master"
+    ],
+    "reason": "el trabajo entra por pull request, con su revisión y su gate en verde. Un push directo entra sin que nadie lo mire."
   },
   "sdd": {
     "$comment": "`phases` son las skills del kit SDD que tienen que estar instaladas (en CI se reporta omitido, nunca «pasó»). Sin kit, dejá `phases: []`: el valor está en `routes`, que pone el criterio delante del agente antes de que edite.",

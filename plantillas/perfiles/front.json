@@ -1,0 +1,105 @@
+{
+  "$stack": "front",
+  "$comment": "Front web (React, Vue, Svelte, Angular). Igual que `node` más los archivos de componente. La capa pura (`purity.dir`) es lo de mayor retorno acá: la lógica que no importa el framework es lo único que sobrevive al próximo cambio de framework.",
+  "$detect": [
+    "angular.json",
+    "vite.config.*",
+    "next.config.*",
+    "svelte.config.*",
+    "nuxt.config.*"
+  ],
+  "gate": {
+    "codeExtensions": [
+      ".ts",
+      ".tsx",
+      ".js",
+      ".jsx",
+      ".mjs",
+      ".cjs",
+      ".vue",
+      ".svelte"
+    ],
+    "command": "npm run gate",
+    "fastCommand": "npm run gate:fast",
+    "installHooksCommand": "npm run hooks:install",
+    "$signalHints": [
+      {
+        "name": "tests",
+        "command": [
+          "npm",
+          "test",
+          "--silent"
+        ],
+        "why": "el comportamiento que ningún tipo garantiza"
+      },
+      {
+        "name": "tipos",
+        "command": [
+          "npx",
+          "tsc",
+          "--noEmit"
+        ],
+        "why": "en front el compilador es el que caza los props mal pasados"
+      },
+      {
+        "name": "build",
+        "command": [
+          "npm",
+          "run",
+          "build"
+        ],
+        "fastSkip": true,
+        "why": "el bundler falla por cosas que ni el test ni el compilador ven (assets, imports dinámicos)"
+      }
+    ]
+  },
+  "purityImportSyntax": [
+    "from\\s+['\"]{mod}['\"]",
+    "require\\(\\s*['\"]{mod}['\"]",
+    "import\\s+['\"]{mod}['\"]"
+  ],
+  "forbiddenDeps": {
+    "manifest": "package.json",
+    "matcher": "^\\s*[\"']?{pkg}[\"']?\\s*[:=]"
+  },
+  "tests": {
+    "filePattern": "(^|/)(__tests__|tests?|e2e)/|\\.(test|spec)\\.[cm]?[jt]sx?$",
+    "onlyPattern": "\\b(describe|it|test)\\.only\\("
+  },
+  "commitMsg": {
+    "$codePattern": "El layout de código NO lo decide el lenguaje: en un repo puede ser `src/`, en otro `services/`. Lo confirma el equipo — si queda mal, `commit-msg` deja de exigir la referencia al ítem y P11 se apaga sin que nada se ponga rojo.",
+    "ignoreExtensions": [
+      ".md",
+      ".png",
+      ".jpg",
+      ".jpeg",
+      ".svg",
+      ".webp",
+      ".ico"
+    ]
+  },
+  "protectedPaths": [
+    {
+      "pattern": "^(node_modules)/",
+      "reason": "dependencias: se cambian por manifiesto + install."
+    },
+    {
+      "pattern": "^(dist|build|out|coverage|\\.next|\\.nuxt|\\.svelte-kit|\\.angular)/",
+      "reason": "artefactos derivados: se regeneran, no se editan."
+    }
+  ],
+  "docs": {
+    "ignore": [
+      "node_modules",
+      ".git",
+      "dist",
+      "build",
+      "out",
+      "coverage",
+      ".next",
+      ".nuxt",
+      ".svelte-kit",
+      ".angular"
+    ]
+  }
+}

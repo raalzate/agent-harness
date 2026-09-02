@@ -243,6 +243,7 @@ footer { border-top: 4px solid var(--ink); }
         <a href="#freno">Un freno</a>
         <a href="#registro">Registro</a>
         <a href="#portar">Portar</a>
+        <a href="#perfiles">Perfiles</a>
         <a href="#stacks">Stacks</a>
         <a href="#documentacion">Docs</a>
         <a href="https://github.com/raalzate/agent-harness">Repo&nbsp;↗</a>
@@ -256,8 +257,9 @@ footer { border-top: 4px solid var(--ink); }
         <p class="hero-meta">
           <span class="chip">node + bash</span>
           <span class="chip">cero dependencias</span>
-          <span class="chip">9 hooks</span>
-          <span class="chip">7 clases de regla</span>
+          <span class="chip">8 stacks</span>
+          <span class="chip">10 hooks</span>
+          <span class="chip">8 clases de regla</span>
           <span class="chip">Apache-2.0</span>
         </p>
       </div>
@@ -506,7 +508,7 @@ en el historial:
       <div class="col stack" style="margin-top:1.75rem">
         <h3 style="font-size:var(--step-1)">Ningún script conoce tu forja</h3>
         <p>Lo único que cambia entre un equipo y otro es qué cuenta como referencia. El mecanismo es
-          el mismo, y las cinco configs de ejemplo usan cinco gestores distintos a propósito.</p>
+          el mismo, y las siete configs de ejemplo usan cinco gestores distintos a propósito.</p>
       </div>
       <div class="table-scroll">
         <table>
@@ -546,7 +548,7 @@ en el historial:
       </div>
 
       <ol class="steps">
-        <li><div><h3>Instalar los archivos</h3><p><code>node scripts/harness-init.mjs &lt;repo&gt;</code> en dry-run, después <code>--apply</code>. Y <code>git config core.hooksPath .githooks</code>: un hook en <code>.git/hooks/</code> existe, se ve bien y nunca corre.</p></div></li>
+        <li><div><h3>Instalar los archivos</h3><p><code>node scripts/harness-init.mjs &lt;repo&gt;</code> en dry-run, después <code>--apply</code>. Detecta tu stack por el manifiesto y aplica su <strong>perfil</strong>: qué extensión es código, cómo se escribe un import, dónde viven las dependencias, qué directorios son derivados. Y <code>git config core.hooksPath .githooks</code>: un hook en <code>.git/hooks/</code> existe, se ve bien y nunca corre.</p></div></li>
         <li><div><h3>Definir el gate</h3><p>Para cada señal candidata, una pregunta: ¿qué clase de error atrapa que ninguna otra atrapa? Esa respuesta va en <code>why</code>. Después rompé algo a propósito y confirmá que el gate se pone rojo — un gate que nunca falló no es un gate, es una esperanza.</p></div></li>
         <li><div><h3>Rutas y comandos</h3><p>Qué nunca edita el agente (secretos, lockfiles, derivados, generados, config de producción) y qué comandos no tienen ctrl-Z <em>en tu stack</em>. Media hora, y es el mejor retorno de todo el arnés.</p></div></li>
         <li><div><h3>Las reglas de tu arquitectura</h3><p>¿Qué capa tiene que quedar limpia? ¿Qué registro es fuente única de verdad? ¿Qué archivo tiene invariantes que nadie debe romper? ¿Qué texto no debería existir nunca en cierto ámbito?</p></div></li>
@@ -567,9 +569,79 @@ node scripts/harness-init.mjs /ruta/a/tu/repo --apply</code></pre>
   </div>
 </section>
 
+<section id="perfiles">
+  <div class="wrap sec-inner">
+    <p class="rail"><b>8</b>stacks, cero reglas ajenas</p>
+    <div>
+      <div class="col stack">
+        <p class="eyebrow">Tu repo no es de Node</p>
+        <h2 style="font-size:var(--step-2)">Agnóstico no es vacío</h2>
+        <p>Hay cosas de un stack que ningún equipo decide: qué extensión es código, cómo se escribe
+          un import, dónde viven las dependencias, qué directorios son derivados. Hacer que cada
+          repo las descubra a mano es la forma más rápida de que el portado se abandone a mitad de
+          camino.</p>
+        <p>El instalador detecta el stack por su manifiesto y aplica su <strong>perfil</strong>. Si
+          detecta varios —un monorepo con front y back— <strong>no elige por vos</strong>: los lista
+          y te dice cómo pedirlos.</p>
+      </div>
+
+      <div class="pair">
+        <figure class="panel">
+          <figcaption>node scripts/harness-init.mjs ../mi-repo</figcaption>
+          <pre><code><span class="hdr">Perfil de stack (detectado):</span> dotnet
+
+  → .claude/hooks/…            <span style="color:var(--ink-faint)">11 hooks</span>
+  → scripts/…                  <span style="color:var(--ink-faint)">gate, lint, self-test, banco</span>
+  → .claude/harness.config.json  <span style="color:var(--ink-faint)">plantilla + perfil dotnet</span>
+
+DRY-RUN: 38 archivo(s) a copiar, 0 conservado(s).</code></pre>
+        </figure>
+        <figure class="panel">
+          <figcaption>lo que el perfil llenó</figcaption>
+          <pre><code>{ <span class="k">"codeExtensions"</span>: [<span class="s">".cs"</span>, <span class="s">".fs"</span>, <span class="s">".vb"</span>],
+  <span class="k">"purityImportSyntax"</span>: [<span class="s">"^\\s*using\\s+{mod}\\b"</span>],
+  <span class="k">"forbiddenDeps"</span>: {
+    <span class="k">"matcher"</span>: <span class="s">"PackageReference…Include=\"{pkg}\""</span> },
+  <span class="k">"gate"</span>: { <span class="k">"signals"</span>: [] }   <span style="color:var(--ink-faint)">← vacío a propósito</span></code></pre>
+        </figure>
+      </div>
+
+      <div class="col stack" style="margin-top:1.75rem">
+        <h3 style="font-size:var(--step-1)">Lo que viaja son los principios, no las reglas ajenas</h3>
+        <p>Una regla concreta describe los incidentes de <strong>un</strong> repo; instalada en otro
+          es ruido bien intencionado que gasta contexto del agente y paciencia del equipo, y termina
+          desactivada llevándose puestas a las que sí servían. El corte no es una convención escrita:
+          es una regla del lint que pone el gate en rojo.</p>
+      </div>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>Sí viaja — hecho del lenguaje</th><th>No viaja — cicatriz de un equipo</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">gate.codeExtensions</td><td class="mono">gate.signals</td></tr>
+            <tr><td class="mono">purityImportSyntax</td><td class="mono">patterns · reuse · singleSource</td></tr>
+            <tr><td class="mono">forbiddenDeps.matcher</td><td class="mono">forbiddenDeps.packages</td></tr>
+            <tr><td>derivados: <span class="mono">bin/ obj/ target/</span></td><td class="mono">bash.deny propio del stack</td></tr>
+            <tr><td class="mono">tests.filePattern</td><td class="mono">commitMsg.codePattern</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="col cta-box" style="border-left-color:var(--ocre)">
+        <p class="eyebrow" style="color:var(--ocre)">El gate se prueba en repos reales</p>
+        <p style="margin-top:.5rem">Un perfil que sólo se verifica a sí mismo no prueba nada: el
+          self-test mira la <strong>forma</strong>, no el <strong>encaje</strong>. Por eso una señal
+          del gate instala el arnés en un repo de juguete de cada stack —con un <code>.csproj</code>
+          de verdad, un <code>pom.xml</code> de verdad— y verifica que los frenos muerdan ahí:
+          <strong>96 comprobaciones sobre 8 stacks</strong>. En su primera corrida encontró dos bugs
+          que ninguna otra señal veía, uno de ellos un <em>falso rojo</em> que sólo aparecía fuera de
+          JS.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
 <section id="stacks">
   <div class="wrap sec-inner">
-    <p class="rail"><b>5</b>configs completas, no plantillas vacías</p>
+    <p class="rail"><b>7</b>configs completas, no plantillas vacías</p>
     <div>
       <div class="col stack">
         <p class="eyebrow">Configs de ejemplo</p>
@@ -584,6 +656,8 @@ node scripts/harness-init.mjs /ruta/a/tu/repo --apply</code></pre>
           <tbody>
             <tr><td>TypeScript</td><td>El runner de tests transpila por archivo y <strong>no</strong> verifica tipos: un import inválido pasa la suite y rompe el build. <code>tsc --noEmit</code> es irremplazable.</td></tr>
             <tr><td>Python</td><td><code>ruff</code> y <code>mypy</code> son señales distintas. Y el chequeo de migraciones pendientes atrapa el fallo que ningún test ve: un modelo cambiado sin su migración.</td></tr>
+            <tr><td>C# / .NET</td><td>Las dependencias no viven en un manifiesto clave-valor sino en <code>&lt;PackageReference&gt;</code>: una regla escrita para <code>package.json</code> sale <strong>verde con la dependencia prohibida presente</strong>. Y sin <code>-warnaserror</code> los warnings se acumulan hasta que nadie los lee.</td></tr>
+            <tr><td>Java / Kotlin</td><td><code>mvn verify</code> es una señal compuesta: conviene tener también las baratas por separado. Y el error que más cuesta después es la inyección por campo (<code>@Autowired</code> en un atributo), que hace intesteable la clase sin levantar el framework.</td></tr>
             <tr><td>Go</td><td>Sin <code>-race</code> las condiciones de carrera aparecen en producción; sin <code>-count=1</code> la caché de tests reporta un verde viejo.</td></tr>
             <tr><td>Monorepo</td><td>La rotura cara es <em>entre</em> paquetes: sólo el build de proyectos la ve. Un gate por paquete la deja pasar.</td></tr>
             <tr><td>Terraform</td><td>Acá el arnés se invierte: el freno más valioso no es el lint, es <code>bash.deny</code>. El agente puede planear todo y aplicar nada.</td></tr>
@@ -596,7 +670,7 @@ node scripts/harness-init.mjs /ruta/a/tu/repo --apply</code></pre>
 
 <section id="documentacion">
   <div class="wrap sec-inner">
-    <p class="rail"><b>15</b>documentos, en cuatro capas</p>
+    <p class="rail"><b>16</b>documentos, en cuatro capas</p>
     <div>
       <div class="col stack">
         <p class="eyebrow">Documentación</p>
@@ -618,6 +692,7 @@ node scripts/harness-init.mjs /ruta/a/tu/repo --apply</code></pre>
 
             <tr><td colspan="2" class="grupo">Cómo — la práctica</td></tr>
             <tr><td><a href="https://github.com/raalzate/agent-harness/blob/main/docs/portar.md">portar.md</a></td><td>La receta: instalarlo en un repo cualquiera en una tarde, con las preguntas a contestar y en qué orden.</td></tr>
+            <tr><td><a href="https://github.com/raalzate/agent-harness/blob/main/docs/perfiles.md">perfiles.md</a></td><td>Perfiles de stack del instalador (.NET, JVM, Python, Go, Rust, front): qué hecho del lenguaje viaja, qué regla no viaja nunca y el freno que lo mantiene así.</td></tr>
             <tr><td><a href="https://github.com/raalzate/agent-harness/blob/main/docs/trazabilidad.md">trazabilidad.md</a></td><td>Que el trabajo quede registrado y cómo entra a la rama principal, en cualquier forja.</td></tr>
             <tr><td><a href="https://github.com/raalzate/agent-harness/blob/main/docs/config-reference.md">config-reference.md</a></td><td>Cada clave del config: qué hace, qué la lee, qué se rompe si la tocás.</td></tr>
             <tr><td><a href="https://github.com/raalzate/agent-harness/blob/main/docs/recetas.md">recetas.md</a></td><td>Situaciones concretas con el comando al lado: agregar una señal, medir si el arnés está vivo, el gate que tarda, «no usamos GitHub».</td></tr>
@@ -650,7 +725,7 @@ node scripts/harness-init.mjs /ruta/a/tu/repo --apply</code></pre>
     <p class="rail"><b>–</b>lo que no es</p>
     <div class="col stack">
       <p class="eyebrow">Límites declarados</p>
-      <h2 style="font-size:var(--step-2)">Tres cosas que este arnés no hace</h2>
+      <h2 style="font-size:var(--step-2)">Cuatro cosas que este arnés no hace</h2>
       <ul class="nots">
         <li><strong>No es un sandbox.</strong> La lista de comandos denegados sube el costo del error
           accidental; un agente puede reformular un comando. Para aislamiento real hacen falta
@@ -658,6 +733,11 @@ node scripts/harness-init.mjs /ruta/a/tu/repo --apply</code></pre>
         <li><strong>No es un linter de estilo.</strong> Convive con ESLint, ruff o golangci-lint y
           cubre lo que ellos no: arquitectura y dominio. El lint propio es regex sobre texto, sin AST
           — cuando la precisión importe, la señal correcta es el linter de tu stack.</li>
+        <li><strong>No se libra de <code>node</code>.</strong> Los hooks y los scripts corren con
+          <code>node</code> y <code>bash</code>, también en un repo de .NET, JVM, Python o Go: eso
+          significa node en la máquina del equipo <strong>y en el runner de CI</strong>. Es el precio
+          de que el arnés entero sea un puñado de archivos copiables; la alternativa —reescribir once
+          hooks en cada lenguaje— es justamente lo que lo volvería inportable.</li>
         <li><strong>No reemplaza el criterio.</strong> La intención no es verificable por máquina: por
           eso hay principios REVIEW y un subagente que revisa el diff. Lo que el arnés logra es que lo
           verificable <strong>no dependa de que alguien se acuerde</strong>.</li>
@@ -684,7 +764,7 @@ node scripts/harness-init.mjs /ruta/a/tu/repo --apply</code></pre>
   var L = function (t, c) { return { t: t, c: c || "" }; };
   var salidas = {
     verde: {
-      nota: "Las cuatro señales corrieron. El marcador `.git/gate-dirty` se borra: el hook Stop ya deja cerrar la tarea.",
+      nota: "Las cinco señales corrieron, la última instalando el arnés en ocho stacks. El marcador `.git/gate-dirty` se borra: el hook Stop ya deja cerrar la tarea.",
       lineas: [
         L("$ npm run gate", "cmd"),
         L("Gate (modo: full) — agent-harness", "dim"),
@@ -714,6 +794,10 @@ node scripts/harness-init.mjs /ruta/a/tu/repo --apply</code></pre>
         L("──▶ artefactos en su lugar"),
         L("artifacts-check: OK — sin artefactos sueltos", "dim"),
         L("    ✓ artefactos en su lugar", "ok"),
+        L(""),
+        L("──▶ banco de perfiles (stacks reales)"),
+        L("BANCO VERDE — 96 comprobaciones sobre 8 stacks", "dim"),
+        L("    ✓ banco de perfiles (stacks reales)", "ok"),
         L(""),
         L("GATE VERDE — entregable.", "ok")
       ]

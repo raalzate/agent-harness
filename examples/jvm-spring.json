@@ -1,0 +1,299 @@
+{
+  "$comment": "Servicio Spring Boot (Java) con Maven y JUnit 5. Particularidades del stack: `mvn verify` es una señal compuesta (compila, testea y corre los plugins de calidad) y por eso conviene tener también las baratas por separado; las dependencias viven en XML (`<artifactId>`), así que `forbiddenDeps.matcher` es obligatorio; el layout `src/main` · `src/test` es lo que hace verificables los patrones; y la inyección por campo (`@Autowired` en un atributo) es el error que más cuesta después, porque hace intesteable la clase.",
+  "gate": {
+    "command": "make gate",
+    "fastCommand": "make gate-fast",
+    "marker": ".git/gate-dirty",
+    "codeGlobs": [
+      "src/"
+    ],
+    "codeExtensions": [
+      ".java",
+      ".kt"
+    ],
+    "installHooksCommand": "git config core.hooksPath .githooks",
+    "signals": [
+      {
+        "name": "self-test del arnés",
+        "command": [
+          "node",
+          "scripts/harness-selftest.mjs"
+        ],
+        "why": "un hook roto falla en silencio: ninguna otra señal lo ve"
+      },
+      {
+        "name": "link-check de docs",
+        "command": [
+          "node",
+          "scripts/docs-linkcheck.mjs"
+        ],
+        "why": "mover un doc rompe punteros de la memoria del agente"
+      },
+      {
+        "name": "lint de convenciones",
+        "command": [
+          "node",
+          "scripts/repo-lint.mjs"
+        ],
+        "why": "las reglas de arquitectura de este repo que ni javac ni Checkstyle conocen"
+      },
+      {
+        "name": "formato",
+        "command": [
+          "mvn",
+          "-q",
+          "-B",
+          "spotless:check"
+        ],
+        "why": "un diff de formato entierra el diff real; spotless:check falla, spotless:apply arregla"
+      },
+      {
+        "name": "compilación",
+        "command": [
+          "mvn",
+          "-q",
+          "-B",
+          "test-compile"
+        ],
+        "why": "la señal más barata del stack: compila producción y tests sin correr nada"
+      },
+      {
+        "name": "tests",
+        "command": [
+          "mvn",
+          "-q",
+          "-B",
+          "surefire:test"
+        ],
+        "why": "los tests unitarios, sin levantar contexto de Spring ni contenedores"
+      },
+      {
+        "name": "verify",
+        "command": [
+          "mvn",
+          "-q",
+          "-B",
+          "verify",
+          "-DskipTests"
+        ],
+        "fastSkip": true,
+        "why": "los plugins de calidad y el empaquetado: el jar puede fallar aunque toda la suite pase"
+      },
+      {
+        "name": "migraciones sin pendientes",
+        "command": [
+          "mvn",
+          "-q",
+          "-B",
+          "flyway:validate"
+        ],
+        "skipIfMissing": "src/main/resources/db/migration",
+        "why": "un esquema cambiado sin migración pasa los tests con base embebida y explota en el primer deploy"
+      },
+      {
+        "name": "artefactos en su lugar",
+        "command": [
+          "node",
+          "scripts/artifacts-check.mjs"
+        ],
+        "why": "un plan suelto en el repo cuando el trabajo vive en el gestor parte el registro en dos"
+      }
+    ]
+  },
+  "protectedPaths": [
+    {
+      "pattern": "^\\.env|application-(prod|production|secrets)\\.(yml|yaml|properties)$",
+      "reason": "configuración con secretos: la edita el humano, y en producción sale del gestor de secretos."
+    },
+    {
+      "pattern": "^\\.git/",
+      "reason": "historia de git: fuera del alcance del agente."
+    },
+    {
+      "pattern": "(^|/)target/",
+      "reason": "salida de Maven: se regenera con `mvn package`."
+    },
+    {
+      "pattern": "^src/main/resources/db/migration/V[0-9]",
+      "reason": "una migración de Flyway ya aplicada es inmutable: su checksum está en la base. Se corrige con una migración nueva."
+    },
+    {
+      "pattern": "^\\.mvn/wrapper/maven-wrapper\\.jar$",
+      "reason": "binario del wrapper: se cambia actualizando el wrapper, no a mano."
+    }
+  ],
+  "bash": {
+    "deny": [
+      {
+        "pattern": "--no-ver[i]fy",
+        "reason": "saltarse los hooks de verificación está prohibido. Si el gate estorba, se arregla el gate."
+      },
+      {
+        "pattern": "mvn\\s+(.*\\s)?(deploy|release:perform)\\b",
+        "reason": "publicar es irreversible: la versión queda tomada. Lo hace el pipeline con un tag."
+      },
+      {
+        "pattern": "flyway:(clean|undo)|mvn\\s+.*flyway:clean",
+        "reason": "`flyway:clean` borra el esquema entero. Nunca a mano: hay una migración de reversa o un restore."
+      },
+      {
+        "pattern": "-DskipTests(=true)?\\b(?!.*verify)",
+        "reason": "saltear los tests convierte el build en un empaquetador. Si tardan, se arregla la suite."
+      },
+      {
+        "pattern": "git\\s+push\\s+.*--force(?!-with-lease)",
+        "reason": "`--force` reescribe historia remota. Usá --force-with-lease."
+      },
+      {
+        "pattern": "\\bcurl\\b[^|;&]*\\|\\s*(ba)?sh",
+        "reason": "ejecuta código remoto sin revisarlo. Bajá el script, leelo, después corrélo."
+      }
+    ]
+  },
+  "reuse": [
+    {
+      "pattern": "new\\s+RestTemplate\\(",
+      "appliesTo": "^src/main/",
+      "reason": "el cliente HTTP ya está configurado con timeouts, reintentos y trazas. Instanciarlo a mano se lleva puesto todo eso y cuelga el pool en el primer incidente de red.",
+      "see": "src/main/java/com/ejemplo/config/HttpClientConfig.java"
+    }
+  ],
+  "lint": {
+    "command": [
+      "node",
+      "scripts/repo-lint.mjs"
+    ],
+    "fileFlag": "--file"
+  },
+  "purityImportSyntax": [
+    "^\\s*import\\s+(?:static\\s+)?{mod}"
+  ],
+  "purity": [
+    {
+      "dir": "src/main/java/com/ejemplo/domain",
+      "forbiddenImports": [
+        "org.springframework",
+        "jakarta.persistence",
+        "javax.persistence",
+        "com.fasterxml.jackson"
+      ],
+      "except": [],
+      "reason": "el dominio no conoce el framework, el ORM ni la serialización: si la entidad de dominio ES la entidad de JPA, el esquema de la base decide el modelo de negocio."
+    }
+  ],
+  "forbiddenDeps": {
+    "$comment": "El manifiesto es XML: sin `matcher` propio la regla sale VERDE con la dependencia prohibida presente.",
+    "manifest": "pom.xml",
+    "matcher": "<artifactId>\\s*{pkg}\\s*</artifactId>",
+    "packages": [
+      "commons-logging",
+      "junit",
+      "mockito-inline"
+    ],
+    "reason": "commons-logging choca con el SLF4J del framework (logs duplicados o mudos); `junit` es JUnit 4 y esta suite es 5 — tener las dos hace que la mitad de los tests no corra y el gate salga verde; mockito-inline se fusionó al core y duplicarlo rompe los agentes de instrumentación."
+  },
+  "singleSource": [
+    {
+      "id": "PERFILES",
+      "source": "src/main/java/com/ejemplo/config/Profiles.java",
+      "extract": "public\\s+static\\s+final\\s+String\\s+\\w+\\s*=\\s*\"([^\"]+)\"",
+      "appliesTo": "^src/",
+      "allow": [],
+      "reason": "un perfil de Spring cableado como string en un `@Profile` no falla al compilar: el bean simplemente no se registra, y el servicio arranca a medias."
+    }
+  ],
+  "invariants": [
+    {
+      "file": "src/main/resources/application.yml",
+      "required": [
+        "management:",
+        "health:"
+      ],
+      "forbidden": [
+        "ddl-auto: update",
+        "ddl-auto: create-drop"
+      ],
+      "reason": "`ddl-auto` distinto de `validate` le deja al ORM modificar el esquema en producción: la migración deja de ser la fuente de verdad y el esquema pasa a depender del orden de arranque."
+    }
+  ],
+  "patterns": [
+    {
+      "id": "AUTOWIREDCAMPO",
+      "pattern": "@Autowired[\\s\\S]{0,40}?(private|protected)\\s+\\w",
+      "appliesTo": "^src/main/",
+      "allow": [],
+      "message": "la inyección por campo hace la clase intesteable sin levantar Spring y esconde las dependencias reales. Inyectá por constructor (con Lombok, `@RequiredArgsConstructor`)."
+    },
+    {
+      "id": "PRINTSTACKTRACE",
+      "pattern": "\\.printStackTrace\\(\\)",
+      "appliesTo": "^src/main/",
+      "allow": [],
+      "message": "va a stderr sin nivel, sin correlación y sin contexto: en producción es una traza huérfana. Logueá con el logger y el error como último argumento."
+    },
+    {
+      "id": "SYSOUT",
+      "pattern": "System\\.(out|err)\\.print",
+      "appliesTo": "^src/main/",
+      "allow": [],
+      "message": "en un servicio nadie lee stdout: usá SLF4J, que sale estructurado y correlacionado con la petición."
+    }
+  ],
+  "tests": {
+    "filePattern": "(^|/)src/test/|Tests?\\.(java|kt)$",
+    "onlyPattern": "@Disabled(?!\\s*\\(\\s*\")"
+  },
+  "incidents": {
+    "file": "docs/gotchas.md",
+    "heading": "### GOTCHA",
+    "requiredLines": [
+      "Síntoma:",
+      "Causa:",
+      "Regla:",
+      "Mecanismo:"
+    ]
+  },
+  "docs": {
+    "ignore": [
+      ".git",
+      "target",
+      ".mvn"
+    ],
+    "ignoreFiles": [],
+    "externalPaths": []
+  },
+  "status": {
+    "file": "STATUS.md",
+    "reminder": "Recordá: nada se entrega sin `make gate` verde · lecciones con `/lesson`."
+  },
+  "tracker": {
+    "$comment": "Forja: jira. Ningún script del arnés la conoce — lo único que se lee es `issuePattern`. El patrón ancla los prefijos REALES: `[A-Z]{2,}-[0-9]+` cazaría UTF-8 y SHA-256. Ver docs/trazabilidad.md.",
+    "kind": "jira",
+    "issuePattern": "\\b(PAY|CORE|OPS)-[0-9]+\\b",
+    "issueExample": "PAY-1234 · Refs PAY-1234",
+    "newIssueHint": [
+      "Jira no trae CLI oficial: abrí el ticket en la web y pegá su clave acá."
+    ],
+    "artifactsIn": "tracker",
+    "specsDir": "specs",
+    "allowedInRepo": [
+      "specs/README.md"
+    ]
+  },
+  "commitMsg": {
+    "codePattern": "^(src/|scripts/)",
+    "ignoreExtensions": [
+      ".md",
+      ".png",
+      ".jpg",
+      ".svg"
+    ],
+    "skipSubjects": [
+      "Merge ",
+      "Revert ",
+      "fixup! ",
+      "squash! "
+    ],
+    "escapeLine": "sin-issue:"
+  }
+}

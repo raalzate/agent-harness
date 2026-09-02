@@ -206,3 +206,137 @@ Regla:   un marcador de deuda se reconoce por su **forma**, no por la palabra: e
          comandos: ¿muerde? y ¿el repo sigue pasando?
 Mecanismo: la regla `TODO` del config con el patrón `\b(TODO|FIXME|XXX)(:|\((?!#))`, el caso del
          self-test que la ejercita y `node scripts/repo-lint.mjs` sobre el repo entero en el gate.
+
+### GOTCHA: el arnés agnóstico que sólo mordía en JS
+
+Síntoma: alguien preguntó qué pasa con un repo de .NET o de Java. La respuesta corta era «nada,
+         es agnóstico»; la auditoría encontró cuatro lugares donde no lo era, y el peor no fallaba
+         nunca: en un repo de .NET, editar un `.cs` **no** marcaba el gate ni corría el lint del
+         archivo. Verde todo el tiempo, freno de mayor retorno muerto.
+Causa:   la arquitectura era agnóstica pero cuatro literales de stack se habían filtrado al código:
+         las extensiones de código cableadas en `post-edit-check.mjs`, la sintaxis de import de la
+         regla PUREZA sin `using` de C#, el matcher de DEPS que sólo entendía manifiestos
+         clave-valor (un `.csproj` salía verde con la dependencia prohibida presente), y avisos que
+         nombraban `npm run …` en un repo donde no existe. Ninguno tenía un caso de self-test que
+         los ejercitara fuera de JS: un freno cuya prueba de vida usa el único stack donde funciona
+         no es una prueba de vida.
+Regla:   toda lista de literales de un lenguaje es una clave del config con default agnóstico
+         (P4), y su caso del self-test se **deriva de esa clave** — nunca de un ejemplo escrito a
+         mano en el stack del repo que la escribió. Lo que un stack necesita para arrancar viaja en
+         un perfil (`plantillas/perfiles/`), y un perfil lleva hechos del lenguaje, no reglas de un
+         equipo (P14).
+Mecanismo: `gate.codeExtensions`, `lint.sourceExtensions`, `purityImportSyntax`,
+         `forbiddenDeps.matcher`, `gate.installHooksCommand` y `status.reminder` en el config, con
+         **un solo** default agnóstico (`DEFAULT_CODE_EXTENSIONS` en `.claude/hooks/harness.mjs`:
+         dos listas ya habían divergido en `.pyi`, que ensuciaba el gate mientras el barrido del
+         lint no lo leía). Casos del self-test: 3e-quater (una por extensión declarada),
+         3e-quinquies (la rama por DEFAULT, en un repo temporal: es la que usa todo repo portado
+         sin perfil), 3e-sexies (las dos listas no divergen), 4b-bis (una por plantilla de import),
+         4g (DEPS por stdin), 4h (PERFIL con un cebo por clave prohibida y otro por clave
+         obligatoria, más `profiles.dir` inexistente y vacío). Más la regla `PERFIL` de
+         `repo-lint.mjs` y la sección 8, que instala **cada** perfil en un repo temporal y corre
+         `repo-lint.mjs` **del destino** —no el de acá, que ignora el cwd y hacía pasar la
+         aserción con un config generado vacío.
+
+### GOTCHA: los frenos por ruta se apagaban bajo un symlink
+
+Síntoma: en un repo temporal montado bajo `/tmp` (que en macOS es un symlink a `/private/tmp`),
+         editar `src/Servicio.cs` no marcaba el gate, no corría el lint del archivo y no
+         disparaba las rutas protegidas. Ningún error: exit 0 y silencio.
+Causa:   `REPO_ROOT` sale de `import.meta.url` y llega ya resuelto (`/private/var/...`), mientras
+         que el `cwd` del payload llega como lo escribió quien invocó (`/var/...`). `path.relative`
+         entre los dos devuelve una ruta con `../../..`, y todos los frenos que preguntan «¿esto
+         está dentro del repo?» contestan que no.
+Regla:   lo que se normaliza es la RAÍZ, no el archivo: se busca el prefijo de la ruta cuyo
+         `realpath` sea la raíz del repo, y lo que sobra es la ruta relativa. Resolver el archivo
+         entero arregla una dirección y rompe la otra —un `node_modules/<dep>` symlinkeado (pnpm,
+         workspaces) apunta afuera del repo y el freno se apaga **hacia abajo**—, y ésa es la
+         dirección que nadie nota. Un freno por ruta se decide siempre hacia el lado seguro: si la
+         ruta pertenece al repo por alguna de las dos formas, las reglas se aplican. Y hay una
+         tercera variante: un alias DENTRO del repo (`alias/ → src/secreto/`) no es una ruta
+         nueva, es **otro nombre de una ruta que ya tiene dueño**. Para las reglas de negación se
+         evalúan TODOS los nombres y basta que uno case: prohibir por un nombre mientras el otro
+         pasa es no prohibir.
+Mecanismo: `relativaAlRepo()` y `targetPaths()` en `.claude/hooks/harness.mjs` —`targetPath()`
+         devuelve UNA ruta para decidir «¿esto es código?»; `targetPaths()` devuelve todas las que
+         el archivo tiene dentro del repo, y es la que usa `protected-paths`— más **cuatro** casos
+         del self-test, uno por variante: el repo entero bajo `/tmp` (3e-quinquies), un
+         `node_modules/<dep>` symlinkeado afuera, la ruta directa equivalente, y un alias interno
+         de una ruta protegida (3e-septies). Con un solo caso el arreglo de una dirección abre la
+         otra: pasó dos veces en esta misma sesión, y las dos las cazó el caso de la dirección
+         contraria.
+
+### GOTCHA: el self-test daba FALSO ROJO en todo repo que no fuera JS
+
+Síntoma: en un repo .NET portado, el self-test reportaba `✗ lint PUREZA protege src/Domain` — una
+         regla que, probada a mano contra el `Order.cs` real, **funcionaba perfectamente**.
+Causa:   el caso 4b armaba su muestra cableada en JS: `import x from "mod"` en un archivo
+         `ejemplo-selftest.mjs`. La regla estaba configurada con la sintaxis del stack
+         (`using X;`), así que la muestra no la cazaba. El caso medía su propia suposición, no la
+         regla. Y el caso hermano (4b-bis) sólo corría con `purityImportSyntax` **declarado**, así
+         que en la mayoría de los repos no corría ninguno de los dos bien.
+Regla:   la muestra de un caso se deriva de la **configuración efectiva** —la declarada o el
+         default compartido—, nunca de un ejemplo escrito a mano en el stack de quien escribió el
+         caso. Un falso rojo es peor que ningún caso: enseña a ignorar la sección entera, y con
+         ella los casos que sí servían.
+Mecanismo: `DEFAULT_IMPORT_SYNTAX` + `importSyntax()` en `.claude/hooks/harness.mjs` (un solo
+         default, consumido por `repo-lint.mjs` y por el self-test), el caso 4b derivando su
+         muestra de esa lista y su extensión de `lint.sourceExtensions`, y la señal
+         **banco de perfiles** (`node scripts/harness-bench.mjs`) en el gate: instala el arnés en
+         un repo real de cada stack y ahí el falso rojo aparece. Fue el banco el que lo encontró.
+
+### GOTCHA: el arnés recién instalado apuntaba a la nada
+
+Síntoma: `docs-linkcheck` del repo portado salía **rojo el primer día**, antes de que el equipo
+         escribiera una sola línea: cuatro hallazgos de «ruta citada», del subagente `reviewer`,
+         del comando `/harness-audit` y de la constitución, hacia documentos del arnés que en el
+         repo destino no existían.
+Causa:   los subagentes, los comandos y las plantillas citan documentos del arnés que el
+         instalador **no copiaba**. El propio instalador violaba P10, y peor: el rojo era
+         indistinguible del rojo esperado por los placeholders, así que se lee como «ya sé, es el
+         mapa» y nadie lo mira.
+Regla:   lo que el arnés instalado cita, viaja con el arnés — o no se cita. Y el rojo de un repo
+         recién portado tiene que ser **sólo** el de los placeholders del config: cualquier otro
+         rojo el primer día entrena al equipo a ignorar la señal.
+Mecanismo: `docs/sdd.md`, `docs/buenas-practicas.md` y `docs/trazabilidad.md` en la lista de
+         copia del instalador; `plantillas/arnes.md`, `plantillas/ci.yml` y `plantillas/ADR.md`
+         como plantillas del destino (el documento del arnés, el CI que corre el mismo gate, y
+         la plantilla de ADR que además crea el directorio de decisiones); y la sección 8 del
+         self-test, que corre
+         `docs-linkcheck` **dentro** de cada repo portado y falla si sale rojo.
+
+### GOTCHA: el link-check revisaba lo que git ignora
+
+Síntoma: el gate se puso rojo por un `ruta citada →` dentro de un material de taller que está
+         **gitignored**: la transcripción cita el árbol del repo destino, no de este.
+Causa:   el script mide la EXISTENCIA de una ruta contra `git ls-files` —bien— pero recolectaba
+         los archivos a revisar caminando el disco. O sea: aplicaba el criterio correcto de un
+         lado y el equivocado del otro. Un archivo que git ignora no está en el repo, así que sus
+         punteros no le rompen nada a nadie que clone, y el rojo que produce CI nunca lo ve.
+Regla:   el mismo criterio en las dos direcciones: si la existencia se mide contra el índice de
+         git, lo que se revisa también sale del índice. Un rojo que sólo aparece en una máquina
+         entrena al equipo a ignorar la señal, igual que un falso rojo.
+Mecanismo: `markdownFiles()` en `scripts/docs-linkcheck.mjs` saltea lo que `git check-ignore`
+         marca, y el caso 3i del self-test pone un cebo con dos punteros muertos dentro de un
+         directorio derivado (el primero de `.gitignore` que exista) y exige que el link-check
+         siga verde. El cebo se borra en `finally`, y el guardián de temporales lo verifica.
+
+### GOTCHA: el instalador hacía viajar tres frenos muertos
+
+Síntoma: en un repo recién portado, `ask-first`, `action-guard` y el `pre-push` estaban ahí, con
+         sus hooks declarados, y **no frenaban nada**. Ningún error: los tres leen su sección del
+         config, no la encuentran y dejan pasar (que es el comportamiento correcto de un hook con
+         config ausente).
+Causa:   el instalador copiaba los tres archivos y el config de arranque no traía `askFirst` ni
+         `branches`. Es el anti-patrón «instalado y muerto» —archivos presentes cuyo eslabón
+         activador nunca corre— cometido por el propio instalador, que es el peor lugar posible:
+         se propaga a todos los repos portados y en cada uno se ve como si el freno existiera.
+Regla:   un freno viaja con la clave que lo activa, o no viaja. Y el config de arranque no puede
+         dejar en blanco lo que no es una decisión del equipo: los patrones del clasificador de
+         intención son del idioma, y las ramas protegidas son `main`/`master` hasta que alguien
+         diga otra cosa.
+Mecanismo: `askFirst` y `branches` en `plantillas/harness.config.json`, la tabla
+         `install.activators` del config (qué clave activa cada freno que se copia) y el caso
+         8a-bis del self-test, que cruza la lista de archivos que el instalador copia contra esa
+         tabla y falla nombrando el freno y la clave que le falta. Probado quitando las dos claves:
+         reporta los tres frenos, uno por línea.

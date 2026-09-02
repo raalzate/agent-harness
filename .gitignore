@@ -5,3 +5,6 @@ build/
 out/
 .DS_Store
 *.log
+
+# Índice de símbolos de Serena: es caché local de una herramienta, no del repo.
+.serena/

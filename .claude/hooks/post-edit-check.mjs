@@ -9,7 +9,7 @@
  * Además marca `.git/gate-dirty` para que el hook Stop sepa que hay código sin verificar.
  */
 import { spawnSync } from "node:child_process";
-import { readInput, loadConfig, deny, allow, targetPath, markGateDirty, underAny, REPO_ROOT } from "./harness.mjs";
+import { readInput, loadConfig, deny, allow, targetPath, markGateDirty, underAny, codeExtensions, REPO_ROOT } from "./harness.mjs";
 
 const input = await readInput();
 const config = loadConfig();
@@ -18,8 +18,11 @@ if (!config) allow();
 const rel = targetPath(input);
 if (!rel || rel.startsWith("..")) allow();
 
-// Sólo código: editar un .md no ensucia el gate.
-const isCode = /\.(ts|tsx|mjs|js|jsx)$/.test(rel) && underAny(rel, config.gate?.codeGlobs ?? []);
+// Qué cuenta como código sale del config; el default agnóstico es UNO y vive en `harness.mjs`
+// (dos listas son dos verdades: ya divergieron una vez y dejaron el barrido del lint ciego).
+const codeExt = codeExtensions(config.gate?.codeExtensions);
+const isCode = codeExt.some((ext) => rel.toLowerCase().endsWith(ext.toLowerCase())) &&
+  underAny(rel, config.gate?.codeGlobs ?? []);
 if (isCode) markGateDirty(config);
 
 if (!isCode) allow();

@@ -1,0 +1,94 @@
+{
+  "$stack": "node",
+  "$comment": "Node/TypeScript de backend o librería. Lleva la FORMA del stack, no las reglas del equipo: `gate.signals`, `patterns`, `reuse` y `bash.deny` propios se escriben leyendo ESTE repo (lo exige la regla PERFIL del lint).",
+  "$detect": [
+    "package.json"
+  ],
+  "gate": {
+    "codeExtensions": [
+      ".ts",
+      ".tsx",
+      ".js",
+      ".jsx",
+      ".mjs",
+      ".cjs"
+    ],
+    "command": "npm run gate",
+    "fastCommand": "npm run gate:fast",
+    "installHooksCommand": "npm run hooks:install",
+    "$signalHints": [
+      {
+        "name": "tests",
+        "command": [
+          "npm",
+          "test",
+          "--silent"
+        ],
+        "why": "el comportamiento que ningún tipo garantiza"
+      },
+      {
+        "name": "tipos",
+        "command": [
+          "npx",
+          "tsc",
+          "--noEmit"
+        ],
+        "why": "el compilador ve lo que el test no ejercita"
+      },
+      {
+        "name": "build",
+        "command": [
+          "npm",
+          "run",
+          "build"
+        ],
+        "fastSkip": true,
+        "why": "un build roto pasa la suite entera"
+      }
+    ]
+  },
+  "purityImportSyntax": [
+    "from\\s+['\"]{mod}['\"]",
+    "require\\(\\s*['\"]{mod}['\"]",
+    "import\\s+['\"]{mod}['\"]"
+  ],
+  "forbiddenDeps": {
+    "manifest": "package.json",
+    "matcher": "^\\s*[\"']?{pkg}[\"']?\\s*[:=]"
+  },
+  "tests": {
+    "filePattern": "(^|/)(__tests__|tests?)/|\\.(test|spec)\\.[cm]?[jt]sx?$",
+    "onlyPattern": "\\b(describe|it|test)\\.only\\("
+  },
+  "commitMsg": {
+    "$codePattern": "El layout de código NO lo decide el lenguaje: en un repo puede ser `src/`, en otro `services/`. Lo confirma el equipo — si queda mal, `commit-msg` deja de exigir la referencia al ítem y P11 se apaga sin que nada se ponga rojo.",
+    "ignoreExtensions": [
+      ".md",
+      ".png",
+      ".jpg",
+      ".jpeg",
+      ".svg"
+    ]
+  },
+  "protectedPaths": [
+    {
+      "pattern": "^(node_modules)/",
+      "reason": "dependencias: se cambian por manifiesto + install."
+    },
+    {
+      "pattern": "^(dist|build|out|coverage|\\.next)/",
+      "reason": "artefactos derivados: se regeneran, no se editan."
+    }
+  ],
+  "docs": {
+    "ignore": [
+      "node_modules",
+      ".git",
+      "dist",
+      "build",
+      "out",
+      "coverage",
+      ".next"
+    ]
+  }
+}

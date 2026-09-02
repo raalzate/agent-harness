@@ -1,0 +1,77 @@
+{
+  "$stack": "go",
+  "$comment": "Go. El `pkg` de `forbiddenDeps.packages` es la ruta del módulo (`github.com/algo/x`) y el matcher lo busca en el bloque `require` de `go.mod`. `gofmt -l .` no falla solo: en el gate va como señal envuelta (`gofmt -l . | tee /dev/stderr | wc -l` o el verificador del equipo).",
+  "$detect": [
+    "go.mod"
+  ],
+  "gate": {
+    "codeExtensions": [
+      ".go"
+    ],
+    "installHooksCommand": "git config core.hooksPath .githooks",
+    "$signalHints": [
+      {
+        "name": "build",
+        "command": [
+          "go",
+          "build",
+          "./..."
+        ],
+        "why": "la señal más barata del stack y la que atrapa la mayoría"
+      },
+      {
+        "name": "tests",
+        "command": [
+          "go",
+          "test",
+          "./..."
+        ],
+        "why": "el comportamiento que el compilador no garantiza"
+      },
+      {
+        "name": "vet",
+        "command": [
+          "go",
+          "vet",
+          "./..."
+        ],
+        "why": "los errores que compilan igual (formatos de Printf, locks copiados)"
+      }
+    ]
+  },
+  "purityImportSyntax": [
+    "import\\s+[\"']{mod}[\"']",
+    "^\\s*(?:_\\s+|\\w+\\s+)?[\"']{mod}[\"']"
+  ],
+  "forbiddenDeps": {
+    "manifest": "go.mod",
+    "matcher": "^\\s*{pkg}\\s+v"
+  },
+  "tests": {
+    "filePattern": "_test\\.go$",
+    "onlyPattern": ""
+  },
+  "commitMsg": {
+    "$codePattern": "El layout de código NO lo decide el lenguaje: en un repo puede ser `src/`, en otro `services/`. Lo confirma el equipo — si queda mal, `commit-msg` deja de exigir la referencia al ítem y P11 se apaga sin que nada se ponga rojo.",
+    "ignoreExtensions": [
+      ".md",
+      ".png",
+      ".jpg",
+      ".jpeg",
+      ".svg"
+    ]
+  },
+  "protectedPaths": [
+    {
+      "pattern": "^(bin|vendor)/",
+      "reason": "binarios y dependencias copiadas: salen de `go build` y `go mod vendor`."
+    }
+  ],
+  "docs": {
+    "ignore": [
+      "vendor",
+      "bin",
+      ".git"
+    ]
+  }
+}

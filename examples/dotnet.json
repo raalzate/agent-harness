@@ -1,0 +1,308 @@
+{
+  "$comment": "Servicio ASP.NET Core (C#) con xUnit. Particularidades del stack: el compilador es la señal más barata y hay que hacerlo fallar (`-warnaserror`), las dependencias no viven en un manifiesto clave-valor sino en `<PackageReference>` (de ahí `forbiddenDeps.matcher`), `bin/` y `obj/` aparecen en CADA proyecto y no sólo en la raíz, y la sintaxis de import es `using` — sin `purityImportSyntax` la regla PUREZA sale verde con el framework importado en el dominio.",
+  "gate": {
+    "command": "dotnet run --project build",
+    "fastCommand": "dotnet run --project build -- fast",
+    "marker": ".git/gate-dirty",
+    "codeGlobs": [
+      "src/",
+      "tests/"
+    ],
+    "codeExtensions": [
+      ".cs",
+      ".csproj"
+    ],
+    "installHooksCommand": "git config core.hooksPath .githooks",
+    "signals": [
+      {
+        "name": "self-test del arnés",
+        "command": [
+          "node",
+          "scripts/harness-selftest.mjs"
+        ],
+        "why": "un hook roto falla en silencio: ninguna otra señal lo ve"
+      },
+      {
+        "name": "link-check de docs",
+        "command": [
+          "node",
+          "scripts/docs-linkcheck.mjs"
+        ],
+        "why": "mover un doc rompe punteros de la memoria del agente"
+      },
+      {
+        "name": "lint de convenciones",
+        "command": [
+          "node",
+          "scripts/repo-lint.mjs"
+        ],
+        "why": "las reglas de arquitectura de este repo que el compilador no conoce"
+      },
+      {
+        "name": "formato",
+        "command": [
+          "dotnet",
+          "format",
+          "--verify-no-changes",
+          "--no-restore"
+        ],
+        "why": "un diff de formato entierra el diff real y ensucia todos los reviews siguientes"
+      },
+      {
+        "name": "build con warnings como errores",
+        "command": [
+          "dotnet",
+          "build",
+          "--nologo",
+          "-warnaserror"
+        ],
+        "why": "en .NET el compilador atrapa la mayoría y es lo más barato; sin -warnaserror los warnings se acumulan hasta que nadie los lee"
+      },
+      {
+        "name": "tests",
+        "command": [
+          "dotnet",
+          "test",
+          "--nologo",
+          "--no-build"
+        ],
+        "why": "el comportamiento que el compilador no garantiza; --no-build reusa la señal anterior en vez de compilar dos veces"
+      },
+      {
+        "name": "migraciones sin pendientes",
+        "command": [
+          "sh",
+          "-c",
+          "test -z \"$(dotnet ef migrations list --no-build --json | grep -i pending)\""
+        ],
+        "skipIfMissing": "src/Infrastructure/Migrations",
+        "why": "un modelo cambiado sin migración compila, pasa los tests con base en memoria y explota en el primer deploy"
+      },
+      {
+        "name": "artefactos en su lugar",
+        "command": [
+          "node",
+          "scripts/artifacts-check.mjs"
+        ],
+        "why": "un plan suelto en el repo cuando el trabajo vive en el gestor parte el registro en dos"
+      }
+    ]
+  },
+  "protectedPaths": [
+    {
+      "pattern": "^\\.env|appsettings\\.(Production|Secrets)\\.json$",
+      "reason": "configuración con secretos: la edita el humano, y en producción sale del gestor de secretos."
+    },
+    {
+      "pattern": "^(packages\\.lock\\.json|.*\\.lock\\.json)$",
+      "reason": "el lockfile se regenera con `dotnet restore --force-evaluate`, no se edita a mano."
+    },
+    {
+      "pattern": "^\\.git/",
+      "reason": "historia de git: fuera del alcance del agente."
+    },
+    {
+      "pattern": "(^|/)(bin|obj)/",
+      "reason": "salida del compilador: se regenera con `dotnet build`. En .NET aparece dentro de CADA proyecto, no sólo en la raíz."
+    },
+    {
+      "pattern": "\\.(Designer\\.cs|g\\.cs|g\\.i\\.cs)$",
+      "reason": "código generado: se cambia el generador o la plantilla, no la salida."
+    },
+    {
+      "pattern": "^src/Infrastructure/Migrations/[0-9]",
+      "reason": "una migración ya aplicada es inmutable: se corrige con una migración nueva."
+    },
+    {
+      "pattern": "\\.user$",
+      "reason": "configuración local de la máquina de alguien: no viaja en el repo."
+    }
+  ],
+  "bash": {
+    "deny": [
+      {
+        "pattern": "--no-ver[i]fy",
+        "reason": "saltarse los hooks de verificación está prohibido. Si el gate estorba, se arregla el gate."
+      },
+      {
+        "pattern": "dotnet\\s+ef\\s+database\\s+(drop|update)",
+        "reason": "toca la base directamente. Generá la migración, revisá el SQL (`dotnet ef migrations script`) y que la aplique el pipeline."
+      },
+      {
+        "pattern": "dotnet\\s+nuget\\s+push",
+        "reason": "publicar un paquete es irreversible: la versión queda tomada para siempre. Lo hace el pipeline con un tag."
+      },
+      {
+        "pattern": "git\\s+push\\s+.*--force(?!-with-lease)",
+        "reason": "`--force` reescribe historia remota. Usá --force-with-lease."
+      },
+      {
+        "pattern": "git\\s+reset\\s+--hard",
+        "reason": "destruye trabajo sin commitear. Usá `git stash`."
+      },
+      {
+        "pattern": "\\bcurl\\b[^|;&]*\\|\\s*(ba)?sh",
+        "reason": "ejecuta código remoto sin revisarlo. Bajá el script, leelo, después corrélo."
+      }
+    ]
+  },
+  "reuse": [
+    {
+      "pattern": "new\\s+HttpClient\\(",
+      "appliesTo": "^src/",
+      "reason": "instanciar HttpClient a mano agota los sockets (el clásico SocketException a las horas). Usá IHttpClientFactory, ya registrado.",
+      "see": "src/Infrastructure/DependencyInjection.cs"
+    }
+  ],
+  "lint": {
+    "$comment": "`sourceExtensions` incluye `.csproj` porque `gate.codeExtensions` también lo incluye: editar un `.csproj` ensucia el gate, así que el barrido completo TIENE que leerlo o los `patterns` de abajo quedan ciegos ahí. El `.csproj` no está en el default agnóstico (es un XML, no código), y esa asimetría es la que hay que declarar.",
+    "command": [
+      "node",
+      "scripts/repo-lint.mjs"
+    ],
+    "fileFlag": "--file",
+    "sourceExtensions": [
+      ".cs",
+      ".fs",
+      ".fsx",
+      ".vb",
+      ".csproj",
+      ".props"
+    ]
+  },
+  "purityImportSyntax": [
+    "^\\s*using\\s+(?:static\\s+)?{mod}\\b",
+    "^\\s*global\\s+using\\s+(?:static\\s+)?{mod}\\b"
+  ],
+  "purity": [
+    {
+      "dir": "src/Domain",
+      "forbiddenImports": [
+        "Microsoft.AspNetCore",
+        "Microsoft.EntityFrameworkCore",
+        "System.Net.Http",
+        "Microsoft.Extensions.Configuration"
+      ],
+      "except": [],
+      "reason": "el dominio no conoce transporte, ORM ni configuración: los adaptadores dependen del dominio y nunca al revés. Es lo único que sobrevive al próximo cambio de framework."
+    }
+  ],
+  "forbiddenDeps": {
+    "$comment": "En .NET las dependencias se declaran con `<PackageReference>`, no con clave-valor: sin `matcher` la regla sale VERDE con el paquete prohibido presente.",
+    "manifest": "Directory.Packages.props",
+    "matcher": "PackageReference\\s+(?:Update|Include)\\s*=\\s*[\"']{pkg}[\"']",
+    "packages": [
+      "Newtonsoft.Json",
+      "AutoMapper"
+    ],
+    "reason": "Newtonsoft duplica al System.Text.Json que ya usa el framework (dos serializadores = dos comportamientos con las fechas). AutoMapper esconde los errores de mapeo hasta runtime: se decidió mapear a mano."
+  },
+  "singleSource": [
+    {
+      "id": "POLITICAS",
+      "source": "src/Api/Authorization/PolicyNames.cs",
+      "extract": "public\\s+const\\s+string\\s+\\w+\\s*=\\s*\"([^\"]+)\"",
+      "appliesTo": "^src/",
+      "allow": [],
+      "reason": "un nombre de política cableado como string en un atributo `[Authorize]` no falla al compilar: falla con un 403 en producción."
+    }
+  ],
+  "invariants": [
+    {
+      "file": "src/Api/Program.cs",
+      "required": [
+        "UseAuthentication",
+        "UseAuthorization",
+        "AddHealthChecks"
+      ],
+      "forbidden": [
+        "UseDeveloperExceptionPage()"
+      ],
+      "reason": "el ORDEN del pipeline es el que hace cumplir la autorización, y una página de excepciones de desarrollo activa en producción filtra el stack trace completo. Se perdió una vez en un refactor del arranque."
+    }
+  ],
+  "patterns": [
+    {
+      "id": "ASYNCVOID",
+      "pattern": "\\basync\\s+void\\s+\\w+\\s*\\(",
+      "appliesTo": "^src/",
+      "allow": [],
+      "message": "`async void` se lleva la excepción a un hilo donde nadie la puede atrapar y tira el proceso abajo. Devolvé Task (la única excepción legítima es un manejador de evento)."
+    },
+    {
+      "id": "RESULTBLOQUEANTE",
+      "pattern": "\\.(Result|GetAwaiter\\(\\)\\.GetResult\\(\\))\\b",
+      "appliesTo": "^src/",
+      "allow": [],
+      "message": "bloquear sobre una tarea produce deadlocks bajo carga y agota el thread pool. Propagá el async hasta el borde."
+    },
+    {
+      "id": "CONSOLE",
+      "pattern": "Console\\.(Write|WriteLine)\\(",
+      "appliesTo": "^src/(?!.*Program\\.cs)",
+      "allow": [],
+      "message": "en un servicio nadie lee la consola: usá ILogger, que sale estructurado y correlacionado con la petición."
+    }
+  ],
+  "tests": {
+    "filePattern": "(^|/)tests?/|Tests?\\.cs$",
+    "onlyPattern": "\\[Fact\\(Skip"
+  },
+  "incidents": {
+    "file": "docs/gotchas.md",
+    "heading": "### GOTCHA",
+    "requiredLines": [
+      "Síntoma:",
+      "Causa:",
+      "Regla:",
+      "Mecanismo:"
+    ]
+  },
+  "docs": {
+    "ignore": [
+      ".git",
+      "bin",
+      "obj",
+      "packages",
+      "TestResults",
+      "artifacts"
+    ],
+    "ignoreFiles": [],
+    "externalPaths": []
+  },
+  "status": {
+    "file": "STATUS.md",
+    "reminder": "Recordá: nada se entrega sin el gate verde (`dotnet run --project build`) · lecciones con `/lesson`."
+  },
+  "tracker": {
+    "$comment": "Forja: azure-devops. Ningún script del arnés la conoce — lo único que se lee es `issuePattern`. Ver docs/trazabilidad.md.",
+    "kind": "azure-devops",
+    "issuePattern": "\\bAB#[0-9]+\\b",
+    "issueExample": "AB#1234 · Fixes AB#1234",
+    "newIssueHint": [
+      "az boards work-item create --title \"<título>\" --type Task --output table"
+    ],
+    "artifactsIn": "tracker",
+    "specsDir": "specs",
+    "allowedInRepo": [
+      "specs/README.md"
+    ]
+  },
+  "commitMsg": {
+    "codePattern": "^(src/|tests/|scripts/)",
+    "ignoreExtensions": [
+      ".md",
+      ".png",
+      ".jpg",
+      ".svg",
+      ".resx"
+    ],
+    "skipSubjects": [
+      "Merge ",
+      "Revert ",
+      "fixup! ",
+      "squash! "
+    ],
+    "escapeLine": "sin-issue:"
+  }
+}
