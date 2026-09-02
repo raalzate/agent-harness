@@ -829,10 +829,22 @@ if (config.tests?.onlyPattern) {
 
 // 4d. FUENTEUNICA: cablear un literal del registro fuera de él es rojo.
 for (const regla of config.singleSource ?? []) {
-  const literal = (regla.literals ?? [])[0];
+  // Un registro puede declarar sus literales a mano (`literals`) o extraerlos del propio archivo
+  // fuente (`extract`). La segunda forma quedaba OMITIDA: el caso no corría y nadie se enteraba,
+  // justo en la variante que usa un repo con un registro grande.
+  let literal = (regla.literals ?? [])[0];
+  if (!literal && regla.extract && regla.source) {
+    try {
+      const fuente = fs.readFileSync(abs(regla.source), "utf8");
+      const hit = new RegExp(regla.extract).exec(fuente);
+      literal = hit?.[1] ?? hit?.[0];
+    } catch {
+      /* la ruta inexistente ya la reporta la sección 2 */
+    }
+  }
   const ruta = sampleFromPattern(regla.appliesTo);
   if (!literal || !ruta) {
-    skip(`lint ${regla.id ?? "FUENTEUNICA"}`, "sin literal declarado o patrón no reducible");
+    skip(`lint ${regla.id ?? "FUENTEUNICA"}`, "sin literal (ni `literals` ni `extract` utilizable) o patrón no reducible");
     continue;
   }
   const archivo = ruta.endsWith("/") ? `${ruta}ejemplo.mjs` : ruta;
