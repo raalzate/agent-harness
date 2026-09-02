@@ -738,6 +738,34 @@ if ((config.docs?.mentionSignals ?? []).length && (config.gate?.signals ?? []).l
   }
 }
 
+// 3i. El link-check no revisa lo que git IGNORA. Es la misma asimetría que ese script existe
+//     para evitar, al revés: un rojo que CI nunca ve, sobre un archivo que no está en el repo.
+//     El cebo va en un directorio derivado (gitignored) para no escribir en el árbol de fuentes.
+{
+  const derivado = ["coverage", "dist", "build", "out"].find((d) => {
+    const r = spawnSync("git", ["check-ignore", "-q", "--", `${d}/`], { cwd: REPO_ROOT });
+    return r.status === 0;
+  });
+  if (!derivado) {
+    skip("link-check ignora lo que git ignora", "el repo no declara ningún directorio derivado en .gitignore");
+  } else {
+    const dir = abs(derivado);
+    const existia = fs.existsSync(dir);
+    const cebo = path.join(dir, "puntero-selftest.md");
+    try {
+      fs.mkdirSync(dir, { recursive: true });
+      // linkcheck:ignora — las rutas son el CEBO: tienen que no existir para que el caso sirva.
+      fs.writeFileSync(cebo, "Ver [esto](../docs/no-existe-en-ningun-lado.md) y `docs/tampoco/`.\n"); // linkcheck:ignora
+      const r = spawnSync("node", [abs("scripts/docs-linkcheck.mjs")], { cwd: REPO_ROOT, encoding: "utf8" });
+      if (r.status === 0) ok(`link-check no revisa \`${derivado}/\` (git lo ignora)`);
+      else bad("link-check ignora lo que git ignora", `salió rojo por un archivo gitignored: ${(r.stdout ?? "").trim().split("\n")[0]}`);
+    } finally {
+      fs.rmSync(cebo, { force: true });
+      if (!existia) fs.rmSync(dir, { recursive: true, force: true });
+    }
+  }
+}
+
 // ── 4. Las reglas del lint muerden (por stdin: no escribe archivos) ──────────
 section("4. reglas del lint");
 

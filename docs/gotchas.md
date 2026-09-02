@@ -304,3 +304,19 @@ Mecanismo: `docs/sdd.md`, `docs/buenas-practicas.md` y `docs/trazabilidad.md` en
          la plantilla de ADR que además crea el directorio de decisiones); y la sección 8 del
          self-test, que corre
          `docs-linkcheck` **dentro** de cada repo portado y falla si sale rojo.
+
+### GOTCHA: el link-check revisaba lo que git ignora
+
+Síntoma: el gate se puso rojo por un `ruta citada →` dentro de un material de taller que está
+         **gitignored**: la transcripción cita el árbol del repo destino, no de este.
+Causa:   el script mide la EXISTENCIA de una ruta contra `git ls-files` —bien— pero recolectaba
+         los archivos a revisar caminando el disco. O sea: aplicaba el criterio correcto de un
+         lado y el equivocado del otro. Un archivo que git ignora no está en el repo, así que sus
+         punteros no le rompen nada a nadie que clone, y el rojo que produce CI nunca lo ve.
+Regla:   el mismo criterio en las dos direcciones: si la existencia se mide contra el índice de
+         git, lo que se revisa también sale del índice. Un rojo que sólo aparece en una máquina
+         entrena al equipo a ignorar la señal, igual que un falso rojo.
+Mecanismo: `markdownFiles()` en `scripts/docs-linkcheck.mjs` saltea lo que `git check-ignore`
+         marca, y el caso 3i del self-test pone un cebo con dos punteros muertos dentro de un
+         directorio derivado (el primero de `.gitignore` que exista) y exige que el link-check
+         siga verde. El cebo se borra en `finally`, y el guardián de temporales lo verifica.
