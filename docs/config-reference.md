@@ -36,6 +36,8 @@ tocás una clave.
 | `command` / `fastCommand` | lo que el agente y los mensajes de error le dicen al humano que corra. **No** es lo que se ejecuta: eso son las `signals` |
 | `marker` | archivo que marca "hay código editado sin gate verde". Lo escribe `post-edit-check`, lo borra `gate.sh` al terminar verde, lo lee el hook `Stop` |
 | `codeGlobs` | qué rutas cuentan como **código**. Editar un `.md` no ensucia el gate; editar `src/` sí |
+| `codeExtensions` | qué **extensiones** cuentan como código. Vacío = el hook usa un superconjunto agnóstico (JS, .NET, JVM, Python, Go, Rust, C/C++). Estaba cableada en `post-edit-check.mjs`: por eso el freno de mayor retorno estaba muerto en todo repo que no fuera JS/TS |
+| `installHooksCommand` | el comando que instala los hooks de git **en este repo**. Lo nombra `session-start` cuando `core.hooksPath` no está puesto: un aviso que cita un comando inexistente se ignora completo |
 | `signals[].name` | lo que se imprime |
 | `signals[].command` | array argv. Sin shell y sin `eval`: ningún dato del config se interpola en una línea de comandos |
 | `signals[].why` | por qué esta señal no la cubre otra. **Obligatorio** (el self-test lo exige): es lo único que va a defender a la señal cuando tarde y alguien la quiera sacar |
@@ -106,6 +108,14 @@ Lo usa el hook `PostToolUse` para correr el lint **sobre el archivo que se acaba
 devolver el error real (archivo, línea, mensaje) en el momento, en vez de que el agente se entere
 diez ediciones después. Es el freno de mayor retorno del arnés.
 
+`sourceExtensions` acota qué archivos BARRE el lint completo. Si `gate.codeExtensions` declara algo
+que **no** está en el default (un `.csproj`, por ejemplo: es XML, no código), hay que declararlo
+también acá — el self-test lo exige, en este repo, en cada perfil y en cada ejemplo publicado. Ausente = el mismo superconjunto
+agnóstico que usa `gate.codeExtensions`. Son dos claves porque son dos preguntas —qué ensucia el
+gate vs. qué archivos llevan reglas— pero comparten un solo default: cuando eran dos listas
+cableadas divergieron, y un `.pyi` ensuciaba el gate mientras el barrido nunca lo leía (PATRON y
+PUREZA ciegas ahí). El self-test verifica que todo lo de `gate.codeExtensions` lo barra el lint.
+
 ---
 
 ## `purity` — la capa que queda limpia
@@ -119,16 +129,42 @@ diez ediciones después. Es el freno de mayor retorno del arnés.
 
 Es un array: podés tener varias capas. `except` son rutas exactas y son **deuda declarada**.
 
+**Sintaxis de import.** Cómo se escribe "importar X" depende del lenguaje, así que el default es un
+superconjunto: `from "x"`, `require("x")`, `import x`, `from x import`, `using X;` (C#/F#),
+`use x;` (Rust/PHP), `#include <x>` (C/C++). Se puede angostar por capa (`purity[].importSyntax`) o
+por repo (`purityImportSyntax`), como plantillas con `{mod}`:
+
+```json
+{ "purityImportSyntax": ["^\\s*using\\s+(?:static\\s+)?{mod}\\b"] }
+```
+
+Ensancharla **no** se hace editando código: el default ya cubre las familias conocidas, y una
+familia nueva es una plantilla más en el config (P4). Cada plantilla declarada queda cubierta por el
+self-test, que deriva de ella una línea de ejemplo y exige que el lint la muerda.
+
 ---
 
 ## `forbiddenDeps` — dependencias vetadas
 
 ```json
-{ "manifest": "package.json", "packages": ["moment", "request"], "reason": "sin mantenimiento: migrar, no agregar." }
+{ "manifest": "package.json", "packages": ["moment", "request"],
+  "matcher": "^\\s*[\"']?{pkg}[\"']?\\s*[:=]",
+  "reason": "sin mantenimiento: migrar, no agregar." }
 ```
 
-Busca la declaración del paquete en el manifiesto, sea `package.json`, `pyproject.toml`, `go.mod`
-o `Cargo.toml` (el patrón es `nombre` seguido de `:` o `=`). Con `packages` vacío, la regla no corre.
+Con `packages` vacío la regla no corre. `matcher` es una plantilla con `{pkg}`: el default entiende
+manifiestos **clave-valor** (`package.json`, `requirements.txt`, `Cargo.toml`, `go.mod`). Un
+manifiesto con otra forma necesita el suyo, o la regla sale **verde con la dependencia prohibida
+presente** — la peor variante de señal:
+
+| Manifiesto | `matcher` |
+|---|---|
+| `.csproj` / `Directory.Packages.props` | `PackageReference\\s+Include\\s*=\\s*["']{pkg}["']` |
+| `pom.xml` | `<artifactId>\\s*{pkg}\\s*</artifactId>` |
+| `build.gradle(.kts)` | `["']{pkg}[:"']` (el `pkg` es `grupo:artefacto`) |
+| `pyproject.toml` | `^\\s*["']?{pkg}["']?\\s*[=<>~]` |
+
+Cada uno viene ya escrito en el perfil de stack correspondiente (`plantillas/perfiles/`).
 
 ---
 
@@ -235,8 +271,12 @@ punteros a archivos gitignored — verde local, rojo en CI, la peor variante de 
 ## `status` — el archivo de estado verificado
 
 ```json
-{ "file": "STATUS.md" }
+{ "file": "STATUS.md",
+  "reminder": "Recordá: nada se entrega sin `npm run gate` verde · lecciones con `/lesson`." }
 ```
+
+`reminder` es la última línea que el agente lee al abrir la sesión: nombrá el comando de gate **real**
+de este repo. Vacío = el hook arma uno con `gate.command`.
 
 Lo imprime el hook `SessionStart` (primeras 40 líneas). Sirve para no releer el repo entero para
 contestar "¿esto anda?". Sólo lo verificado con un comando; lo que se supone va en deuda conocida.
@@ -360,18 +400,53 @@ calla — que es lo correcto: un hook que habla sin tener nada que ofrecer sólo
 
 ---
 
+## `examples` — las configs de ejemplo que se publican
+
+```json
+{ "dir": "examples",
+  "keyValueManifests": ["package.json", "requirements*.txt", "go.mod", "*.toml", "*.cfg", "*.ini"] }
+```
+
+`keyValueManifests` son los manifiestos que el `matcher` por default ya entiende. Cualquier otro
+formato (XML de `.csproj` o `pom.xml`, notación corta de Gradle) tiene que declarar el suyo.
+
+Sólo aplica al repo que **publica** ejemplos (este). El self-test los parsea, compila sus regex,
+exige `why` en cada señal y exige `forbiddenDeps.matcher` cuando el manifiesto no es clave-valor.
+Un ejemplo roto viaja igual que un script roto: alguien lo copia.
+
+---
+
+## `profiles` — perfiles de stack del instalador
+
+```json
+{ "dir": "plantillas/perfiles",
+  "requiredKeys": ["$stack", "$detect", "gate.codeExtensions"],
+  "forbiddenKeys": ["patterns", "reuse", "singleSource", "invariants", "gate.signals", "bash.deny", "forbiddenDeps.packages"],
+  "reason": "un perfil lleva hechos del lenguaje, no reglas de un equipo." }
+```
+
+Sólo aplica al repo que **publica** los perfiles (este). Un perfil describe la **forma** de un stack;
+`forbiddenKeys` es el freno que impide que se le metan reglas, y la regla `PERFIL` del lint lo hace
+cumplir. El detalle de qué viaja y qué no está en [perfiles.md](perfiles.md).
+
+---
+
 ## Quién lee cada clave
 
 | Clave | Lo leen |
 |---|---|
-| `gate` | `scripts/gate.sh`, `gate-stop.mjs`, `post-edit-check.mjs`, `session-start.mjs`, self-test |
+| `gate` (`command`, `marker`, `signals`) | `scripts/gate.sh`, `gate-stop.mjs`, `session-start.mjs`, self-test |
+| `gate.codeGlobs`, `gate.codeExtensions` | `post-edit-check.mjs` (¿ensucia el gate y se lintea?), self-test |
+| `gate.installHooksCommand` | `session-start.mjs` (el aviso de pre-commit sin instalar), self-test |
 | `protectedPaths` | `protected-paths.mjs`, `.githooks/pre-commit`, self-test |
 | `bash.deny` | `bash-guard.mjs`, self-test |
 | `reuse` | `reuse-guard.mjs`, self-test |
-| `lint` | `post-edit-check.mjs`, `.githooks/pre-commit`, self-test |
-| `purity`, `forbiddenDeps`, `singleSource`, `invariants`, `patterns`, `tests`, `incidents` | `scripts/repo-lint.mjs`, self-test |
+| `lint` (incluye `sourceExtensions`) | `post-edit-check.mjs`, `scripts/repo-lint.mjs`, `.githooks/pre-commit`, self-test |
+| `purity`, `purityImportSyntax`, `forbiddenDeps`, `singleSource`, `invariants`, `patterns`, `tests`, `incidents` | `scripts/repo-lint.mjs`, self-test |
+| `profiles` | `scripts/repo-lint.mjs` (regla `PERFIL`), self-test |
+| `examples` | self-test (sección 8) |
 | `docs` | `scripts/docs-linkcheck.mjs`, `scripts/repo-lint.mjs` (directorios a saltear) |
-| `status` | `session-start.mjs`, self-test |
+| `status` (incluye `reminder`) | `session-start.mjs`, self-test |
 | `tracker` | `.githooks/commit-msg`, `scripts/artifacts-check.mjs`, self-test |
 | `commitMsg` | `.githooks/commit-msg`, self-test |
 | `sdd` | `sdd-router.mjs`, self-test |

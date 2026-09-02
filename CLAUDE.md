@@ -24,9 +24,10 @@ nada del repo.
 .claude/agents/               explorer · reviewer · gate-runner
 .claude/commands/             /gate · /lesson · /harness-audit · /harness-port
 scripts/gate.sh               ejecuta gate.signals; no sabe de stacks
-scripts/repo-lint.mjs         7 clases de regla, todas configurables
+scripts/repo-lint.mjs         8 clases de regla, todas configurables
 scripts/harness-selftest.mjs  prueba de vida: genera los casos DESDE el config
-scripts/harness-init.mjs      instalador en otro repo (dry-run por defecto)
+scripts/harness-init.mjs      instalador en otro repo (dry-run por defecto, con perfil de stack)
+plantillas/perfiles/          8 perfiles de stack: hechos del lenguaje, nunca reglas
 plantillas/ examples/ docs/   lo que se copia y lo que se lee
 ```
 
@@ -34,6 +35,9 @@ plantillas/ examples/ docs/   lo que se copia y lo que se lee
 
 - **Nada específico de un repo entra al código.** Si hace falta un literal de dominio en un hook o
   en un script, la respuesta correcta es una clave nueva del config (P4).
+- **Nada específico de un LENGUAJE tampoco.** Una lista de extensiones, una sintaxis de import o la
+  forma de un manifiesto van al config con default agnóstico, y su caso del self-test se deriva de
+  esa clave. Un freno cuya prueba de vida usa el único stack donde funciona no prueba nada.
 - **Un freno nuevo llega con su prueba de vida.** Si es una regla del config, el self-test lo cubre
   solo. Si es una clase de regla nueva o un hook nuevo, el caso se escribe a mano (P2).
 - **Validación doble, siempre:** `npm run selftest` (¿muerde?) y `npm run lint` (¿no muerde de más?).
@@ -61,7 +65,8 @@ npm run lint:rules     # ¿qué reglas están activas y de dónde salen?
 - Pre-commit real: `npm run hooks:install` (`core.hooksPath=.githooks`). Saltarse la verificación
   está prohibido: si el gate estorba, se arregla el gate.
 - Al cambiar el arnés, probá también el portado: `node scripts/harness-init.mjs <repo> ` en dry-run
-  sigue siendo la mitad del producto.
+  sigue siendo la mitad del producto. Si tocás un perfil de stack, la sección 8 del self-test lo
+  instala en un repo temporal: no hace falta un repo de .NET a mano.
 
 ## Documentación: qué va dónde
 
@@ -69,6 +74,7 @@ npm run lint:rules     # ¿qué reglas están activas y de dónde salen?
 |---|---|
 | la teoría, agnóstica de stack | `docs/buenas-practicas.md` (**ruta protegida**: se enmienda en su propio commit) |
 | cómo se instala en otro repo | `docs/portar.md` |
+| portarlo a .NET, JVM, Python, Go, Rust, front | `docs/perfiles.md` |
 | qué hace cada clave del config | `docs/config-reference.md` |
 | el arnés de ESTE repo | `docs/arnes.md` |
 | recetas concretas | `docs/recetas.md` |

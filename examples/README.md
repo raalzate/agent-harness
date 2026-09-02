@@ -8,12 +8,21 @@ hacer las preguntas de [`../docs/portar.md`](../docs/portar.md) en ese stack.
 | [`node-typescript.json`](node-typescript.json) | app o librería TS con vitest | GitHub `#123` | `typecheck` como señal irremplazable; `purity` de la capa de dominio |
 | [`python.json`](python.json) | servicio FastAPI/Django con pytest | GitLab `#123` | `ruff` + `mypy` + `pytest` son tres señales; migraciones aplicadas = inmutables |
 | [`go.json`](go.json) | servicio Go | Jira `PROJ-123` | `vet`/`build`/`test -race` no se reemplazan; artefactos **en el repo**, no en el gestor |
+| [`dotnet.json`](dotnet.json) | servicio ASP.NET Core con xUnit | Azure Boards `AB#1234` | `forbiddenDeps.matcher` para `<PackageReference>` y `purityImportSyntax` para `using`: sin los dos, DEPS y PUREZA salen verdes con la violación puesta |
+| [`jvm-spring.json`](jvm-spring.json) | servicio Spring Boot con Maven | Jira `PAY-123` | `matcher` para `<artifactId>` en XML; `@Autowired` en campo como patrón prohibido; migraciones de Flyway inmutables |
 | [`monorepo.json`](monorepo.json) | workspace con varios paquetes | Azure Boards `AB#123` | el gate corre el workspace completo; `skipIfMissing` para clones parciales |
 | [`infra-terraform.json`](infra-terraform.json) | repo de infraestructura | Gitea `#123` | el arnés se invierte: `bash.deny` es la mitad del valor (planear sí, aplicar no) |
 
 La columna **Forja** está a propósito: cinco gestores distintos con el mismo mecanismo. Ningún
 script del arnés conoce ninguno — lo único que cambia es `tracker.issuePattern`. Ver
 [trazabilidad.md](../docs/trazabilidad.md).
+
+Los siete archivos los verifica el gate (sección 8 del self-test): parsean, sus regex compilan,
+cada señal declara su `why`, y un manifiesto que no es clave-valor trae su `matcher`. Un ejemplo
+roto viaja igual que un script roto.
+
+Si tu stack no está acá, el instalador tiene un **perfil** que llena lo deducible del lenguaje:
+ver [perfiles.md](../docs/perfiles.md).
 
 ## Cómo se usan
 

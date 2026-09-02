@@ -23,13 +23,25 @@
  *   INVARIANTE   un archivo conserva/prohíbe líneas concretas       config → invariants[]
  *   PATRON       texto prohibido en un ámbito, con su motivo        config → patterns[]
  *   INCIDENTE    todo gotcha declara su MECANISMO                   config → incidents
+ *   PERFIL       un perfil de stack no lleva reglas de otro repo    config → profiles
  */
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+// La lista de extensiones «esto es código» es UNA y vive con los hooks: tener una copia acá
+// es tener dos verdades, y ya divergieron (un `.pyi` ensuciaba el gate y el barrido no lo leía).
+import { codeExtensions } from "../.claude/hooks/harness.mjs";
 
 const REPO_ROOT = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
-const CONFIG_PATH = path.join(REPO_ROOT, ".claude", "harness.config.json");
+
+// `--config <ruta>`: probar una variante del config sin escribir en el árbol de fuentes (P7).
+// Lo usa el self-test para los cebos que no se pueden derivar del config real (un directorio
+// de perfiles vacío, una clave obligatoria ausente).
+const configFlagIndex = process.argv.indexOf("--config");
+const CONFIG_PATH =
+  configFlagIndex !== -1 && process.argv[configFlagIndex + 1]
+    ? path.resolve(process.argv[configFlagIndex + 1])
+    : path.join(REPO_ROOT, ".claude", "harness.config.json");
 
 let config;
 try {
@@ -46,9 +58,33 @@ const rel = (abs) => path.relative(REPO_ROOT, abs).split(path.sep).join("/");
 const read = (relPath) => fs.readFileSync(path.join(REPO_ROOT, relPath), "utf8");
 const lineOf = (content, index) => content.slice(0, index).split("\n").length;
 
-/** Extensiones que se consideran «fuente» al barrer el repo. Agnóstico: no asume un stack. */
-const SOURCE_EXT =
-  /\.(ts|tsx|js|jsx|mjs|cjs|py|go|rs|java|kt|kts|rb|php|cs|swift|scala|sh|bash|sql|vue|svelte|html)$/;
+/**
+ * Qué archivos barre el lint. Sale de `lint.sourceExtensions`, y si no está, del MISMO
+ * superconjunto agnóstico que usa `post-edit-check` para decidir qué ensucia el gate.
+ *
+ * Son dos preguntas distintas —qué ensucia el gate vs. qué archivos llevan reglas— y por eso
+ * son dos claves; lo que no puede haber es dos DEFAULTS, que es cómo se produjo la divergencia.
+ */
+const SOURCE_EXTENSIONS = codeExtensions(config.lint?.sourceExtensions);
+const esFuente = (nombre) => SOURCE_EXTENSIONS.some((ext) => nombre.toLowerCase().endsWith(ext.toLowerCase()));
+
+/**
+ * Cómo se escribe «importar X» en cada familia de lenguajes. Plantillas con `{mod}`.
+ *
+ * Es el default agnóstico de la regla PUREZA: cablear sólo la sintaxis de JS dejaba la
+ * regla de mayor retorno CIEGA en C# (`using X;`) y en C/C++ (`#include <x>`). Se puede
+ * angostar por capa (`purity[].importSyntax`) o por repo (`purityImportSyntax`) —un
+ * perfil de stack hace exactamente eso— pero nunca hay que ensancharla editando código.
+ */
+const IMPORT_SYNTAX_DEFAULT = [
+  "from\\s+['\"]{mod}['\"]", //           JS/TS: import x from "mod"
+  "require\\(\\s*['\"]{mod}['\"]", //     CommonJS
+  "import\\s+['\"]{mod}['\"]", //         import "mod" (JS, Go)
+  "^\\s*(?:import|from)\\s+{mod}\\b", //  Python, Java, Kotlin, Scala
+  "^\\s*using\\s+(?:static\\s+)?{mod}\\b", // C#, F#
+  "^\\s*use\\s+{mod}\\b", //              Rust, PHP
+  "^\\s*#include\\s*[<\"]{mod}", //       C, C++, Objective-C
+];
 
 /** Compila un regex del config sin reventar el turno del agente si está mal escrito. */
 function re(pattern, flags = "") {
@@ -69,7 +105,7 @@ function sourceFiles() {
       if (skip.has(entry.name)) continue;
       const abs = path.join(dir, entry.name);
       if (entry.isDirectory()) walk(abs);
-      else if (SOURCE_EXT.test(entry.name)) out.push(rel(abs));
+      else if (esFuente(entry.name)) out.push(rel(abs));
     }
   };
   walk(REPO_ROOT);
@@ -90,10 +126,10 @@ function checkPurity(relPath, content) {
   for (const layer of config.purity ?? []) {
     if (!layer.dir || !underDir(relPath, layer.dir)) continue;
     if ((layer.except ?? []).includes(relPath)) continue;
+    const sintaxis = layer.importSyntax ?? config.purityImportSyntax ?? IMPORT_SYNTAX_DEFAULT;
     for (const mod of layer.forbiddenImports ?? []) {
-      // import ... from "mod"  ·  require("mod")  ·  import "mod"  ·  from mod import (python)
       const pattern = new RegExp(
-        `(from\\s+['"]${escape(mod)}|require\\(\\s*['"]${escape(mod)}|import\\s+['"]${escape(mod)}|^\\s*(import|from)\\s+${escape(mod)}\\b)`,
+        sintaxis.map((t) => `(?:${t.split("{mod}").join(escape(mod))})`).join("|"),
         "m",
       );
       const hit = pattern.exec(content);
@@ -198,18 +234,30 @@ function checkFile(relPath, contenidoDado = null) {
 
 // ── Reglas globales ──────────────────────────────────────────────────────────
 
-/** DEPS — dependencias que el proyecto decidió no tener (con su motivo). */
-function checkDeps() {
+/**
+ * DEPS — dependencias que el proyecto decidió no tener (con su motivo).
+ *
+ * `forbiddenDeps.matcher` es una plantilla con `{pkg}`: el default sólo entiende
+ * manifiestos clave-valor (`package.json`, `requirements.txt`), así que un `.csproj`
+ * (`<PackageReference Include="X"/>`), un `pom.xml` o un `build.gradle` necesitan el
+ * suyo. Sin `matcher`, la regla salía verde con la dependencia prohibida presente.
+ */
+const DEPS_MATCHER_DEFAULT = "^\\s*[\"']?{pkg}[\"']?\\s*[:=]";
+
+function checkDeps(contenidoDado = null) {
   const spec = config.forbiddenDeps;
   if (!spec?.manifest || !(spec.packages ?? []).length) return;
-  let manifest;
-  try {
-    manifest = read(spec.manifest);
-  } catch {
-    return; // sin manifiesto (proyecto de otro stack): la regla no aplica
+  let manifest = contenidoDado;
+  if (manifest === null) {
+    try {
+      manifest = read(spec.manifest);
+    } catch {
+      return; // sin manifiesto (proyecto de otro stack): la regla no aplica
+    }
   }
+  const matcher = spec.matcher ?? DEPS_MATCHER_DEFAULT;
   for (const pkg of spec.packages) {
-    const hit = new RegExp(`^\\s*["']?${escape(pkg)}["']?\\s*[:=]`, "m").exec(manifest);
+    const hit = new RegExp(matcher.split("{pkg}").join(escape(pkg)), "m").exec(manifest);
     if (hit) {
       fail(
         spec.manifest,
@@ -288,6 +336,61 @@ function checkIncidents(contenidoDado = null) {
   });
 }
 
+/**
+ * PERFIL — un perfil de stack lleva HECHOS del lenguaje, nunca reglas de un equipo.
+ *
+ * Es el freno que mantiene honesto el portado. Un perfil describe la FORMA de un stack
+ * (qué extensión es código, cómo se escribe un import, dónde vive el manifiesto); las
+ * reglas concretas describen los incidentes de UN repo y en otro son ruido bien
+ * intencionado que gasta contexto del agente (P14). Sin esta regla, el primer apuro mete
+ * `patterns` y `gate.signals` adentro del perfil y el arnés empieza a viajar con las
+ * cicatrices de otro.
+ */
+const atPath = (obj, ruta) => ruta.split(".").reduce((o, k) => (o == null ? o : o[k]), obj);
+
+function checkProfiles(relPathDado = null, contenidoDado = null) {
+  const spec = config.profiles;
+  if (!spec?.dir) return;
+
+  let archivos;
+  if (relPathDado) archivos = [relPathDado];
+  else {
+    try {
+      archivos = fs
+        .readdirSync(path.join(REPO_ROOT, spec.dir))
+        .filter((f) => f.endsWith(".json"))
+        .map((f) => `${spec.dir}/${f}`);
+    } catch {
+      fail(spec.dir, 0, "PERFIL", "el directorio de perfiles que declara el config no existe.");
+      return;
+    }
+    if (!archivos.length) fail(spec.dir, 0, "PERFIL", "no hay ningún perfil de stack: `profiles.dir` está vacío.");
+  }
+
+  for (const relPath of archivos) {
+    let perfil;
+    const raw = relPath === relPathDado && contenidoDado !== null ? contenidoDado : null;
+    try {
+      perfil = JSON.parse(raw ?? read(relPath));
+    } catch (e) {
+      fail(relPath, 0, "PERFIL", `no es JSON válido: ${e.message}`);
+      continue;
+    }
+    for (const clave of spec.forbiddenKeys ?? []) {
+      const valor = atPath(perfil, clave);
+      if (valor !== undefined && !(Array.isArray(valor) && !valor.length)) {
+        fail(relPath, 0, "PERFIL", `un perfil de stack no lleva \`${clave}\`. ${spec.reason ?? ""}`.trim());
+      }
+    }
+    for (const clave of spec.requiredKeys ?? []) {
+      const valor = atPath(perfil, clave);
+      if (valor === undefined || (Array.isArray(valor) && !valor.length)) {
+        fail(relPath, 0, "PERFIL", `falta \`${clave}\`: un perfil sin eso no aporta nada al instalador.`);
+      }
+    }
+  }
+}
+
 // ── Ejecución ────────────────────────────────────────────────────────────────
 
 if (process.argv.includes("--rules")) {
@@ -299,6 +402,7 @@ if (process.argv.includes("--rules")) {
     ["INVARIANTE", `${(config.invariants ?? []).length} archivo(s)`, (config.invariants ?? []).map((r) => r.file).join(", ")],
     ["PATRON", `${(config.patterns ?? []).length} patrón(es)`, (config.patterns ?? []).map((r) => r.id).join(", ")],
     ["INCIDENTE", config.incidents?.file ? "activa" : "inactiva", config.incidents?.file ?? "—"],
+    ["PERFIL", config.profiles?.dir ? "activa" : "inactiva", config.profiles?.dir ?? "—"],
   ];
   console.log("Reglas activas (todas salen de .claude/harness.config.json):\n");
   for (const [regla, estado, detalle] of filas) console.log(`  ${regla.padEnd(12)} ${estado.padEnd(16)} ${detalle}`);
@@ -316,14 +420,17 @@ const contenidoStdin = desdeStdin ? fs.readFileSync(0, "utf8") : null;
 
 if (single) {
   const relPath = single.split(path.sep).join("/");
+  const enPerfiles = config.profiles?.dir && underDir(relPath, config.profiles.dir) && relPath.endsWith(".json");
   if (relPath === config.incidents?.file) checkIncidents(contenidoStdin);
-  else if (relPath === config.forbiddenDeps?.manifest && !desdeStdin) checkDeps();
+  else if (relPath === config.forbiddenDeps?.manifest) checkDeps(contenidoStdin);
+  else if (enPerfiles) checkProfiles(relPath, contenidoStdin);
   else checkFile(relPath, contenidoStdin);
 } else {
   for (const f of sourceFiles()) checkFile(f);
   checkDeps();
   checkInvariants();
   checkIncidents();
+  checkProfiles();
 }
 
 if (problems.length) {

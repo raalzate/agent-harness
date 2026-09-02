@@ -1,0 +1,82 @@
+{
+  "$stack": "jvm-gradle",
+  "$comment": "JVM con Gradle (Java, Kotlin, Android). `forbiddenDeps.matcher` caza la notación corta `implementation 'grupo:artefacto:version'`: el `pkg` que se escribe en `packages` es `grupo:artefacto`. Si el repo usa un version catalog, el manifiesto es `gradle/libs.versions.toml` y el matcher cambia a clave-valor.",
+  "$detect": [
+    "build.gradle",
+    "build.gradle.kts",
+    "settings.gradle",
+    "settings.gradle.kts"
+  ],
+  "gate": {
+    "codeExtensions": [
+      ".java",
+      ".kt",
+      ".kts",
+      ".scala",
+      ".groovy",
+      ".gradle"
+    ],
+    "installHooksCommand": "git config core.hooksPath .githooks",
+    "$signalHints": [
+      {
+        "name": "check",
+        "command": [
+          "./gradlew",
+          "--quiet",
+          "check"
+        ],
+        "why": "compila, testea y corre los verificadores en un solo paso"
+      },
+      {
+        "name": "build",
+        "command": [
+          "./gradlew",
+          "--quiet",
+          "assemble"
+        ],
+        "fastSkip": true,
+        "why": "el empaquetado falla por cosas que el test no toca"
+      }
+    ]
+  },
+  "purityImportSyntax": [
+    "^\\s*import\\s+(?:static\\s+)?{mod}",
+    "^\\s*import\\s+{mod}\\b"
+  ],
+  "forbiddenDeps": {
+    "manifest": "build.gradle.kts",
+    "matcher": "[\"']{pkg}[:\"']"
+  },
+  "tests": {
+    "filePattern": "(^|/)src/test/|(^|/)src/androidTest/|[Tt]ests?\\.(java|kt|scala|groovy)$",
+    "onlyPattern": ""
+  },
+  "commitMsg": {
+    "$codePattern": "El layout de código NO lo decide el lenguaje: en un repo puede ser `src/`, en otro `services/`. Lo confirma el equipo — si queda mal, `commit-msg` deja de exigir la referencia al ítem y P11 se apaga sin que nada se ponga rojo.",
+    "ignoreExtensions": [
+      ".md",
+      ".png",
+      ".jpg",
+      ".jpeg",
+      ".svg",
+      ".xml"
+    ]
+  },
+  "protectedPaths": [
+    {
+      "pattern": "^(build|\\.gradle)/|/build/",
+      "reason": "salida de Gradle: se regenera, no se edita."
+    },
+    {
+      "pattern": "^gradle/wrapper/gradle-wrapper\\.jar$",
+      "reason": "binario del wrapper: se cambia con `gradle wrapper`, no a mano."
+    }
+  ],
+  "docs": {
+    "ignore": [
+      "build",
+      ".gradle",
+      ".git"
+    ]
+  }
+}

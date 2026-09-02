@@ -120,11 +120,14 @@ existía y no frenó nada, así que hace falta un mecanismo más fuerte, no otra
 | Python | `ruff` + `mypy` (son distintas), `pytest --cov`, chequeo de migraciones pendientes |
 | Go | `gofmt -l`, `go vet ./...`, `go test -race -count=1 ./...`, `go build ./...` |
 | Java/Kotlin | `spotless:check`, `mvn verify` o `gradle check`, el empaquetado |
+| C# / .NET | `dotnet format --verify-no-changes`, `dotnet build -warnaserror` (sin eso los warnings se acumulan), `dotnet test`, migraciones sin pendientes |
 | Rust | `cargo fmt --check`, `cargo clippy -- -D warnings`, `cargo test`, `cargo build --release` |
 | Infra | `fmt -check`, `validate`, política (OPA/conftest), **plan** — nunca `apply` |
 | Datos | validación de esquema, tests de transformación, chequeo de contratos de tablas |
 
-Configs completas en [`../examples/`](../examples/README.md). El patrón general que se repite en
+Configs completas en [`../examples/`](../examples/README.md), y para arrancar sin escribirlas a
+mano, el perfil de stack del instalador ([perfiles.md](perfiles.md)) llena lo que sí es deducible
+del lenguaje. El patrón general que se repite en
 todos: **formato → estático → tipos → tests → empaquetado**, con el self-test del arnés primero
 (un freno roto invalida todo lo que venga después).
 

@@ -16,7 +16,9 @@
  *   4. las reglas del lint MUERDEN (se le pasa el contenido por stdin: no escribe archivos);
  *   5. el clasificador de pedidos no se degrada (una muestra por ruta);
  *   6. las señales del gate son ejecutables y los subagentes/comandos citados existen;
- *   7. el kit SDD declarado está instalado (en CI se reporta OMITIDO, nunca «pasó»).
+ *   7. el kit SDD declarado está instalado (en CI se reporta OMITIDO, nunca «pasó»);
+ *   8. los perfiles de stack son instalables y NO llevan reglas de otro repo, y las configs
+ *      de ejemplo que se publican para copiar parsean y compilan.
  *
  * Agnóstico: no conoce ningún stack. Todo lo que prueba lo deduce del config.
  */
@@ -25,6 +27,9 @@ import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+// El mismo helper que usan el hook y el lint: comparar contra la lista DECLARADA dejaba pasar
+// justo el caso del incidente (el gate declara una extensión que el default agnóstico no tiene).
+import { codeExtensions } from "../.claude/hooks/harness.mjs";
 
 const REPO_ROOT = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
 const abs = (p) => path.join(REPO_ROOT, p);
@@ -238,6 +243,13 @@ const patronesDelConfig = [
   ...(config.sdd?.routes ?? []).flatMap((r) => (r.patterns ?? []).map((p) => [`sdd.${r.route}`, p])),
   ["tests.filePattern", config.tests?.filePattern],
   ["tests.onlyPattern", config.tests?.onlyPattern],
+  // Plantillas con marcador: se compilan con el marcador ya sustituido, que es como las
+  // usa el lint. Un `{mod}` mal cerrado compila igual y después no caza nada.
+  ...(config.purityImportSyntax ?? []).map((t) => ["purityImportSyntax", t.split("{mod}").join("x")]),
+  ...(config.purity ?? []).flatMap((p) =>
+    (p.importSyntax ?? []).map((t) => ["purity.importSyntax", t.split("{mod}").join("x")]),
+  ),
+  ["forbiddenDeps.matcher", config.forbiddenDeps?.matcher?.split("{pkg}").join("x")],
 ];
 let regexMalos = 0;
 for (const [donde, pattern] of patronesDelConfig) {
@@ -417,6 +429,184 @@ if ((config.branches?.protected ?? []).length && fs.existsSync(abs(".githooks/pr
   const libre = empujar("feat/rama-de-prueba");
   if (libre.status === 0) ok("pre-push deja pasar una rama de feature");
   else bad("pre-push deja pasar una rama de feature", `exit ${libre.status}: el freno bloquea de más`);
+}
+
+// 3e-quater. Qué cuenta como CÓDIGO sale del config, no del hook. Las extensiones estaban
+//     cableadas en `post-edit-check.mjs` y por eso el freno de mayor retorno estaba MUERTO
+//     en todo repo que no fuera JS/TS: un `.cs` editado no marcaba el gate ni corría el lint.
+if (hookFiles.has("post-edit-check.mjs") && config.gate?.marker && (config.gate?.codeGlobs ?? []).length) {
+  const marker = abs(config.gate.marker);
+  const existia = fs.existsSync(marker);
+  const respaldo = existia ? fs.readFileSync(marker, "utf8") : null;
+  const glob = config.gate.codeGlobs[0].replace(/\/$/, "");
+
+  const marca = (archivo) => {
+    fs.rmSync(marker, { force: true });
+    runHook("post-edit-check.mjs", {
+      hook_event_name: "PostToolUse",
+      tool_name: "Write",
+      tool_input: { file_path: abs(archivo), content: "" },
+    });
+    return fs.existsSync(marker);
+  };
+
+  try {
+    // Una señal OMITIDA se imprime siempre: sin esto, en un repo portado sin perfil (donde
+    // `codeExtensions` está vacío) el bucle no corría y el caso desaparecía sin dejar rastro.
+    if (!(config.gate.codeExtensions ?? []).length) {
+      skip("post-edit-check por extensión declarada", "el repo usa el default agnóstico (lo cubre 3e-quinquies)");
+    }
+    for (const ext of config.gate.codeExtensions ?? []) {
+      const archivo = `${glob}/ejemplo-selftest${ext}`;
+      if (marca(archivo)) ok(`post-edit-check marca el gate al tocar \`${ext}\``);
+      else bad(`post-edit-check marca el gate al tocar \`${ext}\``, `editar \`${archivo}\` no dejó \`${config.gate.marker}\``);
+    }
+    // Y NO de más: una extensión que el repo no declara como código no ensucia el gate.
+    const ajena = ".txt-no-declarada";
+    if (!marca(`${glob}/ejemplo-selftest${ajena}`)) ok("post-edit-check ignora una extensión no declarada");
+    else bad("post-edit-check ignora una extensión no declarada", `\`${ajena}\` marcó el gate: el freno muerde de más`);
+  } finally {
+    if (respaldo !== null) fs.writeFileSync(marker, respaldo);
+    else fs.rmSync(marker, { force: true });
+  }
+}
+
+// 3e-quinquies. La rama por DEFAULT, que es la que usa todo repo portado sin perfil.
+//     `codeExtensions: []` es lo que trae la plantilla, así que el default agnóstico del hook
+//     es el código que más se ejecuta en el mundo real — y era la rama donde vivía el bug.
+//     Se prueba en un repo TEMPORAL: el hook resuelve su raíz desde su propia ruta, así que
+//     copiarlo a /tmp con otro config es la única forma de ejercitar otra configuración sin
+//     escribir en el árbol de fuentes (P7).
+if (hookFiles.has("post-edit-check.mjs")) {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "harness-default-ext-"));
+  try {
+    fs.mkdirSync(path.join(tmp, ".claude/hooks"), { recursive: true });
+    for (const f of ["harness.mjs", "post-edit-check.mjs"]) {
+      fs.copyFileSync(abs(`.claude/hooks/${f}`), path.join(tmp, `.claude/hooks/${f}`));
+    }
+    fs.writeFileSync(
+      path.join(tmp, ".claude/harness.config.json"),
+      JSON.stringify({
+        gate: { marker: "gate-dirty", codeGlobs: ["src/"], codeExtensions: [] },
+        // Un comando que no hace nada: acá se mide el MARCADOR, no el lint.
+        lint: { command: ["node", "-e", ""], fileFlag: "--file" },
+      }),
+    );
+
+    const marcaEnTmp = (archivo) => {
+      fs.rmSync(path.join(tmp, "gate-dirty"), { force: true });
+      spawnSync("node", [path.join(tmp, ".claude/hooks/post-edit-check.mjs")], {
+        input: JSON.stringify({
+          cwd: tmp,
+          hook_event_name: "PostToolUse",
+          tool_name: "Write",
+          tool_input: { file_path: path.join(tmp, archivo), content: "" },
+        }),
+        encoding: "utf8",
+      });
+      return fs.existsSync(path.join(tmp, "gate-dirty"));
+    };
+
+    // Un lenguaje que este repo no usa: si el default se angosta a JS, esto se apaga.
+    for (const archivo of ["src/Servicio.cs", "src/Servicio.java", "src/servicio.py"]) {
+      if (marcaEnTmp(archivo)) ok(`post-edit-check (sin codeExtensions) marca el gate en \`${archivo}\``);
+      else bad(`post-edit-check (sin codeExtensions) marca \`${archivo}\``, "el default agnóstico no reconoció el archivo como código");
+    }
+    // Y NO de más: la documentación no ensucia el gate, ni el código fuera de `codeGlobs`.
+    if (!marcaEnTmp("src/README.md")) ok("post-edit-check (sin codeExtensions) ignora un .md");
+    else bad("post-edit-check (sin codeExtensions) ignora un .md", "editar documentación marcó el gate");
+    if (!marcaEnTmp("otro/Servicio.cs")) ok("post-edit-check (sin codeExtensions) respeta codeGlobs");
+    else bad("post-edit-check (sin codeExtensions) respeta codeGlobs", "un archivo fuera de `codeGlobs` marcó el gate");
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+}
+
+// 3e-septies. La dirección INVERSA del symlink: una ruta que pasa por un symlink INTERNO
+//     (`node_modules/<dep>` con pnpm, o un paquete de workspace) apunta afuera del repo. Si el
+//     hook resuelve siempre, esa ruta cae fuera de la raíz y los frenos se apagan **hacia
+//     abajo**: se puede escribir en dependencias y derivados en silencio. Es la dirección que
+//     nadie nota, así que es la que necesita el caso.
+if (hookFiles.has("protected-paths.mjs")) {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "harness-symlink-"));
+  try {
+    const repo = path.join(tmp, "repo");
+    const afuera = path.join(tmp, "almacen", "dep");
+    fs.mkdirSync(path.join(repo, ".claude/hooks"), { recursive: true });
+    fs.mkdirSync(path.join(repo, "node_modules"), { recursive: true });
+    fs.mkdirSync(afuera, { recursive: true });
+    for (const f of ["harness.mjs", "protected-paths.mjs"]) {
+      fs.copyFileSync(abs(`.claude/hooks/${f}`), path.join(repo, `.claude/hooks/${f}`));
+    }
+    fs.writeFileSync(
+      path.join(repo, ".claude/harness.config.json"),
+      JSON.stringify({
+        protectedPaths: [{ pattern: "^node_modules/", reason: "dependencias: no las edita el agente." }],
+      }),
+    );
+    fs.symlinkSync(afuera, path.join(repo, "node_modules/dep"), "dir");
+
+    const escribir = (archivo) =>
+      spawnSync("node", [path.join(repo, ".claude/hooks/protected-paths.mjs")], {
+        input: JSON.stringify({
+          cwd: repo,
+          hook_event_name: "PreToolUse",
+          tool_name: "Write",
+          tool_input: { file_path: path.join(repo, archivo), content: "x" },
+        }),
+        encoding: "utf8",
+      }).status;
+
+    if (escribir("node_modules/dep/index.js") === 2) ok("protected-paths bloquea a través de un symlink interno");
+    else bad("protected-paths bloquea a través de un symlink interno", "exit 0: la ruta real cae fuera del repo y el freno se apagó hacia abajo");
+    if (escribir("node_modules/otro.js") === 2) ok("protected-paths bloquea la ruta directa equivalente");
+    else bad("protected-paths bloquea la ruta directa", "exit 0 sobre `node_modules/otro.js`");
+    if (escribir("src/normal.js") === 0) ok("protected-paths deja pasar un archivo normal del repo temporal");
+    else bad("protected-paths deja pasar un archivo normal", "el freno bloquea de más");
+
+    // Tercera variante del mismo incidente: un alias DENTRO del repo. No es una ruta nueva,
+    // es otro nombre de una que ya tiene dueño — y por el nombre nuevo pasaba.
+    fs.mkdirSync(path.join(repo, "src/secreto"), { recursive: true });
+    fs.symlinkSync(path.join(repo, "src/secreto"), path.join(repo, "alias"), "dir");
+    fs.writeFileSync(
+      path.join(repo, ".claude/harness.config.json"),
+      JSON.stringify({
+        protectedPaths: [
+          { pattern: "^node_modules/", reason: "dependencias: no las edita el agente." },
+          { pattern: "^src/secreto/", reason: "eso lo toca el humano." },
+        ],
+      }),
+    );
+    if (escribir("src/secreto/x.js") === 2) ok("protected-paths bloquea la ruta protegida directa");
+    else bad("protected-paths bloquea la ruta protegida directa", "exit 0 sobre `src/secreto/x.js`");
+    if (escribir("alias/x.js") === 2) ok("protected-paths bloquea el alias interno de una ruta protegida");
+    else bad("protected-paths bloquea el alias interno", "exit 0: lo prohibido por un nombre se escribe por el otro");
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+}
+
+// 3e-sexies. Las dos listas de extensiones no pueden divergir. Son dos preguntas distintas
+//     —qué ensucia el gate vs. qué archivos barre el lint— pero si una extensión ensucia el
+//     gate y el barrido no la lee, las reglas quedan CIEGAS justo en la señal que manda.
+//     Pasó con `.pyi`: el perfil de Python lo declaraba y la lista del lint no lo tenía.
+const huerfanasDe = (cfg) => {
+  const delGate = cfg.gate?.codeExtensions ?? [];
+  // La lista EFECTIVA, no la declarada: si `lint.sourceExtensions` está ausente, el lint usa
+  // el default agnóstico — y una extensión declarada en el gate que NO esté en ese default
+  // es exactamente la divergencia del incidente `.pyi`.
+  const efectivaDelLint = codeExtensions(cfg.lint?.sourceExtensions).map((e) => e.toLowerCase());
+  return delGate.filter((e) => !efectivaDelLint.includes(e.toLowerCase()));
+};
+{
+  const huerfanas = huerfanasDe(config);
+  const declaradas = (config.gate?.codeExtensions ?? []).length;
+  if (!declaradas) {
+    // Sin lista declarada no puede haber divergencia (las dos usan el mismo default), pero eso
+    // es una omisión, no una medición: «barre las 0 extensiones» se lee como verde y no lo es.
+    skip("el lint barre lo que ensucia el gate", "el repo no angosta `gate.codeExtensions`");
+  } else if (!huerfanas.length) ok(`el lint barre las ${declaradas} extensiones que ensucian el gate`);
+  else bad("el lint barre lo que ensucia el gate", `\`${huerfanas.join(", ")}\` ensucian el gate y el barrido del lint no las lee: PATRON/PUREZA/ONLY ciegas ahí`);
 }
 
 // 3f. El trabajo queda registrado: `.githooks/commit-msg` en un repo git DE VERDAD.
@@ -616,12 +806,177 @@ if (config.incidents?.file) {
   else bad("lint INCIDENTE exige `Mecanismo:`", `exit ${r.status}: ${r.out.trim() || "sin salida"}`);
 }
 
+// 4b-bis. PUREZA con la sintaxis de import DECLARADA: cada plantilla tiene que morder.
+//     Sin esto, un repo que angosta `purityImportSyntax` a una sintaxis mal escrita se
+//     queda con la regla de mayor retorno silenciosamente apagada.
+for (const capa of config.purity ?? []) {
+  const sintaxis = capa.importSyntax ?? config.purityImportSyntax ?? [];
+  const mod = (capa.forbiddenImports ?? [])[0];
+  if (!capa.dir || !mod) {
+    // La regla de mayor retorno no puede quedar sin probar EN SILENCIO.
+    skip(`lint PUREZA sintaxis de \`${capa.dir ?? "(sin dir)"}\``, "la capa no declara `dir` o no veta ningún import");
+    continue;
+  }
+  if (!sintaxis.length) continue; // sin sintaxis declarada lo cubre 4b con el default
+  const archivo = `${capa.dir.replace(/\/$/, "")}/ejemplo-selftest.mjs`;
+  for (const plantilla of sintaxis) {
+    const linea = sampleFromPattern(plantilla.split("{mod}").join(mod));
+    if (!linea) {
+      skip(`lint PUREZA sintaxis \`${plantilla}\``, "la plantilla no se reduce a un ejemplo; probala a mano");
+      continue;
+    }
+    const r = lint(archivo, `${linea}\n`);
+    if (r.status !== 0 && r.out.includes("PUREZA")) ok(`lint PUREZA caza \`${linea.trim()}\``);
+    else bad(`lint PUREZA caza \`${linea.trim()}\``, `exit ${r.status}: ${r.out.trim() || "sin salida"}`);
+  }
+}
+
+// 4g. DEPS: la dependencia vetada en el manifiesto es roja. Se prueba por stdin porque el
+//     ejemplo se deriva de `forbiddenDeps.matcher` — el default sólo entiende manifiestos
+//     clave-valor, así que un `.csproj` o un `pom.xml` sin matcher propio salía VERDE.
+{
+  const spec = config.forbiddenDeps;
+  const pkg = (spec?.packages ?? [])[0];
+  if (!spec?.manifest || !pkg) {
+    skip("lint DEPS", "el repo no veta ninguna dependencia");
+  } else {
+    const matcher = spec.matcher ?? "^\\s*[\"']?{pkg}[\"']?\\s*[:=]";
+    const linea = sampleFromPattern(matcher.split("{pkg}").join(pkg));
+    if (!linea) {
+      skip("lint DEPS", "`forbiddenDeps.matcher` no se reduce a un ejemplo; probalo a mano");
+    } else {
+      const r = lint(spec.manifest, `${linea}\n`);
+      if (r.status !== 0 && r.out.includes("DEPS")) ok(`lint DEPS caza \`${pkg}\` en \`${spec.manifest}\``);
+      else bad(`lint DEPS caza \`${pkg}\``, `exit ${r.status} con \`${linea.trim()}\`: ${r.out.trim() || "sin salida"}`);
+    }
+  }
+}
+
+// 4g-bis. Y DEPS no muerde de más: un manifiesto sin la dependencia vetada pasa. El ruteo por
+//     stdin es nuevo (antes `--file <manifiesto> --stdin` se salteaba DEPS entero), así que la
+//     dirección «deja pasar lo inocente» necesita su propio caso.
+{
+  const spec = config.forbiddenDeps;
+  if (spec?.manifest && (spec.packages ?? []).length) {
+    const r = lint(spec.manifest, '{\n  "dependencies": {}\n}\n');
+    if (r.status === 0) ok(`lint DEPS deja pasar un \`${spec.manifest}\` limpio`);
+    else bad("lint DEPS deja pasar un manifiesto limpio", `exit ${r.status}: ${r.out.trim()}`);
+  }
+}
+
+// 4g-ter. INVARIANTE: la clase de regla que no se podía probar por stdin (lee el archivo del
+//     disco) y por eso no tenía caso. Con `--config` se prueba con un config temporal: se le
+//     exige a un archivo real una línea que no tiene, y se verifica que sea rojo.
+if ((config.invariants ?? []).length) {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "harness-invariante-"));
+  try {
+    const cebo = JSON.parse(JSON.stringify(config));
+    cebo.invariants = [
+      {
+        file: config.invariants[0].file,
+        required: ["ESTA-LINEA-NO-EXISTE-EN-NINGUN-ARCHIVO"],
+        forbidden: [],
+        reason: "cebo del self-test",
+      },
+    ];
+    const cfg = path.join(tmp, "cebo.json");
+    fs.writeFileSync(cfg, JSON.stringify(cebo));
+    const res = spawnSync("node", [abs("scripts/repo-lint.mjs"), "--config", cfg], { encoding: "utf8" });
+    const salida = `${res.stdout ?? ""}${res.stderr ?? ""}`;
+    if (res.status !== 0 && salida.includes("INVARIANTE")) ok("lint INVARIANTE caza una línea que desapareció");
+    else bad("lint INVARIANTE caza una línea faltante", `exit ${res.status}: ${salida.trim().slice(0, 160)}`);
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+}
+
+// 4h. PERFIL: un perfil de stack con reglas adentro es rojo (P14). El cebo va por stdin.
+if (config.profiles?.dir) {
+  const dir = config.profiles.dir.replace(/\/$/, "");
+  for (const clave of config.profiles.forbiddenKeys ?? []) {
+    const [raiz, hijo] = clave.split(".");
+    const cebo = hijo ? { [raiz]: { [hijo]: [{ x: 1 }] } } : { [raiz]: [{ x: 1 }] };
+    const r = lint(`${dir}/cebo-selftest.json`, JSON.stringify(cebo));
+    if (r.status !== 0 && r.out.includes("PERFIL")) ok(`lint PERFIL rechaza \`${clave}\` en un perfil`);
+    else bad(`lint PERFIL rechaza \`${clave}\``, `exit ${r.status}: ${r.out.trim() || "sin salida"}`);
+  }
+  // Cada clave OBLIGATORIA también tiene su cebo: el cebo se arma con todas menos una.
+  const requeridas = config.profiles.requiredKeys ?? [];
+  for (const ausente of requeridas) {
+    const cebo = {};
+    for (const clave of requeridas) {
+      if (clave === ausente) continue;
+      const [raiz, hijo] = clave.split(".");
+      if (hijo) cebo[raiz] = { ...(cebo[raiz] ?? {}), [hijo]: ["x"] };
+      else cebo[raiz] = ["x"];
+    }
+    const r = lint(`${dir}/cebo-selftest.json`, JSON.stringify(cebo));
+    if (r.status !== 0 && r.out.includes("PERFIL")) ok(`lint PERFIL exige \`${ausente}\` en un perfil`);
+    else bad(`lint PERFIL exige \`${ausente}\``, `exit ${r.status}: ${r.out.trim() || "sin salida"}`);
+  }
+
+  // Y NO de más: los perfiles que el repo publica de verdad tienen que pasar.
+  // El `.json` se filtra: un README o un .DS_Store en el directorio convertía esta aserción
+  // en un fallo de JSON.parse con un mensaje que no señalaba la causa.
+  const realExiste = fs.readdirSync(abs(dir)).filter((f) => f.endsWith(".json"))[0];
+  if (realExiste) {
+    const r = lint(`${dir}/verdadero-selftest.json`, fs.readFileSync(abs(`${dir}/${realExiste}`), "utf8"));
+    if (r.status === 0) ok(`lint PERFIL deja pasar un perfil real (\`${realExiste}\`)`);
+    else bad("lint PERFIL deja pasar un perfil real", `exit ${r.status}: ${r.out.trim()}`);
+  }
+
+  // Un `profiles.dir` que apunta a la nada, y uno vacío, también son rojos: es la forma en que
+  // esta regla se apaga sin que nadie lo note. Se prueban con un CONFIG temporal (`--config`),
+  // no escribiendo en el árbol de fuentes (P7).
+  {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "harness-perfilcfg-"));
+    try {
+      const conDir = (valor) => {
+        const cebo = JSON.parse(JSON.stringify(config));
+        cebo.profiles.dir = valor;
+        const cfg = path.join(tmp, `cfg-${path.basename(valor)}.json`);
+        fs.writeFileSync(cfg, JSON.stringify(cebo));
+        const res = spawnSync("node", [abs("scripts/repo-lint.mjs"), "--config", cfg], { encoding: "utf8" });
+        return `${res.stdout ?? ""}${res.stderr ?? ""}`;
+      };
+
+      const fantasma = conDir("plantillas/perfiles-que-no-existen"); // linkcheck:ignora — es el CEBO: tiene que NO existir
+      if (fantasma.includes("PERFIL")) ok("lint PERFIL caza un `profiles.dir` que apunta a la nada");
+      else bad("lint PERFIL caza un `profiles.dir` inexistente", `sin hallazgo: ${fantasma.trim().slice(0, 160)}`);
+
+      const vacio = path.join(tmp, "perfiles-vacios");
+      fs.mkdirSync(vacio, { recursive: true });
+      const sinPerfiles = conDir(path.relative(REPO_ROOT, vacio));
+      if (sinPerfiles.includes("PERFIL")) ok("lint PERFIL caza un directorio de perfiles vacío");
+      else bad("lint PERFIL caza un directorio vacío", `sin hallazgo: ${sinPerfiles.trim().slice(0, 160)}`);
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  }
+}
+
 // 4f. El arnés no escribe temporales dentro del árbol de fuentes.
 {
-  const antes = fs.readdirSync(REPO_ROOT);
-  const sospechosos = antes.filter((f) => /selftest|tmp-|\.tmp$/.test(f));
-  if (!sospechosos.length) ok("el self-test no dejó archivos temporales en el repo");
-  else bad("el self-test no dejó temporales", `sobraron: ${sospechosos.join(", ")}`);
+  // La raíz NO alcanza: los casos nuevos operan sobre `scripts/`, `plantillas/perfiles/` y
+  // `.claude/hooks/` por stdin, y un temporal ahí adentro es igual de dañino (un watcher lo
+  // ve aparecer y el build muere con un error que nadie puede reproducir).
+  const dondeBuscar = [".", "scripts", ".claude/hooks", config.profiles?.dir, config.examples?.dir].filter(Boolean);
+  const sospechosos = [];
+  for (const dir of dondeBuscar) {
+    let entradas = [];
+    try {
+      entradas = fs.readdirSync(abs(dir));
+    } catch {
+      continue;
+    }
+    for (const f of entradas) {
+      if (/selftest|cebo|tmp-|\.tmp$/.test(f)) sospechosos.push(dir === "." ? f : `${dir}/${f}`);
+    }
+  }
+  // `harness-selftest.mjs` es el script, no un residuo.
+  const residuos = sospechosos.filter((f) => f !== "scripts/harness-selftest.mjs");
+  if (!residuos.length) ok(`el self-test no dejó temporales (${dondeBuscar.length} directorios revisados)`);
+  else bad("el self-test no dejó temporales", `sobraron: ${residuos.join(", ")}`);
 }
 
 // ── 5. El clasificador de pedidos no se degrada ──────────────────────────────
@@ -659,6 +1014,13 @@ for (const s of senales) {
   if (posibleRuta && !fs.existsSync(abs(posibleRuta))) bad(`señal «${s.name}»`, `\`${posibleRuta}\` no existe`);
   else if (!s.why) bad(`señal «${s.name}»`, "no declara `why`: una señal sin motivo es una señal que nadie defiende");
   else ok(`señal «${s.name}» → ${argv.join(" ")}`);
+}
+// `--config` es para los cebos del self-test: en una señal del gate mediría un config
+// permisivo y el gate saldría verde igual. La deuda declarada sólo puede achicarse.
+{
+  const conConfig = (config.gate?.signals ?? []).filter((x) => (x.command ?? []).includes("--config"));
+  if (!conConfig.length) ok("ninguna señal del gate mide un config alternativo (`--config`)");
+  else bad("ninguna señal del gate usa `--config`", `«${conConfig.map((x) => x.name).join(", ")}»: el gate mediría otro config que el del repo`);
 }
 {
   const gateSh = abs("scripts/gate.sh");
@@ -706,6 +1068,189 @@ if (puntero && !fs.existsSync(abs(puntero))) {
   bad("puntero de feature activa", `\`${puntero}\` no existe: el config apunta a la nada`);
 } else if (puntero) {
   ok(`puntero de feature activa \`${puntero}\``);
+}
+
+// ── 8. Perfiles de stack: el portado a un repo que no es de este lenguaje ────
+//    El instalador viajó roto dos releases porque nadie lo corría; un perfil que no se
+//    puede fusionar o que se lleva puestas las señales del gate rompe el portado igual.
+section("8. perfiles y ejemplos por stack");
+{
+  const dirPerfiles = config.profiles?.dir;
+  const init = abs("scripts/harness-init.mjs");
+  if (!dirPerfiles || !fs.existsSync(init)) {
+    skip("perfiles de stack", "el repo no declara `profiles.dir` o no tiene instalador");
+  } else {
+    const perfiles = fs.readdirSync(abs(dirPerfiles)).filter((f) => f.endsWith(".json")).map((f) => f.replace(/\.json$/, ""));
+    if (!perfiles.length) bad("perfiles de stack", `\`${dirPerfiles}\` no tiene ningún perfil`);
+
+    const plantilla = JSON.parse(fs.readFileSync(abs("plantillas/harness.config.json"), "utf8"));
+    const nombresPlantilla = (plantilla.gate?.signals ?? []).map((x) => x.name).join(" · ");
+
+    for (const perfil of perfiles) {
+      const tmp = fs.mkdtempSync(path.join(os.tmpdir(), `harness-perfil-${perfil}-`));
+      try {
+        spawnSync("git", ["init", "-q", tmp], { encoding: "utf8" });
+
+        // Dry-run: no escribe nada (P9). Lo que se verifica es justamente eso.
+        const seco = spawnSync("node", [init, tmp, "--perfil", perfil], { encoding: "utf8" });
+        const escribio = fs.existsSync(path.join(tmp, ".claude"));
+        if (seco.status !== 0 || escribio) {
+          bad(`perfil \`${perfil}\` en dry-run`, escribio ? "el dry-run ESCRIBIÓ en el destino" : (seco.stderr || seco.stdout).trim().slice(0, 160));
+          continue;
+        }
+
+        const res = spawnSync("node", [init, tmp, "--perfil", perfil, "--apply"], { encoding: "utf8" });
+        if (res.status !== 0) {
+          bad(`perfil \`${perfil}\` instalado`, (res.stderr || res.stdout).trim().slice(0, 160));
+          continue;
+        }
+        const generado = JSON.parse(fs.readFileSync(path.join(tmp, ".claude/harness.config.json"), "utf8"));
+        const propio = JSON.parse(fs.readFileSync(abs(`${dirPerfiles}/${perfil}.json`), "utf8"));
+
+        const extEsperadas = propio.gate?.codeExtensions ?? [];
+        const extFaltantes = extEsperadas.filter((e) => !(generado.gate?.codeExtensions ?? []).includes(e));
+        // Por NOMBRE y no por cantidad: reemplazar las N señales de la plantilla por otras N es
+        // justamente el error probable (uno «ya sabe» el comando de test del stack), y un
+        // contador lo deja pasar.
+        const nombresGenerados = (generado.gate?.signals ?? []).map((x) => x.name).join(" · ");
+
+        // La divergencia de extensiones también se verifica sobre el config GENERADO: un perfil
+        // que declare una extensión fuera del default agnóstico tiene que traer su
+        // `lint.sourceExtensions`, o el portado arranca con el barrido ciego ahí.
+        const huerfanasDelPerfil = huerfanasDe(generado);
+        if (huerfanasDelPerfil.length) {
+          bad(`perfil \`${perfil}\` no deja el barrido ciego`, `\`${huerfanasDelPerfil.join(", ")}\` ensucian el gate y el lint no las barre: declaralas en \`lint.sourceExtensions\``);
+        } else if (extFaltantes.length) {
+          bad(`perfil \`${perfil}\` aporta sus extensiones`, `faltan en el config generado: ${extFaltantes.join(", ")}`);
+        } else if (nombresGenerados !== nombresPlantilla) {
+          // Un perfil que llena `gate.signals` adivina el comando de test de otro equipo.
+          bad(`perfil \`${perfil}\` no toca gate.signals`, `la plantilla trae «${nombresPlantilla}» y el generado «${nombresGenerados}»`);
+        } else {
+          // El lint que se corre es LA COPIA DEL DESTINO, no la de este repo: `repo-lint.mjs`
+          // resuelve su config desde `import.meta.url` e IGNORA el cwd, así que correr la copia
+          // de acá con `cwd: tmp` leía el config de ESTE repo — la aserción pasaba igual con un
+          // config generado vacío o inválido. Es `--rules` y no el lint completo a propósito: el
+          // portado arranca en ROJO por los placeholders, y eso está declarado en la plantilla.
+          const lintDelDestino = spawnSync("node", [path.join(tmp, "scripts/repo-lint.mjs"), "--rules"], {
+            cwd: tmp,
+            encoding: "utf8",
+          });
+          const habla = lintDelDestino.stdout ?? "";
+          if (lintDelDestino.status !== 0) {
+            bad(`perfil \`${perfil}\` genera un config legible`, (lintDelDestino.stderr || habla).trim().slice(0, 200));
+          } else if (habla.includes("plantillas/perfiles")) {
+            // Si aparece el directorio de perfiles de ESTE repo, el lint leyó el config de acá.
+            bad(`perfil \`${perfil}\` → se linteó el config del destino`, "la salida menciona `plantillas/perfiles`: se leyó el config de este repo, no el generado");
+          } else {
+            ok(`perfil \`${perfil}\` → config instalable (${extEsperadas.length} extensión(es), gate vacío)`);
+          }
+        }
+      } finally {
+        fs.rmSync(tmp, { recursive: true, force: true });
+      }
+    }
+  }
+}
+
+// 8b. Las configs de ejemplo se publican PARA COPIAR: un regex roto ahí viaja igual que un
+//     script roto, y nadie las corría. Lo verificable sin el repo destino: que parseen, que
+//     sus regex compilen, que cada señal declare su `why` y que un manifiesto que NO es
+//     clave-valor traiga su `matcher` (sin eso, DEPS sale verde con la dependencia puesta).
+if (config.examples?.dir) {
+  const dirEjemplos = config.examples.dir.replace(/\/$/, "");
+  // Qué manifiestos entiende el `matcher` por default sale del CONFIG: es una lista de
+  // literales de formato, o sea exactamente lo que no va cableado en un script (P4).
+  const patronesClaveValor = config.examples?.keyValueManifests ?? [];
+  const esClaveValor = (manifiesto) =>
+    patronesClaveValor.some((glob) =>
+      new RegExp(`^${glob.replace(/[.+?^${}()|[\]\\]/g, "\\$&").split("*").join(".*")}$`, "i").test(path.basename(manifiesto)),
+    );
+  let archivos = [];
+  try {
+    archivos = fs.readdirSync(abs(dirEjemplos)).filter((f) => f.endsWith(".json"));
+  } catch {
+    bad("configs de ejemplo", `\`${dirEjemplos}\` no existe`);
+  }
+  /** Qué se le puede exigir a una config de ejemplo sin tener el repo destino. */
+  const validarEjemplo = (ej) => {
+    const patrones = [
+      ...(ej.protectedPaths ?? []).map((r) => r.pattern),
+      ...(ej.bash?.deny ?? []).map((r) => r.pattern),
+      ...(ej.reuse ?? []).flatMap((r) => [r.pattern, r.appliesTo]),
+      ...(ej.patterns ?? []).flatMap((r) => [r.pattern, r.appliesTo]),
+      ...(ej.singleSource ?? []).flatMap((r) => [r.appliesTo, r.extract]),
+      ...(ej.purityImportSyntax ?? []).map((t) => t.split("{mod}").join("x")),
+      ej.forbiddenDeps?.matcher?.split("{pkg}").join("x"),
+      ej.tests?.filePattern,
+      ej.tests?.onlyPattern,
+      ej.tracker?.issuePattern,
+      ej.commitMsg?.codePattern,
+      ...(ej.sdd?.routes ?? []).flatMap((r) => r.patterns ?? []),
+    ].filter(Boolean);
+
+    const problemas = [];
+    for (const p of patrones) {
+      try {
+        new RegExp(p);
+      } catch (e) {
+        problemas.push(`regex \`${p}\`: ${e.message}`);
+      }
+    }
+    const sinWhy = (ej.gate?.signals ?? []).filter((s) => !s.why).map((s) => s.name);
+    if (sinWhy.length) problemas.push(`señal(es) sin \`why\`: ${sinWhy.join(", ")}`);
+    if (!(ej.gate?.signals ?? []).length) problemas.push("`gate.signals` vacío: el ejemplo no muestra nada");
+
+    // La misma divergencia, en un artefacto que alguien va a COPIAR: el único ejemplo .NET
+    // declaraba `.csproj` en el gate y ninguna señal lo barría.
+    const huerfanas = huerfanasDe(ej);
+    if (huerfanas.length) {
+      problemas.push(`\`${huerfanas.join(", ")}\` ensucian el gate y el barrido del lint no las lee (declaralas en \`lint.sourceExtensions\`)`);
+    }
+
+    const dep = ej.forbiddenDeps;
+    if (dep?.manifest && (dep.packages ?? []).length && !dep.matcher && !esClaveValor(dep.manifest)) {
+      problemas.push(`\`${dep.manifest}\` no es un manifiesto clave-valor y no declara \`matcher\`: DEPS saldría verde`);
+    }
+
+    return { problemas, regex: patrones.length };
+  };
+
+  // El freno prueba que muerde ANTES de usarse, y se afirma por TIPO de hallazgo: un contador
+  // («al menos 3») pasa con tres de cuatro comprobaciones funcionando y no dice cuál se perdió.
+  // `.razor` no está en el default agnóstico y es lo que declara cualquier repo ASP.NET: es el
+  // cebo de la comprobación de extensiones huérfanas, que si no tendría tres consumidores y
+  // ningún caso —el mismo patrón «arreglado sin freno» que este arnés vino a cerrar.
+  {
+    const cebo = validarEjemplo({
+      gate: { codeExtensions: [".razor"], signals: [{ name: "tests", command: ["mvn", "test"] }] },
+      patterns: [{ id: "ROTO", pattern: "[", appliesTo: "^src/" }],
+      forbiddenDeps: { manifest: "pom.xml", packages: ["junit"] },
+    });
+    const dice = (fragmento) => cebo.problemas.some((p) => p.includes(fragmento));
+    const esperados = [
+      ["regex roto", "regex `["],
+      ["señal sin `why`", "sin `why`"],
+      ["manifiesto sin `matcher`", "matcher"],
+      ["extensión que el lint no barre", ".razor"],
+    ];
+    for (const [nombre, fragmento] of esperados) {
+      if (dice(fragmento)) ok(`la validación de ejemplos caza ${nombre}`);
+      else bad(`la validación de ejemplos caza ${nombre}`, `el cebo no produjo ese hallazgo. Salió: ${cebo.problemas.join(" · ") || "(nada)"}`);
+    }
+  }
+
+  for (const archivo of archivos) {
+    let ej;
+    try {
+      ej = JSON.parse(fs.readFileSync(abs(`${dirEjemplos}/${archivo}`), "utf8"));
+    } catch (e) {
+      bad(`ejemplo \`${archivo}\``, `no es JSON válido: ${e.message}`);
+      continue;
+    }
+    const { problemas, regex } = validarEjemplo(ej);
+    if (problemas.length) bad(`ejemplo \`${archivo}\``, problemas.join("\n      "));
+    else ok(`ejemplo \`${archivo}\` (${regex} regex, ${(ej.gate?.signals ?? []).length} señales con why)`);
+  }
 }
 
 // ── Veredicto ────────────────────────────────────────────────────────────────

@@ -1,0 +1,96 @@
+{
+  "$stack": "python",
+  "$comment": "Python. `forbiddenDeps.matcher` sirve para `pyproject.toml` (Poetry: `pkg = \"^1.0\"`; PEP 621: `\"pkg>=1\"`) y para `requirements.txt`. Si el repo usa `setup.py`, ahí el manifiesto es ese archivo y el matcher es el default clave-valor.",
+  "$detect": [
+    "pyproject.toml",
+    "requirements.txt",
+    "setup.py",
+    "setup.cfg"
+  ],
+  "gate": {
+    "codeExtensions": [
+      ".py",
+      ".pyi"
+    ],
+    "installHooksCommand": "git config core.hooksPath .githooks",
+    "$signalHints": [
+      {
+        "name": "tests",
+        "command": [
+          "python",
+          "-m",
+          "pytest",
+          "-q"
+        ],
+        "why": "en Python no hay compilador: el test ES la única verificación temprana"
+      },
+      {
+        "name": "tipos",
+        "command": [
+          "python",
+          "-m",
+          "mypy",
+          "."
+        ],
+        "why": "lo más parecido a un compilador que tiene el stack; atrapa lo que el test no ejercita"
+      },
+      {
+        "name": "lint",
+        "command": [
+          "python",
+          "-m",
+          "ruff",
+          "check",
+          "."
+        ],
+        "why": "importes muertos y errores de nombre que sólo explotan en runtime"
+      }
+    ]
+  },
+  "purityImportSyntax": [
+    "^\\s*(?:import|from)\\s+{mod}\\b",
+    "importlib\\.import_module\\(\\s*['\"]{mod}['\"]"
+  ],
+  "forbiddenDeps": {
+    "manifest": "pyproject.toml",
+    "matcher": "^\\s*[\"']?{pkg}[\"']?\\s*[=<>~]"
+  },
+  "tests": {
+    "filePattern": "(^|/)tests?/|(^|/)test_[^/]*\\.py$|_test\\.py$",
+    "onlyPattern": ""
+  },
+  "commitMsg": {
+    "$codePattern": "El layout de código NO lo decide el lenguaje: en un repo puede ser `src/`, en otro `services/`. Lo confirma el equipo — si queda mal, `commit-msg` deja de exigir la referencia al ítem y P11 se apaga sin que nada se ponga rojo.",
+    "ignoreExtensions": [
+      ".md",
+      ".rst",
+      ".png",
+      ".jpg",
+      ".jpeg",
+      ".svg"
+    ]
+  },
+  "protectedPaths": [
+    {
+      "pattern": "^(\\.venv|venv|__pycache__|\\.tox|\\.mypy_cache|\\.pytest_cache)/",
+      "reason": "entorno y cachés: se regeneran, no se editan."
+    },
+    {
+      "pattern": "^(dist|build|\\.eggs)/|\\.egg-info/",
+      "reason": "artefactos de empaquetado: salen del build."
+    }
+  ],
+  "docs": {
+    "ignore": [
+      ".venv",
+      "venv",
+      "__pycache__",
+      ".tox",
+      ".mypy_cache",
+      ".pytest_cache",
+      "dist",
+      "build",
+      ".git"
+    ]
+  }
+}

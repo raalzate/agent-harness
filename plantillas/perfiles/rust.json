@@ -1,0 +1,87 @@
+{
+  "$stack": "rust",
+  "$comment": "Rust. En un workspace el manifiesto con las dependencias puede ser el `Cargo.toml` de la raíz o el de cada crate: si son varios, la regla DEPS apunta al de la raíz y el resto se cubre con `patterns`. `onlyPattern` vacío: `#[ignore]` es una herramienta legítima acá.",
+  "$detect": [
+    "Cargo.toml"
+  ],
+  "gate": {
+    "codeExtensions": [
+      ".rs"
+    ],
+    "installHooksCommand": "git config core.hooksPath .githooks",
+    "$signalHints": [
+      {
+        "name": "build",
+        "command": [
+          "cargo",
+          "build",
+          "--locked"
+        ],
+        "why": "el compilador de Rust ES la señal principal del stack"
+      },
+      {
+        "name": "tests",
+        "command": [
+          "cargo",
+          "test",
+          "--locked"
+        ],
+        "why": "el comportamiento que los tipos no expresan"
+      },
+      {
+        "name": "clippy",
+        "command": [
+          "cargo",
+          "clippy",
+          "--",
+          "-D",
+          "warnings"
+        ],
+        "why": "lo que compila pero está mal escrito; con -D falla de verdad"
+      },
+      {
+        "name": "formato",
+        "command": [
+          "cargo",
+          "fmt",
+          "--check"
+        ],
+        "why": "un diff de formato entierra el diff real"
+      }
+    ]
+  },
+  "purityImportSyntax": [
+    "^\\s*(?:pub\\s+)?use\\s+{mod}\\b",
+    "^\\s*extern\\s+crate\\s+{mod}\\b"
+  ],
+  "forbiddenDeps": {
+    "manifest": "Cargo.toml",
+    "matcher": "^\\s*{pkg}\\s*="
+  },
+  "tests": {
+    "filePattern": "(^|/)tests?/|_test\\.rs$",
+    "onlyPattern": ""
+  },
+  "commitMsg": {
+    "$codePattern": "El layout de código NO lo decide el lenguaje: en un repo puede ser `src/`, en otro `services/`. Lo confirma el equipo — si queda mal, `commit-msg` deja de exigir la referencia al ítem y P11 se apaga sin que nada se ponga rojo.",
+    "ignoreExtensions": [
+      ".md",
+      ".png",
+      ".jpg",
+      ".jpeg",
+      ".svg"
+    ]
+  },
+  "protectedPaths": [
+    {
+      "pattern": "^target/|/target/",
+      "reason": "salida de cargo: se regenera, no se edita."
+    }
+  ],
+  "docs": {
+    "ignore": [
+      "target",
+      ".git"
+    ]
+  }
+}

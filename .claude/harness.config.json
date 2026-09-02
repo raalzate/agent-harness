@@ -9,6 +9,13 @@
       "scripts/",
       ".claude/hooks/"
     ],
+    "$codeExtensions": "Qué extensión cuenta como CÓDIGO para `post-edit-check` (marcar el gate + correr el lint del archivo). Estaba cableada en el hook y por eso el freno de mayor retorno estaba MUERTO en cualquier repo que no fuera JS/TS. La lista de cada stack la trae su perfil: plantillas/perfiles/.",
+    "codeExtensions": [
+      ".mjs",
+      ".js",
+      ".sh"
+    ],
+    "installHooksCommand": "npm run hooks:install",
     "signals": [
       {
         "name": "self-test del arnés",
@@ -157,6 +164,7 @@
     ],
     "reason": "el arnés debe correr con node y bash solamente: una dependencia lo vuelve inportable."
   },
+  "$invariants": "El segundo invariante existe porque `repo-lint.mjs --config <ruta>` se agregó para los CEBOS del self-test (probar un config alternativo sin escribir en el árbol, P7). Esa misma bandera en el pre-commit haría que la verificación mida un config permisivo y pase igual: la deuda declarada sólo puede achicarse.",
   "singleSource": [
     {
       "$comment": "Un registro es la única fuente de verdad y nadie cablea sus literales fuera de él (códigos de error, tipos de un dominio, feature flags). `allow` es DEUDA DECLARADA y sólo puede achicarse.",
@@ -188,6 +196,16 @@
         "process.exit(1)"
       ],
       "reason": "el contrato de hooks de Claude Code: exit 0 = seguir, exit 2 = bloquear (stderr es lo que lee el agente). Un exit(1) es un error del hook, no una decisión, y no bloquea nada."
+    },
+    {
+      "file": ".githooks/pre-commit",
+      "required": [
+        "harness.config.json"
+      ],
+      "forbidden": [
+        "--config"
+      ],
+      "reason": "el pre-commit verifica el config DEL REPO. `repo-lint.mjs --config <ruta>` existe para los cebos del self-test; acá haría que la verificación mida un config permisivo y pase igual."
     }
   ],
   "patterns": [
@@ -280,7 +298,41 @@
     ]
   },
   "status": {
-    "file": "STATUS.md"
+    "file": "STATUS.md",
+    "reminder": "Recordá: nada se entrega sin `npm run gate` verde · índice de símbolos (Serena) antes de abrir archivos · lecciones con `/lesson`."
+  },
+  "examples": {
+    "$comment": "Configs de ejemplo por stack. Se publican para copiar, así que un regex roto ahí viaja igual que un script roto: el self-test las parsea, compila sus regex y exige que cada señal declare su `why`. También exige `forbiddenDeps.matcher` cuando el manifiesto no es clave-valor (un .csproj o un pom.xml sin matcher sale VERDE con la dependencia prohibida presente).",
+    "dir": "examples",
+    "$keyValueManifests": "Los manifiestos que el `matcher` por default ya entiende (`nombre` seguido de `:` o `=`). Cualquier otro formato —XML, notación corta de Gradle— tiene que declarar su `matcher`.",
+    "keyValueManifests": [
+      "package.json",
+      "requirements*.txt",
+      "go.mod",
+      "*.toml",
+      "*.cfg",
+      "*.ini"
+    ]
+  },
+  "profiles": {
+    "$comment": "Perfiles de stack del instalador. Llevan la FORMA de un lenguaje (qué es código, cómo se escribe un import, dónde vive el manifiesto) y NADA más: las reglas concretas son las cicatrices de un repo y en otro son ruido que gasta contexto (P14). `forbiddenKeys` es el freno que lo mantiene así; el lint lo verifica con la regla PERFIL.",
+    "dir": "plantillas/perfiles",
+    "requiredKeys": [
+      "$stack",
+      "$detect",
+      "gate.codeExtensions"
+    ],
+    "forbiddenKeys": [
+      "patterns",
+      "reuse",
+      "singleSource",
+      "invariants",
+      "gate.signals",
+      "bash.deny",
+      "forbiddenDeps.packages",
+      "commitMsg.codePattern"
+    ],
+    "reason": "un perfil lleva hechos del lenguaje, no reglas de un equipo: una regla instalada sin cicatriz detrás se desactiva en una semana y se lleva puestas a las que servían."
   },
   "tracker": {
     "$comment": "El gestor de trabajo del equipo, sea el que sea. `kind` es informativo: lo que las máquinas leen es `issuePattern` (qué cuenta como referencia en un mensaje de commit) y `newIssueHint` (qué comando ofrecerle a quien quedó frenado). GitHub y GitLab usan `#123`; Azure Boards, `AB#123`; Jira, `PROJ-123`. Ningún script de este arnés conoce una forja: aplican el regex. Ver docs/trazabilidad.md.",

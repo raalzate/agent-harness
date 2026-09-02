@@ -32,13 +32,16 @@ lines.push(
 // Alerta: el pre-commit del repo tiene que estar realmente instalado (no .sample).
 const hooksPath = git(["config", "core.hooksPath"]);
 if (hooksPath !== ".githooks") {
-  lines.push("- ⚠️ pre-commit NO instalado (`core.hooksPath` ≠ `.githooks`). Corré `npm run hooks:install`.");
+  // El comando de instalación sale del config: `npm run hooks:install` no existe en un
+  // repo de .NET o de Java, y un aviso que nombra un comando inexistente se ignora.
+  const instalar = config.gate?.installHooksCommand ?? "git config core.hooksPath .githooks";
+  lines.push(`- ⚠️ pre-commit NO instalado (\`core.hooksPath\` ≠ \`.githooks\`). Corré \`${instalar}\`.`);
 }
 
 // Alerta: gate pendiente de una sesión anterior.
 const marker = path.join(REPO_ROOT, config.gate?.marker ?? ".git/gate-dirty");
 if (fs.existsSync(marker)) {
-  lines.push(`- ⚠️ Gate pendiente de una sesión anterior: corré \`${config.gate?.command ?? "npm run gate"}\`.`);
+  lines.push(`- ⚠️ Gate pendiente de una sesión anterior: corré \`${config.gate?.command ?? "bash scripts/gate.sh"}\`.`);
 }
 
 // STATUS.md: estado verificado + deuda conocida.
@@ -50,9 +53,13 @@ if (fs.existsSync(statusFile)) {
   lines.push(`- ⚠️ Falta \`${config.status?.file ?? "STATUS.md"}\`: nadie sabe qué está verificado.`);
 }
 
+// El recordatorio también sale del config: es lo último que el agente lee al abrir la
+// sesión, así que nombrar el comando de gate de OTRO stack lo vuelve ruido.
 lines.push(
   "",
-  "Recordá: nada se entrega sin `npm run gate` verde · índice de símbolos (Serena) antes de abrir archivos · lecciones con `/lesson`.",
+  // Vacío cuenta como ausente: la plantilla trae la clave con "" para que se llene.
+  config.status?.reminder ||
+    `Recordá: nada se entrega sin \`${config.gate?.command ?? "el gate"}\` verde · lecciones con \`/lesson\`.`,
 );
 
 allow(lines.join("\n"));

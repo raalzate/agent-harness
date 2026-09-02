@@ -1,0 +1,98 @@
+{
+  "$stack": "dotnet",
+  "$comment": ".NET (C#, F#, VB). Ojo con `forbiddenDeps.manifest`: en .NET las dependencias viven en cada `.csproj` o en un `Directory.Packages.props` central, así que la ruta la pone el equipo. `tests.onlyPattern` queda vacío a propósito: el equivalente de `.only(` acá es `[Fact(Skip=…)]` o `[Ignore]`, que a veces es legítimo — si en este repo nunca lo es, se agrega como `patterns` con su motivo.",
+  "$detect": [
+    "*.sln",
+    "*.csproj",
+    "*.fsproj",
+    "Directory.Build.props"
+  ],
+  "gate": {
+    "codeExtensions": [
+      ".cs",
+      ".fs",
+      ".fsx",
+      ".vb"
+    ],
+    "installHooksCommand": "git config core.hooksPath .githooks",
+    "$signalHints": [
+      {
+        "name": "build",
+        "command": [
+          "dotnet",
+          "build",
+          "--nologo",
+          "-warnaserror"
+        ],
+        "why": "en .NET el compilador es la señal más barata y la que más atrapa"
+      },
+      {
+        "name": "tests",
+        "command": [
+          "dotnet",
+          "test",
+          "--nologo",
+          "--no-build"
+        ],
+        "why": "el comportamiento que el compilador no garantiza"
+      },
+      {
+        "name": "formato",
+        "command": [
+          "dotnet",
+          "format",
+          "--verify-no-changes"
+        ],
+        "why": "un diff de formato entierra el diff real en la revisión"
+      }
+    ]
+  },
+  "purityImportSyntax": [
+    "^\\s*using\\s+(?:static\\s+)?{mod}\\b",
+    "^\\s*global\\s+using\\s+(?:static\\s+)?{mod}\\b",
+    "^\\s*open\\s+{mod}\\b"
+  ],
+  "forbiddenDeps": {
+    "manifest": "<el Directory.Packages.props o el .csproj que declara las dependencias>",
+    "matcher": "PackageReference\\s+Include\\s*=\\s*[\"']{pkg}[\"']"
+  },
+  "tests": {
+    "filePattern": "(^|/)([Tt]ests?)/|[Tt]ests?\\.(cs|fs|vb)$",
+    "onlyPattern": ""
+  },
+  "commitMsg": {
+    "$codePattern": "El layout de código NO lo decide el lenguaje: en un repo puede ser `src/`, en otro `services/`. Lo confirma el equipo — si queda mal, `commit-msg` deja de exigir la referencia al ítem y P11 se apaga sin que nada se ponga rojo.",
+    "ignoreExtensions": [
+      ".md",
+      ".png",
+      ".jpg",
+      ".jpeg",
+      ".svg",
+      ".resx"
+    ]
+  },
+  "protectedPaths": [
+    {
+      "pattern": "^(bin|obj)/|/(bin|obj)/",
+      "reason": "salida del compilador: se regenera con `dotnet build`, no se edita."
+    },
+    {
+      "pattern": "^(packages)/",
+      "reason": "dependencias restauradas: se cambian por el manifiesto + restore."
+    },
+    {
+      "pattern": "\\.user$",
+      "reason": "configuración local de la máquina de alguien: no viaja en el repo."
+    }
+  ],
+  "docs": {
+    "ignore": [
+      "bin",
+      "obj",
+      "packages",
+      "TestResults",
+      "artifacts",
+      ".git"
+    ]
+  }
+}

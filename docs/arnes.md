@@ -24,7 +24,7 @@ borra `.git/gate-dirty`, que es lo que mira el hook `Stop`.
 | **self-test del arnés**<br>`node scripts/harness-selftest.mjs` | que los frenos bloquean lo que dicen bloquear y que ninguna ruta ni regex del config apunta a la nada | un hook roto o un config inválido fallan en silencio: ninguna otra señal los ve |
 | **link-check de docs**<br>`node scripts/docs-linkcheck.mjs` | que ninguna referencia a un doc o a una ruta del repo apunte a la nada | mover un archivo rompe punteros que ninguna otra señal mira |
 | **artefactos en su lugar**<br>`node scripts/artifacts-check.mjs` | que los artefactos de trabajo estén donde el equipo declaró (`tracker.artifactsIn`), sin tocar la red | tener spec y plan a medias en dos lugares no lo mira ninguna otra señal, y se descubre cuando alguien busca el plan |
-| **lint de convenciones**<br>`node scripts/repo-lint.mjs` | las convenciones del repo: pureza de los hooks, contrato de exit codes, literales de evento, TODOs sin issue, y que todo gotcha declare su `Mecanismo:` | son reglas de dominio: ninguna config estándar las conoce |
+| **lint de convenciones**<br>`node scripts/repo-lint.mjs` | las convenciones del repo: pureza de los hooks, contrato de exit codes, literales de evento, TODOs sin issue, que todo gotcha declare su `Mecanismo:` y que ningún perfil de stack lleve reglas ajenas (`PERFIL`) | son reglas de dominio: ninguna config estándar las conoce |
 
 **Test verde ≠ compila ≠ entregable.** Reportar "listo" sin gate verde es una violación, no un
 descuido. Y una señal **omitida no es verde**: el gate imprime las omisiones aparte, siempre.

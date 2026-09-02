@@ -13,12 +13,31 @@ Una tarde de trabajo, en este orden. El orden importa: cada paso hace verificabl
 ```bash
 git clone <este-repo> /tmp/agent-harness
 cd /tmp/agent-harness
-node scripts/harness-init.mjs /ruta/a/tu/repo            # dry-run: muestra qué haría
+node scripts/harness-init.mjs /ruta/a/tu/repo            # dry-run: detecta el stack y muestra qué haría
 node scripts/harness-init.mjs /ruta/a/tu/repo --apply    # escribe
 ```
 
 Copia los hooks, los scripts, los subagentes, los comandos, `.githooks/` y las plantillas.
 **No sobreescribe nada**: lo que ya existe lo reporta como conservado.
+
+**Tu repo no es de Node.** No importa: el instalador detecta el stack (`*.csproj`, `pom.xml`,
+`build.gradle`, `go.mod`, `Cargo.toml`, `pyproject.toml`, `package.json`) y aplica el **perfil**
+correspondiente, que llena lo que sí es deducible del lenguaje: qué extensión es código, cómo se
+escribe un import, dónde vive el manifiesto de dependencias, qué directorios son derivados. Si
+detecta varios stacks no elige por vos: los lista.
+
+```bash
+node scripts/harness-init.mjs /ruta/a/tu/repo --perfil dotnet
+node scripts/harness-init.mjs /ruta/a/tu/repo --perfil node,jvm-maven   # monorepo
+```
+
+Lo que el perfil **no** trae son reglas ni señales del gate: eso son cicatrices de un equipo y
+viajar con las ajenas es el error del final de este documento. El detalle del corte está en
+[perfiles.md](perfiles.md).
+
+> **Único requisito de máquina:** el arnés corre con `node` y `bash`. En un repo de .NET, JVM,
+> Python o Go, node tiene que estar instalado en la máquina del equipo **y en el runner de CI**. Es
+> el precio de que los hooks sean archivos copiables en cualquier repo.
 
 En tu repo, agregá al manifiesto (`package.json`, `Makefile`, `justfile`, lo que uses):
 

@@ -206,3 +206,62 @@ Regla:   un marcador de deuda se reconoce por su **forma**, no por la palabra: e
          comandos: ¿muerde? y ¿el repo sigue pasando?
 Mecanismo: la regla `TODO` del config con el patrón `\b(TODO|FIXME|XXX)(:|\((?!#))`, el caso del
          self-test que la ejercita y `node scripts/repo-lint.mjs` sobre el repo entero en el gate.
+
+### GOTCHA: el arnés agnóstico que sólo mordía en JS
+
+Síntoma: alguien preguntó qué pasa con un repo de .NET o de Java. La respuesta corta era «nada,
+         es agnóstico»; la auditoría encontró cuatro lugares donde no lo era, y el peor no fallaba
+         nunca: en un repo de .NET, editar un `.cs` **no** marcaba el gate ni corría el lint del
+         archivo. Verde todo el tiempo, freno de mayor retorno muerto.
+Causa:   la arquitectura era agnóstica pero cuatro literales de stack se habían filtrado al código:
+         las extensiones de código cableadas en `post-edit-check.mjs`, la sintaxis de import de la
+         regla PUREZA sin `using` de C#, el matcher de DEPS que sólo entendía manifiestos
+         clave-valor (un `.csproj` salía verde con la dependencia prohibida presente), y avisos que
+         nombraban `npm run …` en un repo donde no existe. Ninguno tenía un caso de self-test que
+         los ejercitara fuera de JS: un freno cuya prueba de vida usa el único stack donde funciona
+         no es una prueba de vida.
+Regla:   toda lista de literales de un lenguaje es una clave del config con default agnóstico
+         (P4), y su caso del self-test se **deriva de esa clave** — nunca de un ejemplo escrito a
+         mano en el stack del repo que la escribió. Lo que un stack necesita para arrancar viaja en
+         un perfil (`plantillas/perfiles/`), y un perfil lleva hechos del lenguaje, no reglas de un
+         equipo (P14).
+Mecanismo: `gate.codeExtensions`, `lint.sourceExtensions`, `purityImportSyntax`,
+         `forbiddenDeps.matcher`, `gate.installHooksCommand` y `status.reminder` en el config, con
+         **un solo** default agnóstico (`DEFAULT_CODE_EXTENSIONS` en `.claude/hooks/harness.mjs`:
+         dos listas ya habían divergido en `.pyi`, que ensuciaba el gate mientras el barrido del
+         lint no lo leía). Casos del self-test: 3e-quater (una por extensión declarada),
+         3e-quinquies (la rama por DEFAULT, en un repo temporal: es la que usa todo repo portado
+         sin perfil), 3e-sexies (las dos listas no divergen), 4b-bis (una por plantilla de import),
+         4g (DEPS por stdin), 4h (PERFIL con un cebo por clave prohibida y otro por clave
+         obligatoria, más `profiles.dir` inexistente y vacío). Más la regla `PERFIL` de
+         `repo-lint.mjs` y la sección 8, que instala **cada** perfil en un repo temporal y corre
+         `repo-lint.mjs` **del destino** —no el de acá, que ignora el cwd y hacía pasar la
+         aserción con un config generado vacío.
+
+### GOTCHA: los frenos por ruta se apagaban bajo un symlink
+
+Síntoma: en un repo temporal montado bajo `/tmp` (que en macOS es un symlink a `/private/tmp`),
+         editar `src/Servicio.cs` no marcaba el gate, no corría el lint del archivo y no
+         disparaba las rutas protegidas. Ningún error: exit 0 y silencio.
+Causa:   `REPO_ROOT` sale de `import.meta.url` y llega ya resuelto (`/private/var/...`), mientras
+         que el `cwd` del payload llega como lo escribió quien invocó (`/var/...`). `path.relative`
+         entre los dos devuelve una ruta con `../../..`, y todos los frenos que preguntan «¿esto
+         está dentro del repo?» contestan que no.
+Regla:   lo que se normaliza es la RAÍZ, no el archivo: se busca el prefijo de la ruta cuyo
+         `realpath` sea la raíz del repo, y lo que sobra es la ruta relativa. Resolver el archivo
+         entero arregla una dirección y rompe la otra —un `node_modules/<dep>` symlinkeado (pnpm,
+         workspaces) apunta afuera del repo y el freno se apaga **hacia abajo**—, y ésa es la
+         dirección que nadie nota. Un freno por ruta se decide siempre hacia el lado seguro: si la
+         ruta pertenece al repo por alguna de las dos formas, las reglas se aplican. Y hay una
+         tercera variante: un alias DENTRO del repo (`alias/ → src/secreto/`) no es una ruta
+         nueva, es **otro nombre de una ruta que ya tiene dueño**. Para las reglas de negación se
+         evalúan TODOS los nombres y basta que uno case: prohibir por un nombre mientras el otro
+         pasa es no prohibir.
+Mecanismo: `relativaAlRepo()` y `targetPaths()` en `.claude/hooks/harness.mjs` —`targetPath()`
+         devuelve UNA ruta para decidir «¿esto es código?»; `targetPaths()` devuelve todas las que
+         el archivo tiene dentro del repo, y es la que usa `protected-paths`— más **cuatro** casos
+         del self-test, uno por variante: el repo entero bajo `/tmp` (3e-quinquies), un
+         `node_modules/<dep>` symlinkeado afuera, la ruta directa equivalente, y un alias interno
+         de una ruta protegida (3e-septies). Con un solo caso el arreglo de una dirección abre la
+         otra: pasó dos veces en esta misma sesión, y las dos las cazó el caso de la dirección
+         contraria.
