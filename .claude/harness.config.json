@@ -497,5 +497,21 @@
       "master"
     ],
     "reason": "el trabajo entra por pull request, con su revisión y su gate en verde. Un push directo entra sin que nadie lo mire."
+  },
+  "install": {
+    "$comment": "Qué clave del config ACTIVA cada freno que el instalador copia. Un freno copiado sin su clave queda «instalado y muerto» en el repo destino — el anti-patrón que este arnés existe para evitar, cometido por el propio instalador: viajaron `ask-first`, `action-guard` y `pre-push` con la plantilla sin `askFirst` ni `branches`. El self-test verifica la plantilla contra esta tabla.",
+    "activators": {
+      ".claude/hooks/protected-paths.mjs": "protectedPaths",
+      ".claude/hooks/bash-guard.mjs": "bash.deny",
+      ".claude/hooks/reuse-guard.mjs": "reuse",
+      ".claude/hooks/post-edit-check.mjs": "lint.command",
+      ".claude/hooks/gate-stop.mjs": "gate.marker",
+      ".claude/hooks/session-start.mjs": "status.file",
+      ".claude/hooks/sdd-router.mjs": "sdd.routes",
+      ".claude/hooks/ask-first.mjs": "askFirst.marker",
+      ".claude/hooks/action-guard.mjs": "askFirst.marker",
+      ".githooks/commit-msg": "commitMsg.codePattern",
+      ".githooks/pre-push": "branches.protected"
+    }
   }
 }

@@ -400,6 +400,20 @@ calla — que es lo correcto: un hook que habla sin tener nada que ofrecer sólo
 
 ---
 
+## `install` — qué clave activa cada freno que viaja
+
+```json
+{ "activators": { ".claude/hooks/ask-first.mjs": "askFirst.marker",
+                  ".githooks/pre-push": "branches.protected" } }
+```
+
+Sólo aplica al repo que **publica** el arnés (este). Es la tabla que evita el anti-patrón
+«instalado y muerto» del lado del instalador: el self-test cruza los archivos que
+`harness-init.mjs` copia contra esta tabla y falla si la plantilla no trae la clave que activa el
+freno. Pasó con `ask-first`, `action-guard` y `pre-push`, que viajaron inertes.
+
+---
+
 ## `examples` — las configs de ejemplo que se publican
 
 ```json
@@ -444,7 +458,7 @@ cumplir. El detalle de qué viaja y qué no está en [perfiles.md](perfiles.md).
 | `lint` (incluye `sourceExtensions`) | `post-edit-check.mjs`, `scripts/repo-lint.mjs`, `.githooks/pre-commit`, self-test |
 | `purity`, `purityImportSyntax`, `forbiddenDeps`, `singleSource`, `invariants`, `patterns`, `tests`, `incidents` | `scripts/repo-lint.mjs`, self-test |
 | `profiles` | `scripts/repo-lint.mjs` (regla `PERFIL`), self-test |
-| `examples` | self-test (sección 8) |
+| `examples`, `install` | self-test (sección 8) |
 | `docs` | `scripts/docs-linkcheck.mjs`, `scripts/repo-lint.mjs` (directorios a saltear) |
 | `status` (incluye `reminder`) | `session-start.mjs`, self-test |
 | `tracker` | `.githooks/commit-msg`, `scripts/artifacts-check.mjs`, self-test |

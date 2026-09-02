@@ -216,6 +216,40 @@
     "$reminder": "Lo último que el agente lee al abrir la sesión. Nombrá el comando de gate REAL de este repo: un recordatorio que cita el comando de otro stack es ruido.",
     "reminder": ""
   },
+  "askFirst": {
+    "$comment": "«Una pregunta se contesta; una acción se pide». Estas claves ACTIVAN `ask-first.mjs` + `action-guard.mjs`: sin ellas los dos hooks quedan instalados y muertos. Los patrones son del idioma (español), no de este repo — ajustalos si tu equipo trabaja en otro. La detección es ANGOSTA a propósito: un clasificador ancho bloquea instrucciones legítimas, y un freno que muerde de más se desactiva a mano en una semana.",
+    "marker": ".git/agent-answer-first",
+    "questionPatterns": [
+      "^\\s*¿",
+      "\\?\\s*$",
+      "^\\s*(qu[eé]|por\\s?qu[eé]|c[oó]mo|cu[aá]l(es)?|cu[aá]ndo|d[oó]nde|qui[eé]n|para\\s?qu[eé])(?=\\s|$|[,:])",
+      "^\\s*(hay|existe|sirve|conviene|se puede|pod[eé]s|sab[eé]s|vale la pena)(?=\\s|$|[,:])"
+    ],
+    "actionPatterns": [
+      "\\b(arregl|corrig|implement|agreg|a[ñn]ad|cambi|escrib|cre[aá]|aplic|instal|port|actualiz|borr|elimin|quit|refactor|migr|public|commit|push|generá|genera|hacelo|haz|dale|proced)"
+    ],
+    "message": "Esto es una **pregunta**: contestala con lo que ya sabés o leyendo lo que haga falta. **No edites archivos del repo**: el hook `action-guard` los va a bloquear hasta el próximo pedido del humano.",
+    "pastPatterns": [
+      "\\b\\w+(aste|iste|aron|ieron|abas|amos|imos)(?=\\s|$|[,.?!])",
+      "\\b\\w+(ó|ió)(?=\\s|$|[,.?!])",
+      "\\b(hab[ií]as|hiciste|dejaste|qued[oó])(?=\\s|$|[,.?!])"
+    ],
+    "strongQuestionPatterns": [
+      "^\\s*¿",
+      "^\\s*(qu[eé]|por\\s?qu[eé]|c[oó]mo|cu[aá]l(es)?|cu[aá]ndo|d[oó]nde|qui[eé]n|para\\s?qu[eé])(?=\\s|$|[,:])"
+    ],
+    "directRequestPatterns": [
+      "\\b(pod[eé]s|puedes|podr[ií]as|te pido|por favor|necesito que|quiero que)\\b"
+    ]
+  },
+  "branches": {
+    "$comment": "Ramas donde el trabajo entra por pull request. Activa `.githooks/pre-push`, que sin esta clave queda instalado y muerto. La protección del lado del SERVIDOR es el freno fuerte y hay que activarla igual en tu forja: esto falla antes de la red, con el motivo.",
+    "protected": [
+      "main",
+      "master"
+    ],
+    "reason": "el trabajo entra por pull request, con su revisión y su gate en verde. Un push directo entra sin que nadie lo mire."
+  },
   "sdd": {
     "$comment": "`phases` son las skills del kit SDD que tienen que estar instaladas (en CI se reporta omitido, nunca «pasó»). Sin kit, dejá `phases: []`: el valor está en `routes`, que pone el criterio delante del agente antes de que edite.",
     "kit": "ninguno",

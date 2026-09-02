@@ -320,3 +320,23 @@ Mecanismo: `markdownFiles()` en `scripts/docs-linkcheck.mjs` saltea lo que `git 
          marca, y el caso 3i del self-test pone un cebo con dos punteros muertos dentro de un
          directorio derivado (el primero de `.gitignore` que exista) y exige que el link-check
          siga verde. El cebo se borra en `finally`, y el guardián de temporales lo verifica.
+
+### GOTCHA: el instalador hacía viajar tres frenos muertos
+
+Síntoma: en un repo recién portado, `ask-first`, `action-guard` y el `pre-push` estaban ahí, con
+         sus hooks declarados, y **no frenaban nada**. Ningún error: los tres leen su sección del
+         config, no la encuentran y dejan pasar (que es el comportamiento correcto de un hook con
+         config ausente).
+Causa:   el instalador copiaba los tres archivos y el config de arranque no traía `askFirst` ni
+         `branches`. Es el anti-patrón «instalado y muerto» —archivos presentes cuyo eslabón
+         activador nunca corre— cometido por el propio instalador, que es el peor lugar posible:
+         se propaga a todos los repos portados y en cada uno se ve como si el freno existiera.
+Regla:   un freno viaja con la clave que lo activa, o no viaja. Y el config de arranque no puede
+         dejar en blanco lo que no es una decisión del equipo: los patrones del clasificador de
+         intención son del idioma, y las ramas protegidas son `main`/`master` hasta que alguien
+         diga otra cosa.
+Mecanismo: `askFirst` y `branches` en `plantillas/harness.config.json`, la tabla
+         `install.activators` del config (qué clave activa cada freno que se copia) y el caso
+         8a-bis del self-test, que cruza la lista de archivos que el instalador copia contra esa
+         tabla y falla nombrando el freno y la clave que le falta. Probado quitando las dos claves:
+         reporta los tres frenos, uno por línea.

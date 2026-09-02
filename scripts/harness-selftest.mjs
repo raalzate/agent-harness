@@ -1211,6 +1211,41 @@ section("8. perfiles y ejemplos por stack");
   }
 }
 
+// 8a-bis. Ningún freno viaja MUERTO. El instalador copia hooks y hooks de git; si el config de
+//     arranque no trae la clave que los activa, el repo portado tiene el archivo presente y el
+//     eslabón activador que nunca corre — el anti-patrón que este arnés existe para evitar,
+//     cometido por el propio instalador (viajaron `ask-first`, `action-guard` y `pre-push` con la
+//     plantilla sin `askFirst` ni `branches`).
+{
+  const activadores = config.install?.activators ?? {};
+  const init = abs("scripts/harness-init.mjs");
+  if (!Object.keys(activadores).length) {
+    skip("ningún freno viaja muerto", "el repo no declara `install.activators`");
+  } else if (!fs.existsSync(init)) {
+    skip("ningún freno viaja muerto", "el repo no tiene instalador");
+  } else {
+    const fuenteInit = fs.readFileSync(init, "utf8");
+    const plantilla = JSON.parse(fs.readFileSync(abs("plantillas/harness.config.json"), "utf8"));
+    const enRuta = (obj, ruta) => ruta.split(".").reduce((o, k) => (o == null ? o : o[k]), obj);
+    const vacio = (v) => v === undefined || v === null || v === "" || (Array.isArray(v) && !v.length);
+
+    let muertos = 0;
+    for (const [freno, clave] of Object.entries(activadores)) {
+      // Sólo cuenta si el instalador realmente lo copia: la tabla puede nombrar frenos que este
+      // repo tiene y no publica.
+      if (!fuenteInit.includes(freno)) continue;
+      if (vacio(enRuta(plantilla, clave))) {
+        muertos += 1;
+        bad(
+          `el freno \`${freno}\` viaja activado`,
+          `el instalador lo copia y la plantilla no trae \`${clave}\`: en el repo portado queda instalado y MUERTO`,
+        );
+      }
+    }
+    if (!muertos) ok(`los ${Object.keys(activadores).length} frenos que viajan traen su clave que los activa`);
+  }
+}
+
 // 8b. Las configs de ejemplo se publican PARA COPIAR: un regex roto ahí viaja igual que un
 //     script roto, y nadie las corría. Lo verificable sin el repo destino: que parseen, que
 //     sus regex compilen, que cada señal declare su `why` y que un manifiesto que NO es
