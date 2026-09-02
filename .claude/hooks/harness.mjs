@@ -36,6 +36,28 @@ export const DEFAULT_CODE_EXTENSIONS = [
   ".c", ".h", ".cc", ".cpp", ".hpp", ".m", ".mm", ".sh", ".bash", ".sql",
 ];
 
+/**
+ * Cómo se escribe «importar X» en cada familia de lenguajes. Plantillas con `{mod}`.
+ *
+ * Default agnóstico de la regla PUREZA. Vive acá junto con el otro default compartido por el
+ * mismo motivo: el self-test tenía su propia versión cableada en JS y por eso daba FALSO ROJO
+ * sobre una regla que funcionaba, en cualquier repo que no fuera JS. Un falso rojo enseña a
+ * ignorar la sección entera, que es peor que no tener la sección.
+ */
+export const DEFAULT_IMPORT_SYNTAX = [
+  "from\\s+['\"]{mod}['\"]", //           JS/TS: import x from "mod"
+  "require\\(\\s*['\"]{mod}['\"]", //     CommonJS
+  "import\\s+['\"]{mod}['\"]", //         import "mod" (JS, Go)
+  "^\\s*(?:import|from)\\s+{mod}\\b", //  Python, Java, Kotlin, Scala
+  "^\\s*using\\s+(?:static\\s+)?{mod}\\b", // C#, F#
+  "^\\s*use\\s+{mod}\\b", //              Rust, PHP
+  "^\\s*#include\\s*[<\"]{mod}", //       C, C++, Objective-C
+];
+
+/** La sintaxis declarada, o el superconjunto agnóstico. */
+export const importSyntax = (declaradas) =>
+  Array.isArray(declaradas) && declaradas.length ? declaradas : DEFAULT_IMPORT_SYNTAX;
+
 /** Extensiones declaradas, o el superconjunto agnóstico. Vacío = sin llenar, no «ninguna». */
 export const codeExtensions = (declaradas) =>
   Array.isArray(declaradas) && declaradas.length ? declaradas : DEFAULT_CODE_EXTENSIONS;

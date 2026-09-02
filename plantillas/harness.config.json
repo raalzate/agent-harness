@@ -205,7 +205,10 @@
       "vendor",
       "target"
     ],
-    "ignoreFiles": [],
+    "$ignoreFiles": "Documentos cuyas rutas son EJEMPLOS y no punteros. La guía de fondo (`docs/buenas-practicas.md`) es agnóstica: cita `docs/decisions/`, `src/lib/…` y otras rutas que este repo puede no tener.",
+    "ignoreFiles": [
+      "docs/buenas-practicas.md"
+    ],
     "externalPaths": []
   },
   "status": {

@@ -26,6 +26,7 @@ nada del repo.
 scripts/gate.sh               ejecuta gate.signals; no sabe de stacks
 scripts/repo-lint.mjs         8 clases de regla, todas configurables
 scripts/harness-selftest.mjs  prueba de vida: genera los casos DESDE el config
+scripts/harness-bench.mjs     el arnés instalado en un repo real de cada stack (el encaje)
 scripts/harness-init.mjs      instalador en otro repo (dry-run por defecto, con perfil de stack)
 plantillas/perfiles/          8 perfiles de stack: hechos del lenguaje, nunca reglas
 plantillas/ examples/ docs/   lo que se copia y lo que se lee
@@ -55,7 +56,7 @@ plantillas/ examples/ docs/   lo que se copia y lo que se lee
 ## Antes de dar algo por terminado
 
 ```bash
-npm run gate           # EL entregable: self-test · link-check · lint
+npm run gate           # EL entregable: self-test · link-check · lint · artefactos · banco
 npm run selftest       # ¿los frenos muerden?
 npm run lint           # ¿el repo pasa con las reglas activas?
 npm run lint:rules     # ¿qué reglas están activas y de dónde salen?
@@ -66,7 +67,9 @@ npm run lint:rules     # ¿qué reglas están activas y de dónde salen?
   está prohibido: si el gate estorba, se arregla el gate.
 - Al cambiar el arnés, probá también el portado: `node scripts/harness-init.mjs <repo> ` en dry-run
   sigue siendo la mitad del producto. Si tocás un perfil de stack, la sección 8 del self-test lo
-  instala en un repo temporal: no hace falta un repo de .NET a mano.
+  instala en un repo temporal y el **banco** (`node scripts/harness-bench.mjs`) lo instala en un
+  repo de juguete de ese stack con archivos reales: no hace falta un repo de .NET a mano. Perfil
+  nuevo = *fixture* nuevo en el banco, o del perfil sólo se verifica la forma.
 
 ## Documentación: qué va dónde
 

@@ -19,3 +19,15 @@ jobs:
       # Sin `npm ci`: el arnés no tiene dependencias a propósito (node + bash).
       - name: gate
         run: npm run gate
+
+  # El banco completo, incluido el gate de cada repo portado: ~75s, así que no va en el gate
+  # del desarrollador (ahí corre el modo rápido, sin el gate del destino).
+  banco-completo:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: banco de perfiles con el gate del repo portado
+        run: node scripts/harness-bench.mjs --con-gate

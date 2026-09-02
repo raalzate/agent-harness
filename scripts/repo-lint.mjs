@@ -30,7 +30,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 // La lista de extensiones «esto es código» es UNA y vive con los hooks: tener una copia acá
 // es tener dos verdades, y ya divergieron (un `.pyi` ensuciaba el gate y el barrido no lo leía).
-import { codeExtensions } from "../.claude/hooks/harness.mjs";
+import { codeExtensions, importSyntax } from "../.claude/hooks/harness.mjs";
 
 const REPO_ROOT = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
 
@@ -67,24 +67,6 @@ const lineOf = (content, index) => content.slice(0, index).split("\n").length;
  */
 const SOURCE_EXTENSIONS = codeExtensions(config.lint?.sourceExtensions);
 const esFuente = (nombre) => SOURCE_EXTENSIONS.some((ext) => nombre.toLowerCase().endsWith(ext.toLowerCase()));
-
-/**
- * Cómo se escribe «importar X» en cada familia de lenguajes. Plantillas con `{mod}`.
- *
- * Es el default agnóstico de la regla PUREZA: cablear sólo la sintaxis de JS dejaba la
- * regla de mayor retorno CIEGA en C# (`using X;`) y en C/C++ (`#include <x>`). Se puede
- * angostar por capa (`purity[].importSyntax`) o por repo (`purityImportSyntax`) —un
- * perfil de stack hace exactamente eso— pero nunca hay que ensancharla editando código.
- */
-const IMPORT_SYNTAX_DEFAULT = [
-  "from\\s+['\"]{mod}['\"]", //           JS/TS: import x from "mod"
-  "require\\(\\s*['\"]{mod}['\"]", //     CommonJS
-  "import\\s+['\"]{mod}['\"]", //         import "mod" (JS, Go)
-  "^\\s*(?:import|from)\\s+{mod}\\b", //  Python, Java, Kotlin, Scala
-  "^\\s*using\\s+(?:static\\s+)?{mod}\\b", // C#, F#
-  "^\\s*use\\s+{mod}\\b", //              Rust, PHP
-  "^\\s*#include\\s*[<\"]{mod}", //       C, C++, Objective-C
-];
 
 /** Compila un regex del config sin reventar el turno del agente si está mal escrito. */
 function re(pattern, flags = "") {
@@ -126,7 +108,7 @@ function checkPurity(relPath, content) {
   for (const layer of config.purity ?? []) {
     if (!layer.dir || !underDir(relPath, layer.dir)) continue;
     if ((layer.except ?? []).includes(relPath)) continue;
-    const sintaxis = layer.importSyntax ?? config.purityImportSyntax ?? IMPORT_SYNTAX_DEFAULT;
+    const sintaxis = importSyntax(layer.importSyntax ?? config.purityImportSyntax);
     for (const mod of layer.forbiddenImports ?? []) {
       const pattern = new RegExp(
         sintaxis.map((t) => `(?:${t.split("{mod}").join(escape(mod))})`).join("|"),

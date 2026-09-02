@@ -1,0 +1,43 @@
+# CI corre EL MISMO gate que el humano y que el agente. Si CI verifica algo distinto de lo que
+# verifica el desarrollador, una de las dos señales miente.
+#
+# Plantilla del arnés: agregá el setup de TU stack antes del paso del gate. El arnés en sí sólo
+# necesita `node` y `bash` — y los necesita también acá, no sólo en la máquina del equipo.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # ── El stack del proyecto ──────────────────────────────────────────────
+      # Descomentá el que corresponda (o agregá el tuyo).
+      #
+      # - uses: actions/setup-dotnet@v4
+      #   with: { dotnet-version: '8.0.x' }
+      #
+      # - uses: actions/setup-java@v4
+      #   with: { distribution: temurin, java-version: '21', cache: maven }
+      #
+      # - uses: actions/setup-python@v5
+      #   with: { python-version: '3.12' }
+      #
+      # - uses: actions/setup-go@v5
+      #   with: { go-version: '1.22' }
+      #
+      # - uses: dtolnay/rust-toolchain@stable
+
+      # ── El arnés (sin dependencias: no hace falta `npm ci`) ────────────────
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: gate
+        run: bash scripts/gate.sh

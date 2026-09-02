@@ -29,7 +29,7 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 // El mismo helper que usan el hook y el lint: comparar contra la lista DECLARADA dejaba pasar
 // justo el caso del incidente (el gate declara una extensión que el default agnóstico no tiene).
-import { codeExtensions } from "../.claude/hooks/harness.mjs";
+import { codeExtensions, importSyntax } from "../.claude/hooks/harness.mjs";
 
 const REPO_ROOT = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
 const abs = (p) => path.join(REPO_ROOT, p);
@@ -766,14 +766,30 @@ for (const regla of config.patterns ?? []) {
   else bad(`lint PATRON ${regla.id} muerde`, `exit ${r.status} sobre \`${archivo}\`: ${r.out.trim() || "sin salida"}`);
 }
 
-// 4b. PUREZA: un import prohibido en la capa pura es rojo.
+// 4b. PUREZA: un import prohibido en la capa pura es rojo, en la SINTAXIS de este repo.
+//     La versión anterior cableaba `import x from "mod"` y un archivo `.mjs`, así que en un repo
+//     de .NET (`using X;`) reportaba ROJO una regla que funcionaba. Un falso rojo enseña a
+//     ignorar la sección entera — lo destapó el banco de perfiles contra repos reales.
+const extensionDeMuestra = () =>
+  (config.lint?.sourceExtensions ?? config.gate?.codeExtensions ?? [])[0] ?? codeExtensions([])[0];
+
 for (const capa of config.purity ?? []) {
   const mod = (capa.forbiddenImports ?? [])[0];
   if (!capa.dir || !mod) continue;
-  const archivo = `${capa.dir.replace(/\/$/, "")}/ejemplo-selftest.mjs`;
-  const r = lint(archivo, `import x from "${mod}";\n`);
-  if (r.status !== 0 && r.out.includes("PUREZA")) ok(`lint PUREZA protege \`${capa.dir}\` de \`${mod}\``);
-  else bad(`lint PUREZA protege \`${capa.dir}\``, `exit ${r.status}: ${r.out.trim() || "sin salida"}`);
+  const archivo = `${capa.dir.replace(/\/$/, "")}/ejemplo-selftest${extensionDeMuestra()}`;
+  const sintaxis = importSyntax(capa.importSyntax ?? config.purityImportSyntax);
+  const lineas = sintaxis.map((t) => sampleFromPattern(t.split("{mod}").join(mod))).filter(Boolean);
+  if (!lineas.length) {
+    skip(`lint PUREZA protege \`${capa.dir}\``, "ninguna plantilla de import se reduce a un ejemplo");
+    continue;
+  }
+  // Basta que UNA sintaxis de las declaradas muerda: el archivo de muestra es de un lenguaje.
+  const rojos = lineas.filter((linea) => {
+    const r = lint(archivo, `${linea}\n`);
+    return r.status !== 0 && r.out.includes("PUREZA");
+  });
+  if (rojos.length) ok(`lint PUREZA protege \`${capa.dir}\` de \`${mod}\` (${rojos.length}/${lineas.length} sintaxis)`);
+  else bad(`lint PUREZA protege \`${capa.dir}\``, `ninguna de las ${lineas.length} sintaxis declaradas hizo fallar el lint`);
 }
 
 // 4c. ONLY: un `.only(` olvidado es rojo.
@@ -810,7 +826,7 @@ if (config.incidents?.file) {
 //     Sin esto, un repo que angosta `purityImportSyntax` a una sintaxis mal escrita se
 //     queda con la regla de mayor retorno silenciosamente apagada.
 for (const capa of config.purity ?? []) {
-  const sintaxis = capa.importSyntax ?? config.purityImportSyntax ?? [];
+  const sintaxis = importSyntax(capa.importSyntax ?? config.purityImportSyntax);
   const mod = (capa.forbiddenImports ?? [])[0];
   if (!capa.dir || !mod) {
     // La regla de mayor retorno no puede quedar sin probar EN SILENCIO.
@@ -1142,7 +1158,22 @@ section("8. perfiles y ejemplos por stack");
             // Si aparece el directorio de perfiles de ESTE repo, el lint leyó el config de acá.
             bad(`perfil \`${perfil}\` → se linteó el config del destino`, "la salida menciona `plantillas/perfiles`: se leyó el config de este repo, no el generado");
           } else {
-            ok(`perfil \`${perfil}\` → config instalable (${extEsperadas.length} extensión(es), gate vacío)`);
+            // El arnés recién instalado NO puede apuntar a la nada: los subagentes, los comandos
+            // y la constitución citan documentos, y si el instalador no los copia el repo
+            // portado arranca con el link-check en rojo el primer día (P10 violado por el
+            // propio instalador). Lo destapó el banco de perfiles contra repos reales.
+            const punteros = spawnSync("node", [path.join(tmp, "scripts/docs-linkcheck.mjs")], {
+              cwd: tmp,
+              encoding: "utf8",
+            });
+            if (punteros.status === 0) {
+              ok(`perfil \`${perfil}\` → config instalable y sin punteros rotos (${extEsperadas.length} extensión(es))`);
+            } else {
+              bad(
+                `perfil \`${perfil}\` → el arnés instalado no apunta a la nada`,
+                `\`docs-linkcheck\` del repo portado sale rojo el primer día:\n      ${(punteros.stdout ?? "").trim().split("\n").slice(0, 4).join("\n      ")}`,
+              );
+            }
           }
         }
       } finally {

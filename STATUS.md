@@ -12,7 +12,7 @@ lo que se supone va en "deuda conocida".
 
 | Señal | Comando | Resultado |
 |---|---|---|
-| Self-test del arnés | `node scripts/harness-selftest.mjs` | verde — 130 casos: 10 hooks declarados y parseados, 64 regex del config compilan, 16 rutas resuelven, los frenos probados con muestras derivadas del propio config, 8 reglas del lint muerden, 6 casos de ruteo, 8 perfiles de stack instalados en repos temporales |
+| Self-test del arnés | `node scripts/harness-selftest.mjs` | verde — 138 casos: 10 hooks declarados y parseados, 64 regex del config compilan, 16 rutas resuelven, los frenos probados con muestras derivadas del propio config, 8 reglas del lint muerden, 6 casos de ruteo, 8 perfiles de stack instalados en repos temporales |
 | Los frenos no muerden de más | incluido en el self-test | verde — un archivo normal pasa `protected-paths`, `git status` pasa `bash-guard`, el router se calla en lo trivial |
 | Link-check de docs | `node scripts/docs-linkcheck.mjs` | verde — enlaces y rutas citadas medidos contra `git ls-files` (`docs.proseRoots` acota qué raíces) · la prosa de hooks y scripts (`proseInSource`) · que los documentos de `mentionSignals` nombren las 4 señales · y que la página enlace los **15** documentos (`mustLinkAll`) |
 | Lint de convenciones | `node scripts/repo-lint.mjs` | verde — PUREZA (hooks sin lanzar procesos, 2 excepciones declaradas; sintaxis de import agnóstica: `import`, `using`, `use`, `#include`) · EVENTOS (`singleSource`) · INVARIANTE (contrato de exit codes de `harness.mjs`) · DEPS · TODO · CONSOLE · GRIDLI · ONLY · INCIDENTE · PERFIL (ningún perfil de stack lleva reglas ajenas) |
@@ -22,7 +22,8 @@ lo que se supone va en "deuda conocida".
 | El trabajo entra por PR | incluido en el self-test | verde — `pre-push` frena el empujón directo a `main` y a `master`, y deja pasar una rama de feature. La protección del lado del servidor **no la verifica el gate** (necesita red): se activa a mano |
 | El trabajo queda registrado | incluido en el self-test | verde — 6 casos de `.githooks/commit-msg` en un repo git temporal, derivados del config: código sin referencia, con referencia, con la fuga y su motivo, la fuga pelada, extensión ignorada, y un merge |
 | Artefactos donde se declaró | `node scripts/artifacts-check.mjs` | verde — sin `specs/` porque el trabajo vive en el gestor; el cebo del self-test lo pone en rojo |
-| Gate completo | `npm run gate` | verde — 4 señales, ninguna omitida |
+| Banco de perfiles (stacks reales) | `node scripts/harness-bench.mjs` | verde — **96 comprobaciones sobre 8 repos de juguete** (.NET, Maven, Gradle, Python, Go, Rust, Node, front) con archivos reales del lenguaje: detección del stack, DEPS contra el manifiesto real, PUREZA contra el import real, `tests.filePattern` contra el layout real, los hooks sobre archivos reales, `commit-msg` y que el arnés instalado no apunte a la nada. Cazó **dos** bugs en su primera corrida. 15s (`fastSkip`); con `--con-gate` corre además el gate de cada repo portado (~75s) y eso vive en CI |
+| Gate completo | `npm run gate` | verde — 5 señales, ninguna omitida. ~44s (antes ~10s: el banco cuesta 15s y el resto es el self-test instalando los 8 perfiles). En modo `fast` el banco se omite |
 | Instalador (dry-run) | `node scripts/harness-init.mjs <repo>` | verde — 32 archivos a copiar, no sobreescribe, imprime los 6 pasos que ninguna herramienta puede hacer sola |
 | Configs de ejemplo publicadas | incluido en el self-test (sección 8) | verde — los **7** ejemplos (`node-typescript`, `python`, `go`, `monorepo`, `infra-terraform`, `dotnet`, `jvm-spring`) parsean, sus regex compilan, cada señal declara su `why`, y un manifiesto que no es clave-valor trae su `matcher`. Un cebo con las tres fallas da 3 hallazgos |
 | Portado a un stack que no es Node | incluido en el self-test (sección 8) | verde — los **8** perfiles (`node`, `front`, `dotnet`, `jvm-maven`, `jvm-gradle`, `python`, `go`, `rust`) se instalan en un repo git temporal: el dry-run no escribe, el config generado trae las extensiones del perfil y `gate.signals` queda intacto |
@@ -62,13 +63,14 @@ Pre-commit instalado: sí (`core.hooksPath=.githooks`). CI corre **el mismo** `n
   instala cada perfil en un repo temporal y verifica el config generado; lo que **nadie** verifica
   es que el gate de ese repo quede verde, porque para eso hacen falta las señales reales del
   equipo. Mecanismo candidato: un repo de juguete por perfil con su gate mínimo.
-- **El `matcher` de DEPS y `tests.filePattern` de cada perfil son juicio, no medición.** El
-  self-test verifica que un manifiesto no clave-valor **declare** su matcher, no que el matcher
-  case el XML real de un `.csproj`. Es la misma clase que la siguiente y se paga igual.
-- **Los perfiles de stack no se prueban contra un repo real de ese stack.** Que el `matcher` de
-  DEPS case un `.csproj` de verdad, o que `tests.filePattern` cace el layout real de un proyecto
-  Gradle, hoy es criterio de quien escribió el perfil: el self-test verifica la forma, no el
-  encaje. Se paga la primera vez que alguien porte a ese stack, y ahí entra `/lesson`.
+- **Los perfiles se prueban contra repos de juguete, no contra repos de producción.** El banco
+  (`node scripts/harness-bench.mjs`) instala el arnés en un repo real de cada stack con archivos
+  reales del lenguaje, y ahí ya cazó dos bugs. Lo que sigue sin cubrir es la escala: un monorepo
+  Gradle con 40 módulos, un `.sln` con proyectos en rutas raras, un `pyproject` con `uv`. Se paga
+  la primera vez que alguien porte a uno de esos, y ahí entra `/lesson`.
+- **Ninguna señal del stack se ejecuta en el banco.** El banco no corre `dotnet build` ni
+  `mvn verify`: no hay SDKs instalados y tenerlos volvería el gate irreproducible. Lo que se
+  verifica es el arnés sobre archivos reales, no que el stack compile.
 - **La landing page (`docs/index.html`): dos tercios de deuda cerrada.** Que nombre **todas** las señales del
   gate ya lo verifica `docs-linkcheck` (`docs.mentionSignals`), porque envejeció en una sola sesión.
   Una clase de rotura visual sí tiene freno desde hoy: la regla `GRIDLI` (un `li` como contenedor

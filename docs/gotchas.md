@@ -265,3 +265,42 @@ Mecanismo: `relativaAlRepo()` y `targetPaths()` en `.claude/hooks/harness.mjs` �
          de una ruta protegida (3e-septies). Con un solo caso el arreglo de una dirección abre la
          otra: pasó dos veces en esta misma sesión, y las dos las cazó el caso de la dirección
          contraria.
+
+### GOTCHA: el self-test daba FALSO ROJO en todo repo que no fuera JS
+
+Síntoma: en un repo .NET portado, el self-test reportaba `✗ lint PUREZA protege src/Domain` — una
+         regla que, probada a mano contra el `Order.cs` real, **funcionaba perfectamente**.
+Causa:   el caso 4b armaba su muestra cableada en JS: `import x from "mod"` en un archivo
+         `ejemplo-selftest.mjs`. La regla estaba configurada con la sintaxis del stack
+         (`using X;`), así que la muestra no la cazaba. El caso medía su propia suposición, no la
+         regla. Y el caso hermano (4b-bis) sólo corría con `purityImportSyntax` **declarado**, así
+         que en la mayoría de los repos no corría ninguno de los dos bien.
+Regla:   la muestra de un caso se deriva de la **configuración efectiva** —la declarada o el
+         default compartido—, nunca de un ejemplo escrito a mano en el stack de quien escribió el
+         caso. Un falso rojo es peor que ningún caso: enseña a ignorar la sección entera, y con
+         ella los casos que sí servían.
+Mecanismo: `DEFAULT_IMPORT_SYNTAX` + `importSyntax()` en `.claude/hooks/harness.mjs` (un solo
+         default, consumido por `repo-lint.mjs` y por el self-test), el caso 4b derivando su
+         muestra de esa lista y su extensión de `lint.sourceExtensions`, y la señal
+         **banco de perfiles** (`node scripts/harness-bench.mjs`) en el gate: instala el arnés en
+         un repo real de cada stack y ahí el falso rojo aparece. Fue el banco el que lo encontró.
+
+### GOTCHA: el arnés recién instalado apuntaba a la nada
+
+Síntoma: `docs-linkcheck` del repo portado salía **rojo el primer día**, antes de que el equipo
+         escribiera una sola línea: cuatro hallazgos de «ruta citada», del subagente `reviewer`,
+         del comando `/harness-audit` y de la constitución, hacia documentos del arnés que en el
+         repo destino no existían.
+Causa:   los subagentes, los comandos y las plantillas citan documentos del arnés que el
+         instalador **no copiaba**. El propio instalador violaba P10, y peor: el rojo era
+         indistinguible del rojo esperado por los placeholders, así que se lee como «ya sé, es el
+         mapa» y nadie lo mira.
+Regla:   lo que el arnés instalado cita, viaja con el arnés — o no se cita. Y el rojo de un repo
+         recién portado tiene que ser **sólo** el de los placeholders del config: cualquier otro
+         rojo el primer día entrena al equipo a ignorar la señal.
+Mecanismo: `docs/sdd.md`, `docs/buenas-practicas.md` y `docs/trazabilidad.md` en la lista de
+         copia del instalador; `plantillas/arnes.md`, `plantillas/ci.yml` y `plantillas/ADR.md`
+         como plantillas del destino (el documento del arnés, el CI que corre el mismo gate, y
+         la plantilla de ADR que además crea el directorio de decisiones); y la sección 8 del
+         self-test, que corre
+         `docs-linkcheck` **dentro** de cada repo portado y falla si sale rojo.

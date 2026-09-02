@@ -48,6 +48,15 @@
           "scripts/artifacts-check.mjs"
         ],
         "why": "un plan suelto en el repo cuando el equipo decidió que el trabajo vive en el gestor deja el registro partido en dos, y ninguna otra señal lo mira"
+      },
+      {
+        "name": "banco de perfiles (stacks reales)",
+        "command": [
+          "node",
+          "scripts/harness-bench.mjs"
+        ],
+        "fastSkip": true,
+        "why": "el self-test verifica la FORMA de un perfil; sólo un repo real de cada stack verifica el ENCAJE: que el matcher de DEPS case el XML de un .csproj, que PUREZA cace un `using`, y que el arnés recién instalado no apunte a la nada. Cazó dos bugs en su primera corrida"
       }
     ]
   },

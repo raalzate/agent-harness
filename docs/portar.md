@@ -17,8 +17,14 @@ node scripts/harness-init.mjs /ruta/a/tu/repo            # dry-run: detecta el s
 node scripts/harness-init.mjs /ruta/a/tu/repo --apply    # escribe
 ```
 
-Copia los hooks, los scripts, los subagentes, los comandos, `.githooks/` y las plantillas.
+Copia los hooks, los scripts, los subagentes, los comandos, `.githooks/`, las plantillas, los
+tres documentos agnósticos que el arnés instalado cita (la guía de fondo, el ruteo del trabajo y
+la trazabilidad) y un CI listo para llenar con el setup de tu stack.
 **No sobreescribe nada**: lo que ya existe lo reporta como conservado.
+
+El repo recién portado tiene que salir rojo **sólo** por los placeholders del config. Si sale rojo
+por un puntero a un documento que no existe, eso es un bug del instalador: hay un caso del
+self-test que corre el link-check dentro de cada repo portado justamente por eso.
 
 **Tu repo no es de Node.** No importa: el instalador detecta el stack (`*.csproj`, `pom.xml`,
 `build.gradle`, `go.mod`, `Cargo.toml`, `pyproject.toml`, `package.json`) y aplica el **perfil**

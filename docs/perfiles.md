@@ -78,6 +78,11 @@ En CI son dos líneas más, no un problema — el runner ya instala tu SDK, y no
       - run: bash scripts/gate.sh
 ```
 
+**El banco prueba el encaje, no la escala.** Los repos de juguete tienen un módulo y cinco
+archivos; un monorepo Gradle de 40 módulos o un `.sln` con proyectos en rutas raras sigue siendo
+territorio no medido. Y el banco **no** corre `dotnet build` ni `mvn verify`: no hay SDKs
+instalados, y tenerlos volvería el gate irreproducible.
+
 **El perfil no reemplaza el trabajo de traducir convenciones.** Después de aplicarlo, el self-test
 sigue **rojo** hasta que se llenen `gate.signals` y las reglas: ese rojo es el mapa. Cada línea
 nombra la clave que todavía apunta a la nada.
@@ -87,8 +92,14 @@ nombra la clave que todavía apunta a la nada.
 1. `plantillas/perfiles/<stack>.json` con `$stack`, `$detect` y `gate.codeExtensions` (las tres son
    obligatorias: las exige `profiles.requiredKeys`).
 2. Nada de la columna derecha de la tabla. El lint lo verifica.
-3. `npm run gate`. La sección 8 del self-test instala tu perfil en un repo temporal, verifica que el
-   dry-run **no escriba**, que el config generado traiga tus extensiones y que `gate.signals` haya
-   quedado intacto.
+3. `npm run gate`. Dos señales lo cubren:
+   - la **sección 8 del self-test** instala tu perfil en un repo temporal y verifica que el dry-run
+     no escriba, que el config generado traiga tus extensiones, que `gate.signals` quede intacto y
+     que el arnés instalado no apunte a la nada;
+   - el **banco de perfiles** (`node scripts/harness-bench.mjs`) instala el arnés en un repo de
+     juguete de tu stack, con archivos **reales** del lenguaje, y verifica el encaje: que el
+     `matcher` de DEPS case tu manifiesto de verdad, que `purityImportSyntax` cace tu sintaxis de
+     import, que `tests.filePattern` reconozca tu layout y que los hooks muerdan. Si agregás un
+     perfil, agregá su *fixture* ahí: sin eso, del perfil sólo se verifica la forma.
 
 No hace falta tocar ningún script: el instalador lee el directorio.

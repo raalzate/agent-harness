@@ -197,6 +197,12 @@ const COPIAR = [
   "scripts/harness-selftest.mjs",
   "scripts/docs-linkcheck.mjs",
   "scripts/artifacts-check.mjs",
+  // Documentos AGNÓSTICOS que el arnés instalado cita: sin ellos, el propio arnés arranca
+  // apuntando a la nada en el repo destino (P10 violado por el instalador). Lo destapó el
+  // banco de perfiles: `docs-linkcheck` del repo portado salía rojo el primer día.
+  "docs/sdd.md",
+  "docs/buenas-practicas.md",
+  "docs/trazabilidad.md",
   ".githooks/pre-commit",
   ".githooks/commit-msg",
   ".githooks/pre-push",
@@ -209,6 +215,11 @@ const PLANTILLAS = [
   ["plantillas/STATUS.md", "STATUS.md"],
   ["plantillas/gotchas.md", "docs/gotchas.md"],
   ["plantillas/harness.config.json", ".claude/harness.config.json"],
+  ["plantillas/arnes.md", "docs/arnes.md"],
+  // Crea `docs/decisions/` —que la guía y trazabilidad citan— y deja la plantilla adentro:
+  // el directorio vacío no existe en git, y una decisión sin dónde escribirse no se escribe.
+  ["plantillas/ADR.md", "docs/decisions/PLANTILLA.md"], // linkcheck:ignora — ruta del DESTINO, no de acá
+  ["plantillas/ci.yml", ".github/workflows/ci.yml"],
 ];
 
 const EJECUTABLES = new Set([
