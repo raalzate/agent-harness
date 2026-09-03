@@ -108,6 +108,16 @@ function sampleFromPattern(pattern) {
   // cualquier patrón con `\{` o `\[`, que es medio CSS.
   if (/[\\[\]{}]/.test(s) || !s.trim()) return null;
   for (const [c, ph] of Object.entries(PH)) s = s.split(ph).join(c);
+
+  // Y lo último: la muestra tiene que casar el patrón del que salió. Sin esta línea, una
+  // reducción imperfecta devolvía un ejemplo que NO casa (`\brm\b[^|;&]*tareas\.json` daba
+  // «rmtareas.json») y el caso reportaba ROJO un freno que funcionaba. Un falso rojo enseña a
+  // ignorar la sección entera; «omitido» dice la verdad: no pude fabricar el ejemplo.
+  try {
+    if (!new RegExp(pattern).test(s)) return null;
+  } catch {
+    return null;
+  }
   return s;
 }
 
@@ -262,6 +272,29 @@ for (const [donde, pattern] of patronesDelConfig) {
   }
 }
 if (!regexMalos) ok(`${patronesDelConfig.filter(([, p]) => p).length} regex del config compilan`);
+
+// Invariante del generador: la muestra que fabrica DEBE casar el patrón del que salió, o ser
+// null. Sin él, una reducción imperfecta produce un falso rojo sobre un freno que funciona —
+// pasó con `\brm\b[^|;&]*tareas\.json`, que se reducía a «rmtareas.json».
+{
+  const noReducible = "\\brm\\b[^|;&]*tareas\\.json";
+  if (sampleFromPattern(noReducible) === null) ok("una muestra que no casa su patrón se reporta omitida, no roja");
+  else bad("la muestra derivada casa su patrón", `\`${noReducible}\` produjo \`${sampleFromPattern(noReducible)}\`, que NO casa: eso es un falso rojo`);
+
+  const mentirosas = patronesDelConfig
+    .filter(([, p]) => p)
+    .map(([donde, p]) => [donde, p, sampleFromPattern(p)])
+    .filter(([, p, muestra]) => {
+      if (muestra === null) return false;
+      try {
+        return !new RegExp(p).test(muestra);
+      } catch {
+        return false;
+      }
+    });
+  if (!mentirosas.length) ok("todas las muestras derivadas del config casan su patrón");
+  else bad("las muestras derivadas casan su patrón", mentirosas.map(([d, p, m]) => `${d}: \`${p}\` → \`${m}\``).join("\n      "));
+}
 
 const rutasDelConfig = [
   ["incidents.file", config.incidents?.file],

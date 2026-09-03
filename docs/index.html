@@ -564,6 +564,10 @@ node scripts/harness-init.mjs /ruta/a/tu/repo --apply</code></pre>
         <p style="margin-top:.9rem;color:var(--ink-soft)">El self-test va a estar rojo recién
           instalado, y está bien: el config de arranque trae placeholders a propósito. Ese rojo es el
           mapa de lo que falta — cada línea nombra la clave que todavía apunta a la nada.</p>
+        <p style="margin-top:.9rem"><strong>¿Preferís verlo funcionar primero?</strong> El
+          <a href="https://github.com/raalzate/agent-harness/blob/main/docs/quickstart.md">quick start</a>
+          son 10 minutos: un to-do de cuatro archivos, el arnés instalado, tres frenos mordiendo con
+          la salida real, y el gate en rojo a propósito para ver el error que le llega al agente.</p>
       </div>
     </div>
   </div>
@@ -631,7 +635,7 @@ DRY-RUN: 38 archivo(s) a copiar, 0 conservado(s).</code></pre>
           self-test mira la <strong>forma</strong>, no el <strong>encaje</strong>. Por eso una señal
           del gate instala el arnés en un repo de juguete de cada stack —con un <code>.csproj</code>
           de verdad, un <code>pom.xml</code> de verdad— y verifica que los frenos muerdan ahí:
-          <strong>96 comprobaciones sobre 8 stacks</strong>. En su primera corrida encontró dos bugs
+          <strong>105 comprobaciones sobre 9 repos de juguete</strong>. En su primera corrida encontró dos bugs
           que ninguna otra señal veía, uno de ellos un <em>falso rojo</em> que sólo aparecía fuera de
           JS.</p>
       </div>
@@ -641,7 +645,7 @@ DRY-RUN: 38 archivo(s) a copiar, 0 conservado(s).</code></pre>
 
 <section id="stacks">
   <div class="wrap sec-inner">
-    <p class="rail"><b>7</b>configs completas, no plantillas vacías</p>
+    <p class="rail"><b>8</b>configs completas, no plantillas vacías</p>
     <div>
       <div class="col stack">
         <p class="eyebrow">Configs de ejemplo</p>
@@ -670,7 +674,7 @@ DRY-RUN: 38 archivo(s) a copiar, 0 conservado(s).</code></pre>
 
 <section id="documentacion">
   <div class="wrap sec-inner">
-    <p class="rail"><b>16</b>documentos, en cuatro capas</p>
+    <p class="rail"><b>17</b>documentos, en cuatro capas</p>
     <div>
       <div class="col stack">
         <p class="eyebrow">Documentación</p>
@@ -691,6 +695,7 @@ DRY-RUN: 38 archivo(s) a copiar, 0 conservado(s).</code></pre>
             <tr><td><a href="https://github.com/raalzate/agent-harness/blob/main/docs/buenas-practicas.md">buenas-practicas.md</a></td><td>La guía de fondo, agnóstica de stack: qué es un arnés, las cinco decisiones del bucle, los niveles de madurez L0–L4.</td></tr>
 
             <tr><td colspan="2" class="grupo">Cómo — la práctica</td></tr>
+            <tr><td><a href="https://github.com/raalzate/agent-harness/blob/main/docs/quickstart.md">quickstart.md</a></td><td><strong>Empezá acá.</strong> De cero a gate verde en 10 minutos con un to-do de cuatro archivos: tres frenos mordiendo con salida real, y el gate rojo a propósito.</td></tr>
             <tr><td><a href="https://github.com/raalzate/agent-harness/blob/main/docs/portar.md">portar.md</a></td><td>La receta: instalarlo en un repo cualquiera en una tarde, con las preguntas a contestar y en qué orden.</td></tr>
             <tr><td><a href="https://github.com/raalzate/agent-harness/blob/main/docs/perfiles.md">perfiles.md</a></td><td>Perfiles de stack del instalador (.NET, JVM, Python, Go, Rust, front): qué hecho del lenguaje viaja, qué regla no viaja nunca y el freno que lo mantiene así.</td></tr>
             <tr><td><a href="https://github.com/raalzate/agent-harness/blob/main/docs/trazabilidad.md">trazabilidad.md</a></td><td>Que el trabajo quede registrado y cómo entra a la rama principal, en cualquier forja.</td></tr>
@@ -770,14 +775,16 @@ DRY-RUN: 38 archivo(s) a copiar, 0 conservado(s).</code></pre>
         L("Gate (modo: full) — agent-harness", "dim"),
         L(""),
         L("──▶ self-test del arnés"),
-        L("  ✓ 58 regex del config compilan", "ok"),
-        L("  ✓ 27 rutas del config resuelven", "ok"),
+        L("  ✓ 64 regex del config compilan", "ok"),
+        L("  ✓ 16 rutas del config resuelven", "ok"),
         L("  ✓ protected-paths bloquea `.env`", "ok"),
         L("  ✓ bash-guard bloquea `git reset --hard`", "ok"),
         L("  ✓ bash-guard deja pasar `git status`", "ok"),
         L("  ✓ lint INCIDENTE exige `Mecanismo:` en cada gotcha", "ok"),
         L("  ✓ commit-msg: código sin referencia ni declaración", "ok"),
-        L("  ✓ artifacts-check caza un artefacto suelto", "ok"),
+        L("  ✓ post-edit-check marca el gate al tocar `.cs`", "ok"),
+        L("  ✓ protected-paths bloquea el alias interno", "ok"),
+        L("  ✓ perfil `dotnet` → config instalable", "ok"),
         L("  – fases SDD instaladas (omitido: sin kit declarado)", "sk"),
         L("SELF-TEST VERDE — cada regla del config tiene un", "dim"),
         L("comando que falla si se la viola.", "dim"),
@@ -796,31 +803,31 @@ DRY-RUN: 38 archivo(s) a copiar, 0 conservado(s).</code></pre>
         L("    ✓ artefactos en su lugar", "ok"),
         L(""),
         L("──▶ banco de perfiles (stacks reales)"),
-        L("BANCO VERDE — 96 comprobaciones sobre 8 stacks", "dim"),
+        L("BANCO VERDE — 105 comprobaciones sobre 9 repos de juguete", "dim"),
         L("    ✓ banco de perfiles (stacks reales)", "ok"),
         L(""),
         L("GATE VERDE — entregable.", "ok")
       ]
     },
     rojo: {
-      nota: "Un gotcha sin la línea `Mecanismo:` es prosa que se va a volver a pagar. El error viene con archivo, línea y regla: presupuesto de 2 intentos sobre el mismo error.",
+      nota: "Un gotcha sin la línea `Mecanismo:` es prosa que se va a volver a pagar. El error viene con archivo, línea y regla: presupuesto de 2 intentos sobre el mismo error. Ojo al orden: el gate NO se detiene en la primera señal roja — corre todas, porque saber que además faltan tres cosas cambia el plan.",
       lineas: [
         L("$ npm run gate", "cmd"),
         L("Gate (modo: full) — agent-harness", "dim"),
         L(""),
         L("──▶ self-test del arnés"),
+        L("SELF-TEST VERDE — cada regla del config tiene un", "dim"),
+        L("comando que falla si se la viola.", "dim"),
         L("    ✓ self-test del arnés", "ok"),
         L(""),
         L("──▶ link-check de docs"),
+        L("docs-linkcheck: ok", "dim"),
         L("    ✓ link-check de docs", "ok"),
-        L(""),
-        L("──▶ artefactos en su lugar"),
-        L("    ✓ artefactos en su lugar", "ok"),
         L(""),
         L("──▶ lint de convenciones"),
         L("repo-lint: 1 problema(s)", "dim"),
         L(""),
-        L("  docs/gotchas.md:86  [INCIDENTE]  el gotcha", "no"),
+        L("  docs/gotchas.md:344  [INCIDENTE]  el gotcha", "no"),
         L("  «cebo temporal» no declara `Mecanismo:`.", "no"),
         L("  Formato fijo: Síntoma: · Causa: · Regla: ·", "no"),
         L("  Mecanismo:", "no"),
@@ -830,37 +837,53 @@ DRY-RUN: 38 archivo(s) a copiar, 0 conservado(s).</code></pre>
         L("— no se ignora.", "dim"),
         L("    ✗ lint de convenciones", "no"),
         L(""),
+        L("──▶ artefactos en su lugar"),
+        L("artifacts-check: OK — artefactos en el gestor", "dim"),
+        L("    ✓ artefactos en su lugar", "ok"),
+        L(""),
+        L("──▶ banco de perfiles (stacks reales)"),
+        L("BANCO VERDE — 105 comprobaciones sobre 9 repos de juguete", "dim"),
+        L("    ✓ banco de perfiles (stacks reales)", "ok"),
+        L(""),
         L("GATE ROJO — señales fallidas: lint de convenciones", "no"),
         L("Leé el error real (archivo, línea, mensaje) antes", "dim"),
-        L("de reintentar.", "dim")
+        L("de reintentar. Presupuesto: 2 intentos sobre el", "dim"),
+        L("mismo error.", "dim")
       ]
     },
     omitida: {
-      nota: "Omitida ≠ pasó. Se imprime aparte, siempre. Y si NINGUNA señal llegó a correr, el gate es rojo: pasó una vez —un separador de campos mal elegido— y reportó «entregable».",
+      nota: "Omitida ≠ pasó, y verde en modo fast ≠ entregable. Las dos cosas se imprimen aparte, siempre. Y si NINGUNA señal llegó a correr, el gate es rojo: pasó una vez —un separador de campos mal elegido— y reportó «entregable».",
       lineas: [
-        L("$ npm run gate", "cmd"),
-        L("Gate (modo: full) — proyecto-portado", "dim"),
+        L("$ npm run gate:fast", "cmd"),
+        L("Gate (modo: fast) — agent-harness", "dim"),
         L(""),
-        L("──▶ typecheck"),
-        L("    ✓ typecheck", "ok"),
+        L("──▶ self-test del arnés"),
+        L("    ✓ self-test del arnés", "ok"),
         L(""),
-        L("──▶ tests con cobertura"),
-        L("    ✓ tests con cobertura", "ok"),
+        L("──▶ link-check de docs"),
+        L("docs-linkcheck: ok", "dim"),
+        L("    ✓ link-check de docs", "ok"),
         L(""),
-        L("──▶ e2e de la app web"),
-        L("    – OMITIDA: no existe `apps/web`", "sk"),
-        L("      (omitido ≠ pasó)", "sk"),
+        L("──▶ lint de convenciones"),
+        L("repo-lint: OK", "dim"),
+        L("    ✓ lint de convenciones", "ok"),
         L(""),
-        L("──▶ política (OPA/conftest)"),
-        L("    – OMITIDA: no existe `policy`", "sk"),
-        L("      (omitido ≠ pasó)", "sk"),
+        L("──▶ artefactos en su lugar"),
+        L("artifacts-check: OK — artefactos en el gestor", "dim"),
+        L("    ✓ artefactos en su lugar", "ok"),
+        L(""),
+        L("──▶ banco de perfiles (stacks reales)"),
+        L("    – omitida en modo fast", "sk"),
         L(""),
         L("Señales omitidas (NO son verde):", "sk"),
-        L("  e2e de la app web · política (OPA/conftest)", "sk"),
+        L("  banco de perfiles (stacks reales)", "sk"),
         L(""),
-        L("GATE VERDE — entregable.", "ok"),
-        L("…con dos huecos declarados. Un hueco escrito se", "dim"),
-        L("puede cerrar; uno tácito, no.", "dim")
+        L("GATE FAST VERDE — señal de desarrollo.", "sk"),
+        L("NO es entregable: faltan las señales lentas.", "sk"),
+        L(""),
+        L("(la otra forma de omitir: `skipIfMissing`, cuando", "dim"),
+        L("una herramienta no está instalada o CI no tiene", "dim"),
+        L("el índice. También se imprime, nunca se confunde.", "dim")
       ]
     }
   };

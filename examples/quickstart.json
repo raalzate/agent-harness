@@ -1,0 +1,275 @@
+{
+  "$comment": "Config del QUICK START (docs/quickstart.md): un to-do de consola de cuatro archivos. Es el ejemplo más chico que igual muestra las cuatro clases de freno — capa pura, único lector, ruta protegida y comando sin ctrl-Z — y cada regla nace de una cicatriz del propio ejemplo, no de una hipótesis. Sirve para leer un config completo de una sentada; para tu repo, escribí el tuyo (docs/portar.md).",
+  "gate": {
+    "$comment": "Cinco señales: las cuatro que trae el arnés más los tests de la lógica. El self-test va primero porque un freno roto invalida todo lo que venga después.",
+    "command": "npm run gate",
+    "fastCommand": "npm run gate:fast",
+    "marker": ".git/gate-dirty",
+    "codeGlobs": [
+      "src/",
+      "tests/"
+    ],
+    "codeExtensions": [
+      ".mjs"
+    ],
+    "installHooksCommand": "npm run hooks:install",
+    "signals": [
+      {
+        "name": "self-test del arnés",
+        "command": [
+          "node",
+          "scripts/harness-selftest.mjs"
+        ],
+        "why": "un hook roto o un config que apunta a la nada fallan en silencio: ninguna otra señal los ve"
+      },
+      {
+        "name": "link-check de docs",
+        "command": [
+          "node",
+          "scripts/docs-linkcheck.mjs"
+        ],
+        "why": "un puntero roto manda al agente a leer un archivo que no existe y le gasta el turno"
+      },
+      {
+        "name": "lint de convenciones",
+        "command": [
+          "node",
+          "scripts/repo-lint.mjs"
+        ],
+        "why": "las reglas de este repo que ningún compilador ve: la capa pura y el único lector del archivo de datos"
+      },
+      {
+        "name": "tests de la lógica",
+        "command": [
+          "node",
+          "--test"
+        ],
+        "why": "el comportamiento del puntaje: es lo único que garantiza que «urgente» siga pesando más que «algún día»"
+      },
+      {
+        "name": "artefactos en su lugar",
+        "command": [
+          "node",
+          "scripts/artifacts-check.mjs"
+        ],
+        "why": "un plan suelto en el repo cuando el trabajo vive en el gestor deja el registro partido en dos"
+      }
+    ]
+  },
+  "protectedPaths": [
+    {
+      "pattern": "^tareas\\.json$",
+      "reason": "son los datos del usuario. Se cambian con el CLI (`node src/cli.mjs agregar …`), nunca editando el archivo: un JSON mal escrito a mano deja la lista ilegible y sin backup."
+    },
+    {
+      "pattern": "^\\.env",
+      "reason": ".env* es la llave del reino: lo edita el humano, nunca el agente."
+    },
+    {
+      "pattern": "^package-lock\\.json$",
+      "reason": "el lockfile se regenera con `npm install`, no se edita a mano."
+    },
+    {
+      "pattern": "^\\.git/",
+      "reason": "historia de git: fuera del alcance del agente."
+    }
+  ],
+  "bash": {
+    "$comment": "Lo irreversible de ESTE proyecto es una sola cosa: borrar la lista de tareas. Lo demás son los clásicos de git.",
+    "deny": [
+      {
+        "pattern": "rm\\s+[^|;&]*tareas\\.json",
+        "reason": "`tareas.json` es el único estado del programa y no hay backup. Si querés empezar de cero, movelo: `mv tareas.json tareas.json.bak`."
+      },
+      {
+        "pattern": "--no-ver[i]fy",
+        "reason": "saltarse los hooks de verificación está prohibido. Si el gate estorba, se arregla el gate."
+      },
+      {
+        "pattern": "git\\s+reset\\s+--hard",
+        "reason": "destruye trabajo sin commitear. Usá `git stash` o pedí confirmación."
+      },
+      {
+        "pattern": "git\\s+push\\s+.*--force(?!-with-lease)",
+        "reason": "`--force` reescribe historia remota. Usá --force-with-lease."
+      }
+    ]
+  },
+  "reuse": [
+    {
+      "$comment": "La cicatriz: alguien escribió un segundo `readFileSync(\"tareas.json\")` en el CLI, y la validación del almacén dejó de aplicarse a la mitad de las lecturas.",
+      "pattern": "readFileSync\\([^)]*tareas\\.json",
+      "appliesTo": "^src/(?!almacen\\.mjs)",
+      "reason": "leer o escribir `tareas.json` es trabajo de `src/almacen.mjs`, que valida el formato y no revienta si el archivo no existe. Un segundo lector duplica esa lógica y se desincroniza.",
+      "see": "src/almacen.mjs"
+    }
+  ],
+  "lint": {
+    "command": [
+      "node",
+      "scripts/repo-lint.mjs"
+    ],
+    "fileFlag": "--file"
+  },
+  "purity": [
+    {
+      "$comment": "La regla de mayor retorno: la lógica del puntaje no toca disco ni consola, así que se puede probar sin montar nada y sobrevive a cualquier cambio de interfaz.",
+      "dir": "src/lib",
+      "forbiddenImports": [
+        "node:fs",
+        "fs",
+        "node:path"
+      ],
+      "except": [],
+      "reason": "`src/lib` decide, el resto orquesta: si la lógica lee el disco, testearla exige un archivo de verdad y deja de ser lógica."
+    }
+  ],
+  "forbiddenDeps": {
+    "$comment": "El ejemplo corre con node desnudo a propósito: es lo que lo hace clonable sin `npm install`. Fechas con `Date`, ordenar con `sort`.",
+    "manifest": "package.json",
+    "matcher": "^\\s*[\"']?{pkg}[\"']?\\s*[:=]",
+    "packages": [
+      "moment",
+      "lodash",
+      "chalk"
+    ],
+    "reason": "tres dependencias para lo que node ya hace: fechas, utilidades y color. Cada una es un `npm install` entre el clon y el primer `node src/cli.mjs`."
+  },
+  "tests": {
+    "filePattern": "(^|/)tests?/|\\.test\\.mjs$",
+    "onlyPattern": "\\b(describe|it|test)\\.only\\("
+  },
+  "incidents": {
+    "file": "docs/gotchas.md",
+    "heading": "### GOTCHA",
+    "requiredLines": [
+      "Síntoma:",
+      "Causa:",
+      "Regla:",
+      "Mecanismo:"
+    ]
+  },
+  "docs": {
+    "ignore": [
+      "node_modules",
+      ".git",
+      "coverage"
+    ],
+    "ignoreFiles": [
+      "docs/buenas-practicas.md"
+    ],
+    "externalPaths": []
+  },
+  "status": {
+    "file": "STATUS.md",
+    "reminder": "Recordá: nada se entrega sin `npm run gate` verde · el puntaje vive en `src/lib/` · los datos se tocan con el CLI."
+  },
+  "askFirst": {
+    "$comment": "Viene de la plantilla y se deja tal cual: los patrones son del idioma, no de este proyecto.",
+    "marker": ".git/agent-answer-first",
+    "questionPatterns": [
+      "^\\s*¿",
+      "\\?\\s*$",
+      "^\\s*(qu[eé]|por\\s?qu[eé]|c[oó]mo|cu[aá]l(es)?|cu[aá]ndo|d[oó]nde|qui[eé]n|para\\s?qu[eé])(?=\\s|$|[,:])",
+      "^\\s*(hay|existe|sirve|conviene|se puede|pod[eé]s|sab[eé]s|vale la pena)(?=\\s|$|[,:])"
+    ],
+    "actionPatterns": [
+      "\\b(arregl|corrig|implement|agreg|a[ñn]ad|cambi|escrib|cre[aá]|aplic|instal|port|actualiz|borr|elimin|quit|refactor|migr|public|commit|push|generá|genera|hacelo|haz|dale|proced)"
+    ],
+    "message": "Esto es una **pregunta**: contestala con lo que ya sabés o leyendo lo que haga falta. **No edites archivos del repo**: el hook `action-guard` los va a bloquear hasta el próximo pedido del humano.",
+    "pastPatterns": [
+      "\\b\\w+(aste|iste|aron|ieron|abas|amos|imos)(?=\\s|$|[,.?!])",
+      "\\b\\w+(ó|ió)(?=\\s|$|[,.?!])"
+    ],
+    "strongQuestionPatterns": [
+      "^\\s*¿",
+      "^\\s*(qu[eé]|por\\s?qu[eé]|c[oó]mo|cu[aá]l(es)?|cu[aá]ndo|d[oó]nde|qui[eé]n|para\\s?qu[eé])(?=\\s|$|[,:])"
+    ],
+    "directRequestPatterns": [
+      "\\b(pod[eé]s|puedes|podr[ií]as|te pido|por favor|necesito que|quiero que)\\b"
+    ]
+  },
+  "branches": {
+    "protected": [
+      "main"
+    ],
+    "reason": "el trabajo entra por pull request, con su revisión y su gate en verde. Un push directo entra sin que nadie lo mire."
+  },
+  "sdd": {
+    "$comment": "Sin kit SDD: el valor está en el ruteo, que pone el criterio delante del agente antes de que edite.",
+    "kit": "ninguno",
+    "skillRoots": [
+      "~/.claude/skills",
+      ".claude/skills"
+    ],
+    "phases": [],
+    "specsDir": "specs",
+    "activeFeaturePointer": "",
+    "routes": [
+      {
+        "route": "sdd",
+        "patterns": [
+          "\\bnueva (feature|funcionalidad|pantalla)\\b",
+          "\\bmvp\\b",
+          "\\breescrib(ir|e)\\b"
+        ],
+        "message": "Pedido de tamaño FEATURE → spec, plan y tareas en el ítem de trabajo antes de tocar `src/`."
+      },
+      {
+        "route": "bugfix",
+        "patterns": [
+          "\\bbug\\b",
+          "\\bfalla\\b",
+          "\\bno funciona\\b",
+          "\\bse rompe\\b"
+        ],
+        "message": "Falla sobre algo que ya existe → test rojo que la reproduzca ANTES de tocar producción."
+      },
+      {
+        "route": "clarify",
+        "patterns": [
+          "\\bno s[ée] si\\b",
+          "\\balgo as[íi]\\b",
+          "\\bcomo veas\\b"
+        ],
+        "message": "Pedido ambiguo → preguntá UNA sola cosa antes de tocar archivos."
+      },
+      {
+        "route": "none",
+        "patterns": [
+          "\\btypo\\b",
+          "\\brenombrar\\b",
+          "\\bdocumentar\\b"
+        ],
+        "message": ""
+      }
+    ]
+  },
+  "tracker": {
+    "$comment": "Forja: GitHub. Lo único que las máquinas leen es `issuePattern`.",
+    "kind": "github",
+    "issuePattern": "(^|[^A-Za-z0-9_])#[0-9]+",
+    "issueExample": "#12 · Refs #12 · Closes #12",
+    "newIssueHint": [
+      "gh issue create --title \"…\" --body \"…\""
+    ],
+    "artifactsIn": "tracker",
+    "specsDir": "specs",
+    "allowedInRepo": []
+  },
+  "commitMsg": {
+    "codePattern": "^(src/|tests/|scripts/)",
+    "ignoreExtensions": [
+      ".md",
+      ".png",
+      ".svg"
+    ],
+    "skipSubjects": [
+      "Merge ",
+      "Revert ",
+      "fixup! ",
+      "squash! "
+    ],
+    "escapeLine": "sin-issue:"
+  }
+}

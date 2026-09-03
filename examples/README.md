@@ -5,6 +5,7 @@ hacer las preguntas de [`../docs/portar.md`](../docs/portar.md) en ese stack.
 
 | Archivo | Repo típico | Forja | Lo que muestra de particular |
 |---|---|---|---|
+| [`quickstart.json`](quickstart.json) | el to-do de cuatro archivos de [`quickstart.md`](../docs/quickstart.md) | GitHub `#123` | **el más chico que igual muestra las cuatro clases de freno**: capa pura, único lector, ruta protegida y comando sin ctrl-Z. Se lee de una sentada |
 | [`node-typescript.json`](node-typescript.json) | app o librería TS con vitest | GitHub `#123` | `typecheck` como señal irremplazable; `purity` de la capa de dominio |
 | [`python.json`](python.json) | servicio FastAPI/Django con pytest | GitLab `#123` | `ruff` + `mypy` + `pytest` son tres señales; migraciones aplicadas = inmutables |
 | [`go.json`](go.json) | servicio Go | Jira `PROJ-123` | `vet`/`build`/`test -race` no se reemplazan; artefactos **en el repo**, no en el gestor |
@@ -17,7 +18,7 @@ La columna **Forja** está a propósito: cinco gestores distintos con el mismo m
 script del arnés conoce ninguno — lo único que cambia es `tracker.issuePattern`. Ver
 [trazabilidad.md](../docs/trazabilidad.md).
 
-Los siete archivos los verifica el gate (sección 8 del self-test): parsean, sus regex compilan,
+Los ocho archivos los verifica el gate (sección 8 del self-test): parsean, sus regex compilan,
 cada señal declara su `why`, y un manifiesto que no es clave-valor trae su `matcher`. Un ejemplo
 roto viaja igual que un script roto.
 
