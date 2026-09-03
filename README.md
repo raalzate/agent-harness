@@ -11,6 +11,11 @@ pasada, con el transcript del gate y sus tres veredictos.
 
 > **La frase que resume todo:** una regla sin un comando que la haga fallar es una sugerencia.
 
+**Primera vez acá → [docs/quickstart.md](docs/quickstart.md).** Diez minutos: un to-do de cuatro
+archivos, el arnés instalado, tres frenos mordiendo con la salida real, y el gate en rojo a
+propósito para ver el error que le llega al agente. Todas las salidas de ese documento se corrieron
+tal como están escritas.
+
 Este repo documenta **el método** de ingeniería de arnés ([docs/metodo.md](docs/metodo.md)), lo
 muestra aplicado sobre un producto real ([docs/caso-de-estudio.md](docs/caso-de-estudio.md)), y
 entrega los mecanismos listos para copiar.
@@ -45,21 +50,31 @@ guiado paso a paso en **[docs/portar.md](docs/portar.md)**.
 ```
 .claude/
   settings.json          en qué momento del ciclo del agente corre cada hook
-  harness.config.json    ← EL ÚNICO archivo específico de tu repo
-  hooks/                 8 hooks genéricos: leen la config, no tienen nada cableado
+  harness.config.json    ← EL ÚNICO archivo específico de tu repo (lo llena el perfil del stack)
+  hooks/                 11 hooks genéricos: leen la config, no tienen nada cableado
   agents/                explorer · reviewer · gate-runner
   commands/              /gate · /lesson · /harness-audit · /harness-port
   skills/nuevo-freno/    convierte una regla en prosa en un freno ejecutable
 scripts/
   gate.sh                el gate: ejecuta las señales declaradas en el config
-  repo-lint.mjs          las reglas del repo que ningún compilador ve
+  repo-lint.mjs          las reglas del repo que ningún compilador ve (8 clases)
   harness-selftest.mjs   prueba de vida: ¿cada regla tiene un comando que la hace fallar?
   docs-linkcheck.mjs     que la memoria del agente no apunte a la nada
-  harness-init.mjs       el instalador
-.githooks/               pre-commit real + post-commit opcional
-plantillas/              CONSTITUTION · CLAUDE · STATUS · gotchas · ADR · config de arranque
-examples/                configs completas: TypeScript · Python · Go · monorepo · Terraform
+  artifacts-check.mjs    que spec, plan y tareas estén donde el equipo declaró
+.githooks/               pre-commit · commit-msg · pre-push · post-commit
+docs/                    la teoría que el arnés cita: sdd · buenas-practicas · trazabilidad
+.github/workflows/ci.yml plantilla: el MISMO gate en CI, con el setup de tu stack comentado
+plantillas/              CONSTITUTION · CLAUDE · STATUS · gotchas · ADR · arnés · config de arranque
 ```
+
+El instalador detecta tu stack por el manifiesto y aplica su **perfil** (Node, front, .NET,
+Maven, Gradle, Python, Go, Rust): qué extensión es código, cómo se escribe un import, dónde viven
+las dependencias, qué directorios son derivados. Reglas y señales del gate **no** viajan: ver
+[docs/perfiles.md](docs/perfiles.md).
+
+Además, en el repo del arnés: `examples/` con **8 configs completas** (Node, front, .NET, Spring,
+Python, Go, monorepo, Terraform) y `scripts/harness-bench.mjs`, que instala el arnés en un repo de
+juguete de cada stack y verifica que los frenos muerdan ahí.
 
 ## Las cinco piezas, y qué problema resuelve cada una
 

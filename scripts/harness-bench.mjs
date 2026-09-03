@@ -298,6 +298,8 @@ const correr = (cmd, args, opts = {}) => {
 const hook = (repo, archivo, payload) =>
   correr("node", [path.join(repo, ".claude/hooks", archivo)], { input: JSON.stringify(payload), cwd: repo });
 
+const hook_ = (repo, archivo, payload) => hook(repo, archivo, payload).status;
+
 const escritura = (repo, rel) => ({
   cwd: repo,
   hook_event_name: "PreToolUse",
@@ -463,6 +465,129 @@ function probar(stack, fx) {
   }
 }
 
+// ── El quick start, extraído del propio documento ────────────────────────────
+
+/**
+ * `docs/quickstart.md` promete que sus salidas son reales. Sin un mecanismo, esa promesa dura
+ * hasta el próximo cambio del arnés.
+ *
+ * La app NO se escribe acá: se **extrae del documento** (sus bloques `cat > archivo <<EOF`), que
+ * es la única forma de que no haya dos versiones del mismo código. Después se instala el arnés,
+ * se copia `examples/quickstart.json` —el config que el documento manda copiar— y se verifica lo
+ * que el documento afirma: los frenos muerden, el gate sale verde, y romper la capa pura lo pone
+ * rojo con archivo, línea y regla.
+ */
+function archivosDelDocumento(md) {
+  const archivos = {};
+  const bloque = /cat > (\S+) <<'EOF'\n([\s\S]*?)\nEOF/g;
+  for (const [, ruta, contenido] of md.matchAll(bloque)) archivos[ruta] = `${contenido}\n`;
+  return archivos;
+}
+
+function probarQuickStart() {
+  console.log(`\n── quick start ${"─".repeat(48)}`);
+  const stack = "quickstart";
+  const doc = path.join(ARNES, "docs/quickstart.md");
+  const configEjemplo = path.join(ARNES, "examples/quickstart.json");
+  if (!fs.existsSync(doc) || !fs.existsSync(configEjemplo)) {
+    registrar(stack, "el quick start existe", false, "falta docs/quickstart.md o examples/quickstart.json");
+    return;
+  }
+
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), "banco-quickstart-"));
+  const repo = path.join(base, "mi-todo");
+  try {
+    const archivos = archivosDelDocumento(fs.readFileSync(doc, "utf8"));
+    const esperados = ["src/lib/puntaje.mjs", "src/almacen.mjs", "src/cli.mjs", "tests/puntaje.test.mjs"];
+    const faltantes = esperados.filter((f) => !archivos[f]);
+    if (faltantes.length) {
+      registrar(stack, "la app sale del documento", false, `el documento ya no crea: ${faltantes.join(", ")}`);
+      return;
+    }
+    registrar(stack, `la app sale del documento (${Object.keys(archivos).length} archivos)`, true);
+
+    for (const [rel, contenido] of Object.entries(archivos)) {
+      const dest = path.join(repo, rel);
+      fs.mkdirSync(path.dirname(dest), { recursive: true });
+      fs.writeFileSync(dest, contenido);
+    }
+    fs.writeFileSync(
+      path.join(repo, "package.json"),
+      `${JSON.stringify(
+        {
+          name: "mi-todo",
+          version: "0.1.0",
+          private: true,
+          type: "module",
+          scripts: {
+            gate: "bash scripts/gate.sh",
+            "gate:fast": "bash scripts/gate.sh fast",
+            selftest: "node scripts/harness-selftest.mjs",
+            lint: "node scripts/repo-lint.mjs",
+            test: "node --test",
+          },
+        },
+        null,
+        2,
+      )}\n`,
+    );
+    fs.writeFileSync(path.join(repo, ".gitignore"), "node_modules/\ncoverage/\n");
+    correr("git", ["init", "-q", "-b", "main", repo]);
+    correr("git", ["-C", repo, "config", "user.email", "banco@example.com"]);
+    correr("git", ["-C", repo, "config", "user.name", "banco"]);
+
+    // Lo primero que promete el documento: la app corre y sus tests pasan.
+    const tests = correr("node", ["--test"], { cwd: repo });
+    registrar(stack, "los tests de la app pasan", tests.status === 0, tests.salida.trim().slice(-200));
+    const cli = correr("node", ["src/cli.mjs"], { cwd: repo });
+    registrar(stack, "el CLI corre", cli.status === 0 && /nada pendiente|→/.test(cli.salida), cli.salida.trim());
+
+    const init = correr("node", [path.join(ARNES, "scripts/harness-init.mjs"), repo, "--apply"]);
+    if (init.status !== 0) {
+      registrar(stack, "instalación", false, init.salida.trim().slice(0, 200));
+      return;
+    }
+    fs.copyFileSync(configEjemplo, path.join(repo, ".claude/harness.config.json"));
+
+    // El documento afirma SELF-TEST VERDE con ese config, sin tocar nada más.
+    const self = correr("node", [path.join(repo, "scripts/harness-selftest.mjs")], { cwd: repo });
+    registrar(
+      stack,
+      "el self-test sale VERDE con el config del ejemplo",
+      self.status === 0,
+      self.salida.split("\n").filter((l) => l.includes("✗")).join("\n").slice(0, 300),
+    );
+
+    // Los tres frenos que el documento muestra mordiendo, con su exit=2.
+    const rechaza = (hook, payload) => hook_(repo, hook, payload) === 2;
+    registrar(stack, "bash-guard frena `rm tareas.json`", rechaza("bash-guard.mjs", {
+      cwd: repo,
+      hook_event_name: "PreToolUse",
+      tool_name: "Bash",
+      tool_input: { command: "rm tareas.json" },
+    }));
+    registrar(stack, "protected-paths frena editar `tareas.json`", rechaza("protected-paths.mjs", escritura(repo, "tareas.json")));
+    registrar(stack, "reuse-guard frena un segundo lector", rechaza("reuse-guard.mjs", {
+      ...escritura(repo, "src/cli.mjs"),
+      tool_input: { file_path: path.join(repo, "src/cli.mjs"), content: 'const t = JSON.parse(readFileSync("tareas.json"));' },
+    }));
+
+    // El gate verde, y el rojo a propósito que el documento muestra al final.
+    const verde = correr("bash", [path.join(repo, "scripts/gate.sh")], { cwd: repo });
+    registrar(stack, "el gate del quick start sale VERDE", verde.status === 0, verde.salida.split("\n").slice(-4).join("\n"));
+
+    const puro = path.join(repo, "src/lib/puntaje.mjs");
+    fs.writeFileSync(puro, `import { readFileSync } from "node:fs";\n${fs.readFileSync(puro, "utf8")}`);
+    const rojo = correr("bash", [path.join(repo, "scripts/gate.sh")], { cwd: repo });
+    const dice = /\[PUREZA\]/.test(rojo.salida) && /GATE ROJO/.test(rojo.salida);
+    registrar(stack, "romper la capa pura pone el gate ROJO con archivo, línea y regla", rojo.status !== 0 && dice, rojo.salida.split("\n").slice(-4).join("\n"));
+
+    if (CONSERVAR) console.log(`   · repo conservado en ${repo}`);
+  } finally {
+    if (!CONSERVAR) fs.rmSync(base, { recursive: true, force: true });
+  }
+}
+
 // ── Ejecución ────────────────────────────────────────────────────────────────
 
 console.log(`Banco de perfiles — arnés en ${ARNES}`);
@@ -472,6 +597,8 @@ for (const [stack, fx] of Object.entries(FIXTURES)) {
   if (SOLO && stack !== SOLO) continue;
   probar(stack, fx);
 }
+
+if (!SOLO || SOLO === "quickstart") probarQuickStart();
 
 // Resumen
 const porStack = new Map();
