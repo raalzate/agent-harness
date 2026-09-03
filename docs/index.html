@@ -137,6 +137,13 @@ h1 .sub { display: block; font-family: var(--f-mono); font-weight: 500; font-siz
 .thesis em { font-style: normal; box-shadow: inset 0 -.45em 0 color-mix(in srgb, var(--accent) 18%, transparent); }
 .hero-meta { margin-top: 1.75rem; display: flex; flex-wrap: wrap; gap: .5rem .75rem; font-family: var(--f-mono); font-size: var(--step--1); color: var(--ink-faint); }
 .chip { border: 1px solid var(--rule); padding: .18rem .5rem; border-radius: 2px; background: var(--surface); }
+.hero-cta { margin-top: 1.5rem; display: flex; flex-wrap: wrap; gap: .6rem .8rem; align-items: center; }
+.btn { display: inline-flex; align-items: center; gap: .45rem; font-family: var(--f-mono); font-size: var(--step--1); text-decoration: none; border-radius: 3px; padding: .55rem .9rem; border: 1px solid var(--rule); transition: transform .12s ease, box-shadow .12s ease; }
+.btn:hover { transform: translateY(-1px); box-shadow: 0 2px 0 var(--rule); }
+.btn-1 { background: var(--accent); color: var(--surface); border-color: var(--accent); font-weight: 700; }
+.btn-1:hover { box-shadow: 0 2px 0 var(--accent-ink); }
+.btn-2 { background: var(--surface); color: var(--ink); }
+.btn-nota { font-size: var(--step--1); color: var(--ink-faint); }
 
 /* ── Terminal ──────────────────────────────────────────────────────────── */
 .term { background: var(--term-bg); color: var(--term-ink); border-radius: 4px; overflow: hidden; box-shadow: 0 1px 0 var(--rule), 0 18px 40px -28px rgba(9,14,20,.55); }
@@ -237,6 +244,7 @@ footer { border-top: 4px solid var(--ink); }
     <div class="masthead">
       <span class="name">Agent&nbsp;Harness</span>
       <nav>
+        <a href="#quickstart">Quick&nbsp;start</a>
         <a href="#tesis">Tesis</a>
         <a href="#leyes">Método</a>
         <a href="#piezas">Piezas</a>
@@ -254,6 +262,11 @@ footer { border-top: 4px solid var(--ink); }
       <div>
         <h1><span class="sub">Arnés de agente portable</span>El gate<br>es el<br>entregable.</h1>
         <p class="thesis"><em>Una regla sin un comando que la haga fallar es una sugerencia.</em></p>
+        <p class="hero-cta">
+          <a class="btn btn-1" href="#quickstart">Quick start — 10 min</a>
+          <a class="btn btn-2" href="https://github.com/raalzate/agent-harness">Ver el repo ↗</a>
+          <span class="btn-nota">un ejemplo que corre, no una demo</span>
+        </p>
         <p class="hero-meta">
           <span class="chip">node + bash</span>
           <span class="chip">cero dependencias</span>
@@ -278,6 +291,77 @@ footer { border-top: 4px solid var(--ink); }
 </header>
 
 <main>
+
+<section id="quickstart">
+  <div class="wrap sec-inner">
+    <p class="rail"><b>10 min</b>un ejemplo que corre</p>
+    <div>
+      <div class="col stack">
+        <p class="eyebrow">Quick start</p>
+        <h2 style="font-size:var(--step-2)">La forma más rápida de entender esto es verlo frenar algo</h2>
+        <p>Un to-do de consola de <strong>cuatro archivos</strong> con una separación normal:
+          <code>src/lib/</code> decide (lógica pura), <code>src/almacen.mjs</code> es el único que
+          toca el archivo de datos, <code>src/cli.mjs</code> orquesta. Tres convenciones que al
+          principio viven <em>en la cabeza de quien escribió el código</em> — que es el punto de
+          partida de cualquier repo.</p>
+        <p>Al final de los diez minutos las tres son frenos que muerden, y el gate es una línea.
+          <strong>Cero código nuevo:</strong> sólo un JSON.</p>
+      </div>
+
+      <ol class="steps">
+        <li><div><h3>La app y sus tres convenciones</h3><p>Cuatro archivos y tres tests, copiar y pegar. <code>node --test</code> → <code>pass 3</code>.</p></div></li>
+        <li><div><h3>Instalar el arnés</h3><p><code>harness-init.mjs . --apply</code>. Detecta el stack por el manifiesto y aplica su perfil: extensiones, sintaxis de import, manifiesto de dependencias, derivados.</p></div></li>
+        <li><div><h3>Copiar un config ya escrito</h3><p><code>cp examples/quickstart.json .claude/harness.config.json</code> → <code>SELF-TEST VERDE</code>. Son 250 líneas comentadas: es el 80&nbsp;% de entender el arnés.</p></div></li>
+        <li><div><h3>Verlos morder, y romper el gate a propósito</h3><p>Tres hooks contestando <code>exit=2</code> con su motivo, y el gate en rojo con archivo, línea y regla. Un freno que nunca se vio fallar es una esperanza.</p></div></li>
+      </ol>
+
+      <div class="pair">
+        <figure class="panel">
+          <figcaption>las cuatro reglas del ejemplo</figcaption>
+          <pre><code><span class="k">purity</span>          src/lib no importa node:fs
+                <span class="s">si la lógica lee el disco, testearla
+                exige un archivo de verdad</span>
+
+<span class="k">reuse</span>           sólo almacen.mjs lee tareas.json
+                <span class="s">un segundo lector duplica la
+                validación y se desincroniza</span>
+
+<span class="k">protectedPaths</span>  tareas.json no lo edita el agente
+                <span class="s">son datos del usuario, y no hay backup</span>
+
+<span class="k">bash.deny</span>       nada de `rm … tareas.json`
+                <span class="s">es el único estado del programa</span></code></pre>
+        </figure>
+        <figure class="panel blocked">
+          <figcaption>$ npm run gate — tras importar node:fs en src/lib</figcaption>
+          <pre><code>──▶ lint de convenciones
+repo-lint: 1 problema(s)
+
+  src/lib/puntaje.mjs:1  <span class="hdr">[PUREZA]</span>
+  `src/lib` no importa `node:fs`.
+  `src/lib` decide, el resto orquesta: si la
+  lógica lee el disco, testearla exige un
+  archivo de verdad y deja de ser lógica.
+
+    ✗ lint de convenciones
+
+<span class="hdr">GATE ROJO</span> — señales fallidas:
+  lint de convenciones</code></pre>
+        </figure>
+      </div>
+
+      <div class="col cta-box">
+        <p class="eyebrow">Empezar por acá</p>
+        <p style="margin-top:.5rem"><a href="https://github.com/raalzate/agent-harness/blob/main/docs/quickstart.md"><strong>docs/quickstart.md</strong></a>
+          — los siete pasos, con la salida real de cada comando.</p>
+        <p style="margin-top:.9rem;color:var(--ink-soft)">Las salidas de ese documento no están
+          redactadas: una señal del gate <strong>extrae la app del propio markdown</strong>, la
+          instala, copia el config del ejemplo y verifica las nueve cosas que promete. Si el arnés
+          cambia y el quick start deja de funcionar, se pone rojo el gate — no el lector.</p>
+      </div>
+    </div>
+  </div>
+</section>
 
 <section id="tesis">
   <div class="wrap sec-inner">
@@ -449,7 +533,7 @@ explícita. No lo reintentes igual.</code></pre>
       </div>
 
       <div class="col stack" style="margin-top:1.75rem">
-        <h3 style="font-size:var(--step-1)">Siete clases de regla cubren casi todo</h3>
+        <h3 style="font-size:var(--step-1)">Ocho clases de regla cubren casi todo</h3>
         <p>Escribir una regla nueva es una línea de JSON, y el self-test la cubre sin código nuevo.</p>
       </div>
       <div class="table-scroll">
@@ -557,17 +641,16 @@ en el historial:
       </ol>
 
       <div class="col cta-box">
-        <p class="eyebrow">Empezar</p>
+        <p class="eyebrow">Instalarlo en tu repo</p>
+        <p style="margin-top:.5rem;color:var(--ink-soft)">Si todavía no lo viste funcionar, el
+          <a href="#quickstart">quick start</a> son 10 minutos y ahorra esta tarde entera.</p>
         <pre><code>git clone https://github.com/raalzate/agent-harness
 node scripts/harness-init.mjs /ruta/a/tu/repo          <span style="color:var(--ink-faint)"># dry-run</span>
 node scripts/harness-init.mjs /ruta/a/tu/repo --apply</code></pre>
         <p style="margin-top:.9rem;color:var(--ink-soft)">El self-test va a estar rojo recién
           instalado, y está bien: el config de arranque trae placeholders a propósito. Ese rojo es el
           mapa de lo que falta — cada línea nombra la clave que todavía apunta a la nada.</p>
-        <p style="margin-top:.9rem"><strong>¿Preferís verlo funcionar primero?</strong> El
-          <a href="https://github.com/raalzate/agent-harness/blob/main/docs/quickstart.md">quick start</a>
-          son 10 minutos: un to-do de cuatro archivos, el arnés instalado, tres frenos mordiendo con
-          la salida real, y el gate en rojo a propósito para ver el error que le llega al agente.</p>
+
       </div>
     </div>
   </div>
