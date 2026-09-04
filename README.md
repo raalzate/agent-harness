@@ -72,9 +72,10 @@ Maven, Gradle, Python, Go, Rust): qué extensión es código, cómo se escribe u
 las dependencias, qué directorios son derivados. Reglas y señales del gate **no** viajan: ver
 [docs/perfiles.md](docs/perfiles.md).
 
-Además, en el repo del arnés: `examples/` con **16 configs completas** (Node, React, Android/Kotlin,
-iOS/Swift, .NET, Spring, Python, Go, Rust, Rails, Laravel, C++/CMake, datos con Airflow y dbt,
-monorepo, Terraform, y el quick start) y `scripts/harness-bench.mjs`, que instala el arnés en un repo de
+Además, en el repo del arnés: `examples/` con **20 configs completas** (Node, React, Android/Kotlin,
+iOS/Swift, .NET, Spring, Python, Go, Rust, Rails, Laravel, Elixir/Phoenix, C++/CMake, firmware en C,
+Unity, datos con Airflow y dbt, monorepo, Terraform, un repo heredado sin tests, y el quick start)
+y `scripts/harness-bench.mjs`, que instala el arnés en un repo de
 juguete de cada stack y verifica que los frenos muerdan ahí.
 
 ## Las cinco piezas, y qué problema resuelve cada una

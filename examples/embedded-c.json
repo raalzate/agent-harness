@@ -1,0 +1,310 @@
+{
+  "$comment": "Firmware en C para microcontrolador (Zephyr/bare-metal). Es el ejemplo con el arnés más estricto de la carpeta, y por la razón correcta: acá no hay ctrl-Z: el firmware se instala en placas que están en campo, y una asignación dinámica o un `printf` de más se ven como un dispositivo que se reinicia solo a los tres días. El gate no puede correr en la placa, así que se apoya en tres cosas que sí corren en cualquier máquina: compilar con `-Werror`, los tests de la lógica pura en el host, y el tamaño del binario contra el presupuesto de flash y RAM.",
+  "gate": {
+    "command": "make gate",
+    "fastCommand": "make gate-fast",
+    "marker": ".git/gate-dirty",
+    "codeGlobs": [
+      "src/",
+      "include/",
+      "drivers/"
+    ],
+    "codeExtensions": [
+      ".c",
+      ".h"
+    ],
+    "installHooksCommand": "git config core.hooksPath .githooks",
+    "signals": [
+      {
+        "name": "self-test del arnés",
+        "command": [
+          "node",
+          "scripts/harness-selftest.mjs"
+        ],
+        "why": "un hook roto falla en silencio: ninguna otra señal lo ve"
+      },
+      {
+        "name": "link-check de docs",
+        "command": [
+          "node",
+          "scripts/docs-linkcheck.mjs"
+        ],
+        "why": "mover un doc rompe punteros de la memoria del agente"
+      },
+      {
+        "name": "lint de convenciones",
+        "command": [
+          "node",
+          "scripts/repo-lint.mjs"
+        ],
+        "why": "las reglas de este firmware que el compilador no ve: nada de malloc, nada de printf, nada de esperas activas"
+      },
+      {
+        "name": "formato",
+        "command": [
+          "sh",
+          "-c",
+          "git ls-files -z '*.c' '*.h' | xargs -0 clang-format --dry-run --Werror"
+        ],
+        "why": "sin `--Werror` clang-format imprime el diff y sale 0: verde con el archivo mal formateado"
+      },
+      {
+        "name": "compila para la placa",
+        "command": [
+          "west",
+          "build",
+          "-b",
+          "nrf52840dk_nrf52840",
+          "--",
+          "-DEXTRA_CFLAGS=-Werror"
+        ],
+        "why": "el compilador cruzado ve lo que el compilador del host no (tamaños de tipo, alineación), y con -Werror un aviso nuevo falla en vez de sumarse a los que nadie lee"
+      },
+      {
+        "name": "presupuesto de flash y RAM",
+        "command": [
+          "sh",
+          "-c",
+          "arm-none-eabi-size -A build/zephyr/zephyr.elf | awk '/\\.text|\\.bss|\\.data/ {s+=$2} END {print s; exit (s > 245760)}'"
+        ],
+        "why": "el binario no puede crecer más que la flash del chip, y el día que no entra el proyecto se entera en el laboratorio con la placa en la mano. Un número que falla lo convierte en un rojo del gate"
+      },
+      {
+        "name": "tests de la lógica en el host",
+        "command": [
+          "ctest",
+          "--test-dir",
+          "build-host",
+          "--output-on-failure"
+        ],
+        "why": "la máquina de estados y el parseo de protocolo se testean compilados para el host, en segundos: es la única suite que no necesita hardware"
+      },
+      {
+        "name": "análisis estático",
+        "command": [
+          "cppcheck",
+          "--error-exitcode=1",
+          "--enable=warning,style",
+          "--inline-suppr",
+          "src",
+          "drivers"
+        ],
+        "fastSkip": true,
+        "why": "en C el desbordamiento de buffer y la variable sin inicializar no las ve ningún test: las ve el analizador"
+      },
+      {
+        "name": "artefactos en su lugar",
+        "command": [
+          "node",
+          "scripts/artifacts-check.mjs"
+        ],
+        "why": "un plan suelto en el repo cuando el trabajo vive en el gestor parte el registro en dos, y ninguna otra señal lo mira"
+      }
+    ]
+  },
+  "protectedPaths": [
+    {
+      "pattern": "\\.ld$|^boards/.*\\.dts(i)?$|^linker/",
+      "reason": "el script de enlazado y el device tree describen el hardware: un cambio mal hecho ahí produce una placa que no arranca (y a veces una que no se puede reflashear). Los cambia quien tiene la placa en la mano."
+    },
+    {
+      "pattern": "^bootloader/|_signing_key\\.pem$|^\\.env",
+      "reason": "el bootloader y su llave de firma: con esa llave se instala firmware en los equipos de campo. Fuera del alcance del agente."
+    },
+    {
+      "pattern": "^certification/|^calibration/",
+      "reason": "los valores de calibración y los archivos de la certificación de radio son evidencia regulatoria: se cambian con el trámite, no con un commit."
+    },
+    {
+      "pattern": "^\\.git/",
+      "reason": "historia de git: fuera del alcance del agente."
+    },
+    {
+      "pattern": "^(build|build-host|modules|zephyr)/",
+      "reason": "salida del build y árboles de dependencias traídos por west: se regeneran."
+    }
+  ],
+  "bash": {
+    "$comment": "Acá `bash.deny` frena lo que toca el hardware: no hay backup de una placa con el bootloader borrado.",
+    "deny": [
+      {
+        "pattern": "--no-ver[i]fy",
+        "reason": "saltarse la verificación está prohibido: si el gate estorba, se arregla el gate."
+      },
+      {
+        "pattern": "git\\s+reset\\s+--hard",
+        "reason": "destruye trabajo sin commitear."
+      },
+      {
+        "pattern": "(nrfjprog|openocd|st-flash|pyocd)[^|;&]*\\b(--eraseall|erase|--recover)\\b",
+        "reason": "borrar toda la flash se lleva el bootloader y los datos de calibración de la placa: puede dejarla inservible. Lo hace quien la tiene delante."
+      },
+      {
+        "pattern": "(nrfjprog|openocd|st-flash|pyocd|west\\s+flash)\\b",
+        "reason": "flashear es tocar hardware físico que quizá esté en medio de un ensayo: lo dispara un humano, nunca el agente."
+      },
+      {
+        "pattern": "west\\s+update\\b",
+        "reason": "mueve el árbol de módulos y del SDK entero: cambia el binario de todos sin que se vea en el diff. Es una decisión del equipo."
+      },
+      {
+        "pattern": "rm\\s+-rf?\\s+[^|;&]*(build|modules|zephyr)\\b",
+        "reason": "reconstruir el árbol del SDK son veinte minutos y una descarga completa."
+      },
+      {
+        "pattern": "\\bsed\\s+(-[a-zA-Z]*\\s+)*-i\\b.*\\b(src|drivers|include)\\b",
+        "reason": "edición masiva in-place sobre el árbol de fuentes."
+      }
+    ]
+  },
+  "reuse": [
+    {
+      "pattern": "\\bk_sleep\\(|\\bk_busy_wait\\(",
+      "appliesTo": "^drivers/(?!timing/)",
+      "reason": "las esperas de los drivers pasan por `drivers/timing`, que usa temporizadores del kernel en vez de quemar CPU. Un `k_busy_wait` en un driver mantiene el núcleo despierto y duplica el consumo: en un equipo a batería son meses de autonomía.",
+      "see": "drivers/timing/delay.c"
+    }
+  ],
+  "lint": {
+    "command": [
+      "node",
+      "scripts/repo-lint.mjs"
+    ],
+    "fileFlag": "--file"
+  },
+  "purity": [
+    {
+      "dir": "src/logic",
+      "forbiddenImports": [
+        "zephyr/kernel.h",
+        "zephyr/drivers/gpio.h",
+        "nrfx.h"
+      ],
+      "except": [],
+      "reason": "la máquina de estados y el parseo del protocolo no conocen el hardware: reciben bytes y devuelven decisiones. Es lo único que compila y se testea en el host, o sea la única verificación que corre sin una placa conectada."
+    }
+  ],
+  "purityImportSyntax": [
+    "^\\s*#include\\s*[<\"]{mod}"
+  ],
+  "forbiddenDeps": {
+    "manifest": "west.yml",
+    "matcher": "name:\\s*{pkg}\\b",
+    "packages": [
+      "mbedtls"
+    ],
+    "reason": "mbedTLS no entra en la flash de este chip junto con la pila de radio (se probó: faltaban 40 kB). La criptografía la da el acelerador del SoC a través de PSA; si aparece en el manifiesto, alguien copió una muestra de otra placa."
+  },
+  "invariants": [
+    {
+      "file": "src/main.c",
+      "required": [
+        "watchdog_init",
+        "wdt_feed"
+      ],
+      "forbidden": [
+        "while (1) {}"
+      ],
+      "reason": "sin el watchdog alimentado, un cuelgue en campo es un equipo muerto hasta que alguien lo visita físicamente. Se perdió una vez en un refactor del arranque y se descubrió con 200 equipos instalados."
+    }
+  ],
+  "patterns": [
+    {
+      "id": "DINAMICA",
+      "pattern": "\\b(malloc|calloc|realloc|free|k_malloc)\\s*\\(",
+      "appliesTo": "^(src|drivers)/",
+      "message": "la asignación dinámica en firmware fragmenta un heap de kilobytes y falla a los días de encendido, no en el laboratorio. Todo va en buffers estáticos dimensionados al peor caso."
+    },
+    {
+      "id": "PRINTF",
+      "pattern": "\\b(printf|sprintf|snprintf)\\s*\\(",
+      "appliesTo": "^(src|drivers)/",
+      "message": "printf arrastra el formateo de punto flotante (decenas de kB de flash) y bloquea el hilo mientras escribe por UART. Usá los macros de log del proyecto, que se compilan afuera en release."
+    },
+    {
+      "id": "ESPERAACTIVA",
+      "pattern": "while\\s*\\(\\s*[^)]*\\)\\s*;",
+      "appliesTo": "^(src|drivers)/",
+      "message": "una espera activa sobre un registro cuelga el equipo si el periférico nunca responde, y consume corriente todo el tiempo. Poné timeout y cedé el CPU."
+    },
+    {
+      "id": "VOLATILFALTANTE",
+      "pattern": "^\\s*(?!volatile)(static\\s+)?(uint8_t|uint32_t|int)\\s+\\w*_(flag|isr|irq)\\b",
+      "appliesTo": "^(src|drivers)/",
+      "message": "una variable compartida con una interrupción sin `volatile` la cachea el optimizador: el bucle no ve nunca el cambio y el bug aparece sólo compilando con -O2. Declarala volatile."
+    },
+    {
+      "id": "RETARDOFIJO",
+      "pattern": "k_sleep\\(K_MSEC\\([0-9]{4,}\\)\\)",
+      "appliesTo": "^(src|drivers)/",
+      "message": "un retardo de segundos escondido en el código descuadra el presupuesto de energía y nadie lo encuentra al medir consumo. Los tiempos van en `include/timing_config.h`, juntos y documentados."
+    }
+  ],
+  "tests": {
+    "filePattern": "(^|/)tests?/|_test\\.c$",
+    "onlyPattern": ""
+  },
+  "incidents": {
+    "file": "docs/gotchas.md",
+    "heading": "### GOTCHA",
+    "requiredLines": [
+      "Síntoma:",
+      "Causa:",
+      "Regla:",
+      "Mecanismo:"
+    ]
+  },
+  "docs": {
+    "ignore": [
+      "build",
+      "build-host",
+      "modules",
+      "zephyr",
+      ".git"
+    ],
+    "ignoreFiles": [],
+    "externalPaths": []
+  },
+  "status": {
+    "file": "STATUS.md"
+  },
+  "sdd": {
+    "kit": "ninguno",
+    "skillRoots": [
+      "~/.claude/skills",
+      ".claude/skills"
+    ],
+    "phases": [],
+    "routes": []
+  },
+  "tracker": {
+    "$comment": "Forja: azure boards. Ningún script del arnés la conoce — lo único que se lee es `issuePattern`. Ver docs/trazabilidad.md.",
+    "kind": "azure",
+    "issuePattern": "\\bAB#[0-9]+\\b",
+    "issueExample": "AB#1187",
+    "newIssueHint": [
+      "az boards work-item create --type Bug --title \"…\"",
+      "Un cambio que toca el device tree o el bootloader necesita además el ítem de ensayo en placa"
+    ],
+    "artifactsIn": "repo",
+    "specsDir": "docs/specs",
+    "allowedInRepo": []
+  },
+  "commitMsg": {
+    "$comment": "Qué cuenta como CÓDIGO para exigir registro. En un producto que se certifica, el ítem de trabajo es parte del expediente: por eso el device tree y los Kconfig también piden referencia.",
+    "codePattern": "^(src/|drivers/|include/|boards/|prj\\.conf$)",
+    "ignoreExtensions": [
+      ".md",
+      ".png",
+      ".jpg",
+      ".svg"
+    ],
+    "skipSubjects": [
+      "Merge ",
+      "Revert ",
+      "fixup! ",
+      "squash! "
+    ],
+    "escapeLine": "sin-issue:"
+  }
+}

@@ -41,7 +41,7 @@ El orden que funciona: **el método** (qué se hace y por qué) → **el caso** 
 
 | Directorio | Contenido |
 |---|---|
-| [`../examples/`](../examples/README.md) | Dieciséis configs completas por stack: TypeScript, React, Android/Kotlin, iOS/Swift, .NET, Spring, Python, Go, Rust, Rails, Laravel, C++/CMake, datos (Airflow+dbt), monorepo, Terraform y el quick start. |
+| [`../examples/`](../examples/README.md) | Veinte configs completas por stack y por situación: TypeScript, React, Android/Kotlin, iOS/Swift, .NET, Spring, Python, Go, Rust, Rails, Laravel, Elixir/Phoenix, C++/CMake, firmware en C, Unity, datos (Airflow+dbt), monorepo, Terraform, un repo heredado sin tests y el quick start. |
 | [`../plantillas/`](../plantillas) | `CONSTITUTION.md`, `CLAUDE.md`, `STATUS.md`, `gotchas.md`, `ADR.md` y una config de arranque. |
 
 ---

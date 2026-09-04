@@ -1,0 +1,280 @@
+{
+  "$comment": "Juego en Unity (C#). Es el ejemplo donde `protectedPaths` vale más que todas las demás reglas juntas: los `.meta` guardan el GUID con el que cada escena y cada prefab referencian sus assets, y un agente que borra o reescribe un `.meta` deja las referencias en null — la escena abre vacía y el diff no muestra nada raro. Las escenas y los prefabs son YAML gigante que no se mergea: se editan de uno a la vez, con acuerdo. La otra particularidad: acá el costo se mide en milisegundos por frame, así que los patrones prohibidos son los que asignan memoria en `Update()`.",
+  "gate": {
+    "command": "make gate",
+    "fastCommand": "make gate-fast",
+    "marker": ".git/gate-dirty",
+    "codeGlobs": [
+      "Assets/Scripts/",
+      "Packages/"
+    ],
+    "codeExtensions": [
+      ".cs"
+    ],
+    "installHooksCommand": "git config core.hooksPath .githooks",
+    "signals": [
+      {
+        "name": "self-test del arnés",
+        "command": [
+          "node",
+          "scripts/harness-selftest.mjs"
+        ],
+        "why": "un hook roto falla en silencio: ninguna otra señal lo ve"
+      },
+      {
+        "name": "link-check de docs",
+        "command": [
+          "node",
+          "scripts/docs-linkcheck.mjs"
+        ],
+        "why": "mover un doc rompe punteros de la memoria del agente"
+      },
+      {
+        "name": "lint de convenciones",
+        "command": [
+          "node",
+          "scripts/repo-lint.mjs"
+        ],
+        "why": "las reglas de este proyecto que el compilador de C# no ve, empezando por lo que no se puede asignar en Update()"
+      },
+      {
+        "name": "cada asset tiene su .meta",
+        "command": [
+          "sh",
+          "-c",
+          "! git ls-files -z 'Assets/**' | grep -zv '\\.meta$' | while IFS= read -r -d '' f; do [ -e \"$f.meta\" ] || echo \"falta $f.meta\"; done | grep ."
+        ],
+        "why": "un asset sin su .meta commiteado le da un GUID distinto a cada persona: las referencias de las escenas quedan en null en la máquina del otro y se ve como «el prefab perdió su script». Ninguna otra señal lo mira"
+      },
+      {
+        "name": "compila",
+        "command": [
+          "dotnet",
+          "build",
+          "Assembly-CSharp.csproj",
+          "--nologo"
+        ],
+        "why": "el compilador es la señal barata: corre sin abrir Unity y ya atrapa la mayoría de lo que rompe el editor"
+      },
+      {
+        "name": "tests de EditMode",
+        "command": [
+          "sh",
+          "-c",
+          "\"$UNITY_PATH\" -batchmode -runTests -testPlatform EditMode -projectPath . -logFile - -quit"
+        ],
+        "fastSkip": true,
+        "skipIfMissing": "Assets/Tests",
+        "why": "es la única suite que corre sin abrir el editor a mano; Unity en batch tarda minutos, así que se omite en modo fast y vive en CI"
+      },
+      {
+        "name": "artefactos en su lugar",
+        "command": [
+          "node",
+          "scripts/artifacts-check.mjs"
+        ],
+        "why": "un plan suelto en el repo cuando el trabajo vive en el gestor parte el registro en dos, y ninguna otra señal lo mira"
+      }
+    ]
+  },
+  "protectedPaths": [
+    {
+      "pattern": "\\.meta$",
+      "reason": "el .meta guarda el GUID con el que las escenas y los prefabs referencian el asset: reescribirlo rompe TODAS las referencias y la escena abre vacía sin que el diff muestre nada. Los mantiene el editor."
+    },
+    {
+      "pattern": "\\.(unity|prefab|asset|controller)$",
+      "reason": "escenas, prefabs y ScriptableObjects son YAML generado de miles de líneas que no se mergea a mano: se editan de uno en el editor y con acuerdo de quién lo tiene tomado."
+    },
+    {
+      "pattern": "^ProjectSettings/",
+      "reason": "capas, física, calidad y plataformas de build: un cambio ahí afecta el juego entero y no se ve en ninguna pantalla del PR."
+    },
+    {
+      "pattern": "\\.keystore$|^\\.env|/Signing/",
+      "reason": "claves de firma de las tiendas: nunca las toca el agente."
+    },
+    {
+      "pattern": "^\\.git/",
+      "reason": "historia de git: fuera del alcance del agente."
+    },
+    {
+      "pattern": "^(Library|Temp|Obj|Build|Builds|Logs|UserSettings)/",
+      "reason": "caché e importaciones del editor: se regeneran (y pesan gigas)."
+    }
+  ],
+  "bash": {
+    "deny": [
+      {
+        "pattern": "--no-ver[i]fy",
+        "reason": "saltarse la verificación está prohibido: si el gate estorba, se arregla el gate."
+      },
+      {
+        "pattern": "git\\s+reset\\s+--hard",
+        "reason": "destruye trabajo sin commitear; con assets binarios no hay forma de reconstruirlo."
+      },
+      {
+        "pattern": "rm\\s+-rf?\\s+[^|;&]*(Library|Assets)\\b",
+        "reason": "borrar Library son veinte minutos de reimportación de todos los assets; borrar dentro de Assets se lleva los .meta y con ellos las referencias."
+      },
+      {
+        "pattern": "git\\s+lfs\\s+(prune|migrate)\\b",
+        "reason": "reescribe el historial de los binarios grandes: si sale mal, los assets del pasado no vuelven."
+      },
+      {
+        "pattern": "\\bfind\\b[^|;&]*-delete|\\bfind\\b[^|;&]*-exec\\s+rm",
+        "reason": "un barrido de borrado sobre Assets se lleva .meta junto con lo que buscaba. Mostrá la lista primero."
+      },
+      {
+        "pattern": "\\bsed\\s+(-[a-zA-Z]*\\s+)*-i\\b.*\\bAssets\\b",
+        "reason": "edición masiva in-place dentro de Assets: el formato YAML de Unity no perdona un reemplazo textual."
+      }
+    ]
+  },
+  "reuse": [
+    {
+      "pattern": "Instantiate\\(",
+      "appliesTo": "^Assets/Scripts/(?!Pooling/)",
+      "reason": "los objetos que aparecen muchas veces (balas, enemigos, partículas) salen del pool de `Assets/Scripts/Pooling`: un Instantiate por disparo genera basura y el recolector produce el tirón de frame que los jugadores reportan como lag.",
+      "see": "Assets/Scripts/Pooling/ObjectPool.cs"
+    }
+  ],
+  "lint": {
+    "command": [
+      "node",
+      "scripts/repo-lint.mjs"
+    ],
+    "fileFlag": "--file"
+  },
+  "purity": [
+    {
+      "dir": "Assets/Scripts/Domain",
+      "forbiddenImports": [
+        "UnityEngine",
+        "UnityEditor"
+      ],
+      "except": [
+        "Assets/Scripts/Domain/Bridge"
+      ],
+      "reason": "las reglas del juego (economía, progresión, daño) son C# plano: se testean en milisegundos y sin abrir Unity. Todo lo que necesita UnityEngine vive en la capa de arriba, y el puente declarado es la única excepción."
+    }
+  ],
+  "purityImportSyntax": [
+    "^\\s*using\\s+(?:static\\s+)?{mod}\\b"
+  ],
+  "forbiddenDeps": {
+    "manifest": "Packages/manifest.json",
+    "matcher": "\"{pkg}\"\\s*:",
+    "packages": [
+      "com.unity.textmeshpro"
+    ],
+    "reason": "TextMeshPro viene incluido en el motor desde 2023: agregarlo como paquete suelto duplica los shaders y los assets de fuente, y las etiquetas se ven distintas según de dónde se resolvió."
+  },
+  "patterns": [
+    {
+      "id": "BUSCARENFRAME",
+      "pattern": "(GameObject\\.Find|FindObjectOfType|GetComponent)\\w*\\(",
+      "appliesTo": "^Assets/Scripts/(?!Bootstrap/)",
+      "message": "buscar por nombre o tipo recorre la escena entera: llamado desde Update() son milisegundos por frame. Resolvelo una vez en Awake() y guardá la referencia."
+    },
+    {
+      "id": "BASURAENFRAME",
+      "pattern": "void\\s+Update\\s*\\([^)]*\\)\\s*\\{[\\s\\S]{0,400}(new\\s+\\w+\\[|\\bnew\\s+List<|\\+\\s*\"|ToString\\(\\))",
+      "appliesTo": "^Assets/Scripts/",
+      "message": "asignar memoria en Update() (arrays, listas, concatenar strings) alimenta al recolector y produce el tirón periódico que se reporta como lag. Reservá fuera del frame y reutilizá."
+    },
+    {
+      "id": "DEBUGLOG",
+      "pattern": "Debug\\.Log\\(",
+      "appliesTo": "^Assets/Scripts/(?!.*Tests)",
+      "message": "Debug.Log cuesta incluso en release (arma el stack trace) y aparece en el log del jugador. Usá el logger del proyecto, que se apaga por build."
+    },
+    {
+      "id": "CORRUTINASINPARAR",
+      "pattern": "StartCoroutine\\(",
+      "appliesTo": "^Assets/Scripts/(?!Coroutines/)",
+      "message": "una corrutina arrancada sin guardar su handle sigue viva al cambiar de escena y toca objetos destruidos (NullReference que aparece «solo» al volver al menú). Guardá el handle y paralá en OnDisable."
+    },
+    {
+      "id": "RUTAABSOLUTA",
+      "pattern": "[\"'][A-Za-z]:\\\\\\\\|[\"']/Users/",
+      "appliesTo": "^Assets/Scripts/",
+      "message": "una ruta de la máquina de quien escribió el código no existe en la de nadie más ni en el build. Usá `Application.persistentDataPath` o los Resources del proyecto."
+    }
+  ],
+  "tests": {
+    "filePattern": "(^|/)Tests?/|Tests\\.cs$",
+    "onlyPattern": "\\[(Explicit|Ignore)\\("
+  },
+  "incidents": {
+    "file": "docs/gotchas.md",
+    "heading": "### GOTCHA",
+    "requiredLines": [
+      "Síntoma:",
+      "Causa:",
+      "Regla:",
+      "Mecanismo:"
+    ]
+  },
+  "docs": {
+    "ignore": [
+      "Library",
+      "Temp",
+      "Obj",
+      "Build",
+      "Builds",
+      "Logs",
+      ".git"
+    ],
+    "ignoreFiles": [],
+    "externalPaths": []
+  },
+  "status": {
+    "file": "STATUS.md"
+  },
+  "sdd": {
+    "kit": "ninguno",
+    "skillRoots": [
+      "~/.claude/skills",
+      ".claude/skills"
+    ],
+    "phases": [],
+    "routes": []
+  },
+  "tracker": {
+    "$comment": "Forja: jira. Ningún script del arnés la conoce — lo único que se lee es `issuePattern`. Ver docs/trazabilidad.md.",
+    "kind": "jira",
+    "issuePattern": "\\b(GAME|ART|LIVE)-[0-9]+\\b",
+    "issueExample": "GAME-412",
+    "newIssueHint": [
+      "Jira no trae CLI oficial: abrí el ticket en la web y pegá su clave acá.",
+      "Un cambio de escena o de prefab avisa en el ítem quién lo tiene tomado: esos archivos no se mergean"
+    ],
+    "artifactsIn": "tracker",
+    "specsDir": "specs",
+    "allowedInRepo": [
+      "specs/README.md"
+    ]
+  },
+  "commitMsg": {
+    "$comment": "Qué cuenta como CÓDIGO para exigir registro. Los assets de arte no piden ítem acá: entran por el pipeline de arte y tienen su propio tablero.",
+    "codePattern": "^(Assets/Scripts/|Packages/)",
+    "ignoreExtensions": [
+      ".md",
+      ".png",
+      ".jpg",
+      ".psd",
+      ".fbx",
+      ".wav",
+      ".mp3",
+      ".meta"
+    ],
+    "skipSubjects": [
+      "Merge ",
+      "Revert ",
+      "fixup! ",
+      "squash! "
+    ],
+    "escapeLine": "sin-issue:"
+  }
+}
