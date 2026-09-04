@@ -29,7 +29,7 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 // El mismo helper que usan el hook y el lint: comparar contra la lista DECLARADA dejaba pasar
 // justo el caso del incidente (el gate declara una extensión que el default agnóstico no tiene).
-import { codeExtensions, importSyntax } from "../.claude/hooks/harness.mjs";
+import { codeExtensions, depsMatcher, importSyntax } from "../.claude/hooks/harness.mjs";
 
 const REPO_ROOT = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
 const abs = (p) => path.join(REPO_ROOT, p);
@@ -62,6 +62,9 @@ const writeInput = (file, content = "x") => ({
   tool_name: "Write",
   tool_input: { file_path: abs(file), content },
 });
+
+/** Un literal (un nombre de paquete, un módulo) puesto DENTRO de un regex, sin que actúe. */
+const escapeRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 /**
  * Muestra concreta que un regex del config debería cazar.
@@ -1378,6 +1381,159 @@ if (config.examples?.dir) {
     }
   }
 
+  /**
+   * Lo anterior mide la FORMA de un ejemplo (parsea, sus regex compilan). Esto corre sus reglas
+   * de verdad, con el config del ejemplo (`--config`) y la muestra por stdin: no se escribe nada
+   * en el árbol de fuentes (P7) y no hace falta un repo de juguete por ejemplo.
+   *
+   * OJO con lo que esto NO prueba, porque es la trampa de la técnica: la muestra se deriva del
+   * propio `matcher`, así que «la regla caza su muestra» es casi una tautología — no dice nada
+   * sobre si el `matcher` describe el formato REAL de un `Gemfile` o de un `pom.xml`. Eso sólo
+   * lo mide un archivo real del lenguaje, o sea el banco (`harness-bench.mjs`).
+   *
+   * Lo que sí cierra, y no estaba cubierto por nada:
+   *   1. RUTEO — que la regla LLEGUE a correr. Un `manifest: "./package.json"` o un
+   *      `purity.dir: "/src/lib"` parsean, compilan y no se aplican nunca: freno muerto con
+   *      el JSON impecable.
+   *   2. ANCHURA — que no muerda de más. Un `matcher` sin anclas o una plantilla de import
+   *      floja marcan cualquier línea, y un freno que bloquea trabajo legítimo se desactiva
+   *      a mano en una semana (P3).
+   */
+  const lintConEjemplo = (ej, rutaVirtual, contenido) => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "harness-ejemplo-"));
+    try {
+      const cfg = path.join(tmp, "config.json");
+      fs.writeFileSync(cfg, JSON.stringify(ej));
+      const res = spawnSync(
+        "node",
+        [abs("scripts/repo-lint.mjs"), "--config", cfg, "--file", rutaVirtual, "--stdin"],
+        { input: contenido, cwd: REPO_ROOT, encoding: "utf8" },
+      );
+      return { status: res.status, out: `${res.stdout ?? ""}${res.stderr ?? ""}` };
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  };
+
+  /**
+   * La ruta con la que el archivo aparece DE VERDAD en un repo (como la lista `git ls-files`),
+   * no como la escribió el ejemplo. Es lo que hace que el caso pruebe el ruteo en vez de
+   * repetir el config: pasarle al lint la misma cadena que declaró el ejemplo la compara
+   * consigo misma y sale verde aunque `./package.json` nunca vaya a coincidir con nada.
+   */
+  const rutaCanonica = (p) => p.replace(/^\.\//, "").replace(/^\/+/, "").replace(/\/+$/, "");
+
+  /** Los cuatro casos derivables de un ejemplo sin conocer su repo ni su lenguaje. */
+  const probarReglasDelEjemplo = (ej) => {
+    const casos = [];
+    const AJENO = "paquete-que-nadie-veto";
+
+    const dep = ej.forbiddenDeps;
+    const paquetes = dep?.packages ?? [];
+    if (!dep?.manifest || !paquetes.length) {
+      casos.push({ nombre: "DEPS llega a su manifiesto", omitido: "el ejemplo no veta dependencias" });
+    } else {
+      const plantilla = depsMatcher(dep.matcher);
+      const muestra = sampleFromPattern(plantilla.split("{pkg}").join(escapeRegex(paquetes[0])));
+      const inocente = sampleFromPattern(plantilla.split("{pkg}").join(AJENO));
+      if (!muestra) {
+        casos.push({ nombre: "DEPS llega a su manifiesto", omitido: `\`${plantilla}\` no es reducible a un manifiesto de ejemplo` });
+      } else {
+        const r = lintConEjemplo(ej, rutaCanonica(dep.manifest), `${muestra}\n`);
+        casos.push({
+          nombre: `DEPS llega a su manifiesto (${dep.manifest})`,
+          ok: r.status !== 0 && r.out.includes("DEPS"),
+          detalle: `el lint no marcó DEPS sobre \`${dep.manifest}\` con \`${muestra}\` adentro: la regla NO se está aplicando a esa ruta (¿un \`./\` de más, una barra inicial, un nombre que no es el del manifiesto?). Un freno que no llega a correr es un freno muerto. exit ${r.status}: ${r.out.trim().slice(0, 200) || "sin salida"}`,
+        });
+        if (inocente) {
+          const r2 = lintConEjemplo(ej, rutaCanonica(dep.manifest), `${inocente}\n`);
+          casos.push({
+            nombre: "DEPS no muerde de más",
+            ok: !r2.out.includes("DEPS"),
+            detalle: `\`${inocente}\` no declara ninguna dependencia vetada y el lint la marcó: el freno bloquearía trabajo legítimo. ${r2.out.trim().slice(0, 200)}`,
+          });
+        }
+      }
+    }
+
+    const capa = (ej.purity ?? []).find((c) => c.dir && (c.forbiddenImports ?? []).length);
+    if (!capa) {
+      casos.push({ nombre: "PUREZA llega a su capa", omitido: "el ejemplo no declara una capa pura con imports vetados" });
+    } else {
+      const sintaxis = importSyntax(capa.importSyntax ?? ej.purityImportSyntax);
+      const mod = capa.forbiddenImports[0];
+      const ext = codeExtensions(ej.gate?.codeExtensions)[0];
+      const ruta = `${rutaCanonica(capa.dir)}/muestra${ext}`;
+      let plantillaUsada = null;
+      let muestra = null;
+      for (const t of sintaxis) {
+        const s = sampleFromPattern(t.split("{mod}").join(escapeRegex(mod)));
+        if (s) {
+          plantillaUsada = t;
+          muestra = s;
+          break;
+        }
+      }
+      if (!muestra) {
+        casos.push({ nombre: "PUREZA llega a su capa", omitido: "ninguna plantilla de import es reducible a un ejemplo" });
+      } else {
+        const r = lintConEjemplo(ej, ruta, `${muestra}\n`);
+        casos.push({
+          nombre: `PUREZA llega a su capa (${capa.dir})`,
+          ok: r.status !== 0 && r.out.includes("PUREZA"),
+          detalle: `el lint no marcó PUREZA sobre \`${ruta}\` con \`${muestra}\` adentro: la capa declarada no está casando su propia ruta (¿barra inicial, \`./\`, un directorio que no existe con ese nombre?). exit ${r.status}: ${r.out.trim().slice(0, 200) || "sin salida"}`,
+        });
+        const limpio = sampleFromPattern(plantillaUsada.split("{mod}").join("modulo-sin-veto"));
+        if (limpio) {
+          const r2 = lintConEjemplo(ej, ruta, `${limpio}\n`);
+          casos.push({
+            nombre: "PUREZA no muerde de más",
+            ok: !r2.out.includes("PUREZA"),
+            detalle: `\`${limpio}\` importa un módulo que la capa no prohíbe y el lint lo marcó igual. ${r2.out.trim().slice(0, 200)}`,
+          });
+        }
+      }
+    }
+
+    return casos;
+  };
+
+  // El freno prueba que muerde ANTES de usarse, y por TIPO de falla: un contador («al menos 2»)
+  // pasa con la mitad funcionando y no dice cuál se perdió. Los cuatro cebos son las cuatro
+  // clases que esto puede cazar — dos de ruteo (la regla no llega a correr) y dos de anchura
+  // (la regla marca cualquier cosa). El cebo también documenta el límite: un cebo cuyo `matcher`
+  // simplemente «no case el formato real» NO existe acá, porque esa clase la mide el banco.
+  {
+    const casoDe = (ej, prefijo) => probarReglasDelEjemplo(ej).find((c) => c.nombre.startsWith(prefijo));
+    const rojo = (caso) => Boolean(caso) && !caso.omitido && caso.ok === false;
+
+    const capaOk = { dir: "capa", forbiddenImports: ["modulo-vetado"] };
+    const depOk = { manifest: "manifiesto.txt", matcher: "^{pkg}$", packages: ["dep-vetada"] };
+
+    const cebos = [
+      [
+        "un manifiesto que la regla nunca mira",
+        casoDe({ forbiddenDeps: { ...depOk, manifest: "./manifiesto.txt" } }, "DEPS llega"),
+      ],
+      [
+        "una capa cuya ruta no casa nunca",
+        casoDe({ purity: [{ ...capaOk, dir: "/capa" }], purityImportSyntax: ["^usa {mod}$"] }, "PUREZA llega"),
+      ],
+      [
+        "un matcher que marca cualquier línea",
+        casoDe({ forbiddenDeps: { ...depOk, matcher: "." } }, "DEPS no muerde"),
+      ],
+      [
+        "una sintaxis de import que marca cualquier línea",
+        casoDe({ purity: [capaOk], purityImportSyntax: ["\\w+"] }, "PUREZA no muerde"),
+      ],
+    ];
+    for (const [nombre, caso] of cebos) {
+      if (rojo(caso)) ok(`la prueba de reglas caza ${nombre}`);
+      else bad(`la prueba de reglas caza ${nombre}`, `el cebo no salió rojo: ${JSON.stringify(caso ?? null)}`);
+    }
+  }
+
   for (const archivo of archivos) {
     let ej;
     try {
@@ -1389,6 +1545,12 @@ if (config.examples?.dir) {
     const { problemas, regex } = validarEjemplo(ej);
     if (problemas.length) bad(`ejemplo \`${archivo}\``, problemas.join("\n      "));
     else ok(`ejemplo \`${archivo}\` (${regex} regex, ${(ej.gate?.signals ?? []).length} señales con why)`);
+
+    for (const caso of probarReglasDelEjemplo(ej)) {
+      if (caso.omitido) skip(`ejemplo \`${archivo}\` · ${caso.nombre}`, caso.omitido);
+      else if (caso.ok) ok(`ejemplo \`${archivo}\` · ${caso.nombre}`);
+      else bad(`ejemplo \`${archivo}\` · ${caso.nombre}`, caso.detalle);
+    }
   }
 }
 

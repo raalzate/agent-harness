@@ -164,7 +164,10 @@ presente** — la peor variante de señal:
 | `build.gradle(.kts)` | `["']{pkg}[:"']` (el `pkg` es `grupo:artefacto`) |
 | `pyproject.toml` | `^\\s*["']?{pkg}["']?\\s*[=<>~]` |
 
-Cada uno viene ya escrito en el perfil de stack correspondiente (`plantillas/perfiles/`).
+Cada uno viene ya escrito en el perfil de stack correspondiente (`plantillas/perfiles/`). El
+default vive en `.claude/hooks/harness.mjs` (`DEFAULT_DEPS_MATCHER`), con los otros dos defaults
+agnósticos: tenerlo cableado en el lint obligaba a copiarlo para poder probarlo, y dos copias de
+un default son dos verdades.
 
 ---
 
@@ -458,7 +461,7 @@ cumplir. El detalle de qué viaja y qué no está en [perfiles.md](perfiles.md).
 | `lint` (incluye `sourceExtensions`) | `post-edit-check.mjs`, `scripts/repo-lint.mjs`, `.githooks/pre-commit`, self-test |
 | `purity`, `purityImportSyntax`, `forbiddenDeps`, `singleSource`, `invariants`, `patterns`, `tests`, `incidents` | `scripts/repo-lint.mjs`, self-test |
 | `profiles` | `scripts/repo-lint.mjs` (regla `PERFIL`), self-test |
-| `examples`, `install` | self-test (sección 8) |
+| `examples`, `install` | self-test (sección 8): forma de cada ejemplo, y sus reglas `forbiddenDeps`/`purity` corridas con `--config` + stdin (ruteo y anchura) |
 | `docs` | `scripts/docs-linkcheck.mjs`, `scripts/repo-lint.mjs` (directorios a saltear) |
 | `status` (incluye `reminder`) | `session-start.mjs`, self-test |
 | `tracker` | `.githooks/commit-msg`, `scripts/artifacts-check.mjs`, self-test |
