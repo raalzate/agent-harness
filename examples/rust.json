@@ -1,0 +1,277 @@
+{
+  "$comment": "Workspace Rust (crates de dominio + binario). Particularidades: el compilador ya es una señal, así que lo que agrega el arnés es lo que `cargo build` NO ve — `clippy -D warnings` como señal que falla de verdad, la pureza del crate de dominio, y `Cargo.lock` protegido sólo porque acá hay un binario publicable. `onlyPattern` va vacío a propósito: `#[ignore]` es una herramienta legítima en Rust y prohibirla sería un freno que muerde trabajo real.",
+  "gate": {
+    "command": "make gate",
+    "fastCommand": "make gate-fast",
+    "marker": ".git/gate-dirty",
+    "codeGlobs": [
+      "crates/",
+      "src/"
+    ],
+    "codeExtensions": [
+      ".rs"
+    ],
+    "installHooksCommand": "git config core.hooksPath .githooks",
+    "signals": [
+      {
+        "name": "self-test del arnés",
+        "command": [
+          "node",
+          "scripts/harness-selftest.mjs"
+        ],
+        "why": "un hook roto falla en silencio: ninguna otra señal lo ve"
+      },
+      {
+        "name": "link-check de docs",
+        "command": [
+          "node",
+          "scripts/docs-linkcheck.mjs"
+        ],
+        "why": "mover un doc rompe punteros de la memoria del agente"
+      },
+      {
+        "name": "lint de convenciones",
+        "command": [
+          "node",
+          "scripts/repo-lint.mjs"
+        ],
+        "why": "las reglas de arquitectura de este repo que ni rustc ni clippy conocen"
+      },
+      {
+        "name": "formato",
+        "command": [
+          "cargo",
+          "fmt",
+          "--all",
+          "--check"
+        ],
+        "why": "un diff de formato entierra el diff real y ensucia todos los reviews siguientes"
+      },
+      {
+        "name": "clippy",
+        "command": [
+          "cargo",
+          "clippy",
+          "--workspace",
+          "--all-targets",
+          "--",
+          "-D",
+          "warnings"
+        ],
+        "why": "sin `-D warnings` clippy imprime y sale 0: la señal se lee verde con los avisos puestos"
+      },
+      {
+        "name": "tests",
+        "command": [
+          "cargo",
+          "test",
+          "--workspace",
+          "--locked"
+        ],
+        "why": "el comportamiento que los tipos no expresan; `--locked` falla si alguien tocó Cargo.lock sin querer"
+      },
+      {
+        "name": "build release",
+        "command": [
+          "cargo",
+          "build",
+          "--release",
+          "--locked"
+        ],
+        "fastSkip": true,
+        "why": "release difiere de debug (overflow checks, LTO, features): compila en debug y rompe en el tag"
+      },
+      {
+        "name": "artefactos en su lugar",
+        "command": [
+          "node",
+          "scripts/artifacts-check.mjs"
+        ],
+        "why": "un plan suelto en el repo cuando el trabajo vive en el gestor parte el registro en dos, y ninguna otra señal lo mira"
+      }
+    ]
+  },
+  "protectedPaths": [
+    {
+      "pattern": "^\\.env",
+      "reason": ".env* es la llave del reino: lo edita el humano."
+    },
+    {
+      "pattern": "^Cargo\\.lock$",
+      "reason": "el lock lo mueve cargo. Acá se commitea porque el workspace publica un binario, y editarlo a mano rompe la reproducibilidad del release."
+    },
+    {
+      "pattern": "^\\.git/",
+      "reason": "historia de git: fuera del alcance del agente."
+    },
+    {
+      "pattern": "^target/|/target/",
+      "reason": "salida de cargo: se regenera, no se edita."
+    },
+    {
+      "pattern": "\\.generated\\.rs$|/bindings\\.rs$",
+      "reason": "código generado (bindgen, prost): se regenera desde su fuente, editarlo se pierde en el próximo build."
+    }
+  ],
+  "bash": {
+    "deny": [
+      {
+        "pattern": "--no-ver[i]fy",
+        "reason": "saltarse la verificación está prohibido: si el gate estorba, se arregla el gate."
+      },
+      {
+        "pattern": "git\\s+reset\\s+--hard",
+        "reason": "destruye trabajo sin commitear."
+      },
+      {
+        "pattern": "cargo\\s+publish\\b",
+        "reason": "publicar en crates.io es IRREVERSIBLE: una versión no se puede borrar. Lo hace CI desde un tag."
+      },
+      {
+        "pattern": "cargo\\s+update\\b(?![^|;&]*\\s-p\\b)",
+        "reason": "un `cargo update` pelado mueve todo el árbol de dependencias en un commit que nadie puede revisar. Actualizá un crate: `cargo update -p <crate>`."
+      },
+      {
+        "pattern": "cargo\\s+clean\\b",
+        "reason": "tira el target completo y el próximo build tarda diez minutos. Si hace falta, lo corre el humano."
+      },
+      {
+        "pattern": "\\bsed\\s+(-[a-zA-Z]*\\s+)*-i\\b.*\\b(crates|src)\\b",
+        "reason": "edición masiva in-place sobre el árbol de fuentes."
+      }
+    ]
+  },
+  "reuse": [
+    {
+      "pattern": "reqwest::(get|Client::new)\\(",
+      "appliesTo": "^crates/(?!http/)",
+      "reason": "el cliente HTTP compartido (timeout, reintentos, trazas) está en `crates/http`. Un `Client::new` por módulo abre su propio pool de conexiones y ninguno tiene timeout.",
+      "see": "crates/http/src/client.rs"
+    }
+  ],
+  "lint": {
+    "command": [
+      "node",
+      "scripts/repo-lint.mjs"
+    ],
+    "fileFlag": "--file"
+  },
+  "purity": [
+    {
+      "dir": "crates/domain/src",
+      "forbiddenImports": [
+        "tokio",
+        "sqlx",
+        "axum",
+        "reqwest"
+      ],
+      "except": [],
+      "reason": "el dominio no conoce runtime, transporte ni persistencia: los adaptadores dependen del dominio, nunca al revés. Es también el único crate cuyos tests corren sin runtime async."
+    }
+  ],
+  "purityImportSyntax": [
+    "^\\s*(?:pub\\s+)?use\\s+{mod}\\b",
+    "^\\s*extern\\s+crate\\s+{mod}\\b"
+  ],
+  "forbiddenDeps": {
+    "manifest": "Cargo.toml",
+    "matcher": "^\\s*{pkg}\\s*=",
+    "packages": [
+      "openssl"
+    ],
+    "reason": "`openssl` obliga a tener toolchain de C en cada máquina y en cada imagen de CI. El TLS del proyecto es rustls; si aparece en el manifiesto, alguien copió un ejemplo viejo."
+  },
+  "patterns": [
+    {
+      "id": "UNWRAP",
+      "pattern": "\\.(unwrap|expect)\\(",
+      "appliesTo": "^crates/(?!.*/tests/)(?!.*_test\\.rs)",
+      "message": "un unwrap en librería aborta el proceso de quien la usa. Devolvé `Result` y que el llamador decida; en un test está bien."
+    },
+    {
+      "id": "PANIC",
+      "pattern": "\\b(panic!|todo!|unimplemented!)\\(",
+      "appliesTo": "^crates/(?!.*/tests/)",
+      "message": "un panic! deja el proceso sin manera de recuperarse. Si es un caso imposible, documentá por qué con `unreachable!` y su motivo."
+    },
+    {
+      "id": "BLOQUEO",
+      "pattern": "std::thread::sleep|\\.blocking_(recv|send|lock)\\(",
+      "appliesTo": "^crates/(?!domain/)",
+      "message": "bloquear dentro de una tarea async congela el worker del runtime entero. Usá el equivalente de tokio (`tokio::time::sleep`, `.await`)."
+    },
+    {
+      "id": "INSEGURO",
+      "pattern": "\\bunsafe\\s*\\{",
+      "appliesTo": "^crates/(?!ffi/)",
+      "message": "`unsafe` sólo vive en `crates/ffi`, donde está revisado y documentado. Fuera de ahí, hay una forma segura: buscala o pedí revisión."
+    }
+  ],
+  "tests": {
+    "filePattern": "(^|/)tests?/|_test\\.rs$",
+    "onlyPattern": ""
+  },
+  "incidents": {
+    "file": "docs/gotchas.md",
+    "heading": "### GOTCHA",
+    "requiredLines": [
+      "Síntoma:",
+      "Causa:",
+      "Regla:",
+      "Mecanismo:"
+    ]
+  },
+  "docs": {
+    "ignore": [
+      "target",
+      ".git"
+    ],
+    "ignoreFiles": [],
+    "externalPaths": []
+  },
+  "status": {
+    "file": "STATUS.md"
+  },
+  "sdd": {
+    "kit": "ninguno",
+    "skillRoots": [
+      "~/.claude/skills",
+      ".claude/skills"
+    ],
+    "phases": [],
+    "routes": []
+  },
+  "tracker": {
+    "$comment": "Forja: linear. Ningún script del arnés la conoce — lo único que se lee es `issuePattern`. Ver docs/trazabilidad.md.",
+    "kind": "linear",
+    "issuePattern": "\\b(ENG|PLAT)-[0-9]+\\b",
+    "issueExample": "ENG-123",
+    "newIssueHint": [
+      "linear issue create --title \"…\"   (o la web)",
+      "OJO: el patrón ancla los prefijos reales. `[A-Z]{2,}-[0-9]+` cazaría UTF-8 y SHA-256."
+    ],
+    "artifactsIn": "tracker",
+    "specsDir": "specs",
+    "allowedInRepo": [
+      "specs/README.md"
+    ]
+  },
+  "commitMsg": {
+    "$comment": "Qué cuenta como CÓDIGO para exigir registro. La documentación no pide ítem: es el registro, no el cambio.",
+    "codePattern": "^(crates/|src/|build\\.rs$)",
+    "ignoreExtensions": [
+      ".md",
+      ".png",
+      ".jpg",
+      ".jpeg",
+      ".svg"
+    ],
+    "skipSubjects": [
+      "Merge ",
+      "Revert ",
+      "fixup! ",
+      "squash! "
+    ],
+    "escapeLine": "sin-issue:"
+  }
+}

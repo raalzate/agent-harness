@@ -1,0 +1,314 @@
+{
+  "$comment": "SPA React con Vite y Playwright. Lo particular del front: el bundle es público, así que la mitad del valor del arnés está en los patrones que impiden que un secreto o un `dangerouslySetInnerHTML` lleguen al navegador; y la capa pura (`src/domain`) es lo único que sobrevive al próximo cambio de framework, así que es donde la regla PUREZA paga. Los e2e NO están en el gate: necesitan navegador y servidor levantado, y una señal que a veces no puede correr enseña a ignorar el rojo.",
+  "gate": {
+    "command": "npm run gate",
+    "fastCommand": "npm run gate:fast",
+    "marker": ".git/gate-dirty",
+    "codeGlobs": [
+      "src/",
+      "scripts/",
+      ".claude/hooks/"
+    ],
+    "codeExtensions": [
+      ".ts",
+      ".tsx",
+      ".js",
+      ".jsx",
+      ".mjs"
+    ],
+    "installHooksCommand": "npm run hooks:install",
+    "signals": [
+      {
+        "name": "self-test del arnés",
+        "command": [
+          "node",
+          "scripts/harness-selftest.mjs"
+        ],
+        "why": "un hook roto falla en silencio: ninguna otra señal lo ve"
+      },
+      {
+        "name": "link-check de docs",
+        "command": [
+          "node",
+          "scripts/docs-linkcheck.mjs"
+        ],
+        "why": "mover un doc rompe punteros de la memoria del agente"
+      },
+      {
+        "name": "lint de convenciones",
+        "command": [
+          "node",
+          "scripts/repo-lint.mjs"
+        ],
+        "why": "las reglas del repo que ni eslint ni el compilador ven"
+      },
+      {
+        "name": "typecheck",
+        "command": [
+          "npx",
+          "tsc",
+          "--noEmit"
+        ],
+        "why": "Vite transpila sin type-checkear: un prop mal pasado corre en dev y explota en el navegador del usuario"
+      },
+      {
+        "name": "tests de componentes",
+        "command": [
+          "npx",
+          "vitest",
+          "run"
+        ],
+        "why": "el comportamiento que ningún tipo garantiza (estados, efectos, accesibilidad de los roles)"
+      },
+      {
+        "name": "build de producción",
+        "command": [
+          "npm",
+          "run",
+          "build"
+        ],
+        "fastSkip": true,
+        "why": "el bundler falla por cosas que ni el test ni tsc ven: assets faltantes, imports dinámicos, variables de entorno ausentes"
+      },
+      {
+        "name": "presupuesto de bundle",
+        "command": [
+          "node",
+          "scripts/bundle-budget.mjs"
+        ],
+        "fastSkip": true,
+        "skipIfMissing": "dist",
+        "why": "el peso del bundle sólo crece, y crece de a 20 kB por PR: sin un número que falle, la app tarda cuatro segundos en cargar y nadie sabe cuándo pasó"
+      },
+      {
+        "name": "e2e",
+        "command": [
+          "npx",
+          "playwright",
+          "test"
+        ],
+        "fastSkip": true,
+        "skipIfMissing": "node_modules/@playwright/test",
+        "why": "el único lugar donde se ve el flujo completo con router y red reales; OMITIDO si no están los navegadores instalados en vez de rojo mentiroso"
+      },
+      {
+        "name": "artefactos en su lugar",
+        "command": [
+          "node",
+          "scripts/artifacts-check.mjs"
+        ],
+        "why": "un plan suelto en el repo cuando el trabajo vive en el gestor parte el registro en dos, y ninguna otra señal lo mira"
+      }
+    ]
+  },
+  "protectedPaths": [
+    {
+      "pattern": "^\\.env",
+      "reason": ".env* es la llave del reino: lo edita el humano. En Vite es peor que en el back — todo lo que empiece con VITE_ termina en el bundle público."
+    },
+    {
+      "pattern": "^(package-lock\\.json|pnpm-lock\\.yaml|yarn\\.lock)$",
+      "reason": "el lockfile lo regenera el gestor, no se edita a mano."
+    },
+    {
+      "pattern": "^\\.git/",
+      "reason": "historia de git: fuera del alcance del agente."
+    },
+    {
+      "pattern": "^(node_modules|dist|coverage|playwright-report|test-results)/",
+      "reason": "derivados y dependencias: se regeneran."
+    },
+    {
+      "pattern": "^src/api/generated/|\\.gen\\.ts$",
+      "reason": "tipos generados desde el OpenAPI del backend: se regeneran con `npm run api:types`, editarlos se pierde."
+    },
+    {
+      "pattern": "^public/",
+      "reason": "lo que hay en public/ se sirve tal cual y sin hash: un archivo puesto ahí queda cacheado en los navegadores de los usuarios. Lo revisa un humano."
+    }
+  ],
+  "bash": {
+    "deny": [
+      {
+        "pattern": "--no-ver[i]fy",
+        "reason": "saltarse la verificación está prohibido: si el gate estorba, se arregla el gate."
+      },
+      {
+        "pattern": "git\\s+reset\\s+--hard",
+        "reason": "destruye trabajo sin commitear."
+      },
+      {
+        "pattern": "git\\s+add\\s+(\\.|-A|--all)(\\s|$)",
+        "reason": "arrastra `dist/`, `.env.local` y capturas de Playwright: agregá archivos por nombre."
+      },
+      {
+        "pattern": "npm\\s+(install|i|ci)\\b[^|;&]*\\s(--force|-f|--legacy-peer-deps)\\b",
+        "reason": "forzar la instalación esconde un conflicto de peer deps que reaparece en el build de CI. Resolvé la versión."
+      },
+      {
+        "pattern": "(vercel|netlify)\\s+(deploy|--prod)\\b",
+        "reason": "publicar es visible para los usuarios en segundos: lo hace CI desde la rama principal, no el agente."
+      },
+      {
+        "pattern": "\\bsed\\s+(-[a-zA-Z]*\\s+)*-i\\b.*\\bsrc\\b",
+        "reason": "edición masiva in-place sobre el árbol de fuentes."
+      }
+    ]
+  },
+  "reuse": [
+    {
+      "pattern": "\\b(fetch|axios)\\(",
+      "appliesTo": "^src/(components|features|pages)/",
+      "reason": "las llamadas a la API pasan por `src/api/client.ts`: ahí viven el token, el manejo del 401 y los reintentos. Un fetch suelto en un componente no renueva la sesión y muestra pantalla en blanco.",
+      "see": "src/api/client.ts"
+    },
+    {
+      "pattern": "useState<[^>]*>\\(\\s*\\)[\\s\\S]{0,80}useEffect",
+      "appliesTo": "^src/(components|features|pages)/",
+      "reason": "cargar datos con useState + useEffect duplica el caché, el estado de error y la deduplicación que ya da el hook de datos del proyecto.",
+      "see": "src/api/useQuery.ts"
+    }
+  ],
+  "lint": {
+    "command": [
+      "node",
+      "scripts/repo-lint.mjs"
+    ],
+    "fileFlag": "--file"
+  },
+  "purity": [
+    {
+      "dir": "src/domain",
+      "forbiddenImports": [
+        "react",
+        "react-dom",
+        "react-router",
+        "@mui/",
+        "axios",
+        "src/api"
+      ],
+      "except": [],
+      "reason": "src/domain son reglas de negocio puras: sin hooks, sin DOM, sin red. Es lo único que sobrevive intacto al próximo cambio de framework y lo único con cobertura exigida."
+    }
+  ],
+  "purityImportSyntax": [
+    "from\\s+['\"]{mod}['\"]",
+    "require\\(\\s*['\"]{mod}['\"]",
+    "import\\s+['\"]{mod}['\"]"
+  ],
+  "forbiddenDeps": {
+    "manifest": "package.json",
+    "matcher": "^\\s*[\"']?{pkg}[\"']?\\s*[:=]",
+    "packages": [
+      "moment",
+      "lodash",
+      "jquery"
+    ],
+    "reason": "los tres pesan en el bundle lo que no devuelven: moment no se puede tree-shakear (70 kB), lodash entero entra por un `import _`, y jQuery al lado de React son dos dueños del mismo DOM. Hay reemplazos en `src/utils`."
+  },
+  "patterns": [
+    {
+      "id": "SECRETO",
+      "pattern": "import\\.meta\\.env\\.VITE_[A-Z_]*(KEY|TOKEN|SECRET|PASSWORD)",
+      "appliesTo": "^src/",
+      "message": "todo lo que empieza con VITE_ se INCRUSTA en el bundle público: ese secreto queda a la vista de cualquiera con las devtools abiertas. Poné el secreto en el backend y llamalo por API."
+    },
+    {
+      "id": "HTMLCRUDO",
+      "pattern": "dangerouslySetInnerHTML",
+      "appliesTo": "^src/(?!.*(sanitize|__tests__))",
+      "message": "HTML sin sanitizar es XSS con datos de usuario. Si de verdad hace falta, pasa por `src/utils/sanitize.ts` y con revisión."
+    },
+    {
+      "id": "CONSOLE",
+      "pattern": "console\\.(log|debug)\\(",
+      "appliesTo": "^src/(?!.*__tests__)",
+      "message": "un console.log queda en el navegador del usuario y a veces imprime su sesión entera. Usá el logger del proyecto."
+    },
+    {
+      "id": "INDEXKEY",
+      "pattern": "\\.map\\(\\s*\\(?[\\w{}, ]*,\\s*(i|idx|index)\\)?\\s*=>[\\s\\S]{0,200}key=\\{\\s*(i|idx|index)\\s*\\}",
+      "appliesTo": "^src/",
+      "message": "`key={index}` hace que React reutilice el nodo equivocado al reordenar o borrar: se ve como inputs que cambian de valor solos. Usá un id estable del dato."
+    },
+    {
+      "id": "ACCESIBLE",
+      "pattern": "<div[^>]*onClick=",
+      "appliesTo": "^src/(components|features|pages)/",
+      "message": "un div clickeable no recibe foco ni responde a Enter: para teclado y lector de pantalla ese botón no existe. Usá <button>."
+    }
+  ],
+  "tests": {
+    "filePattern": "(^|/)(__tests__|e2e)/|\\.(test|spec)\\.[cm]?[jt]sx?$",
+    "onlyPattern": "\\b(describe|it|test)\\.only\\("
+  },
+  "incidents": {
+    "file": "docs/gotchas.md",
+    "heading": "### GOTCHA",
+    "requiredLines": [
+      "Síntoma:",
+      "Causa:",
+      "Regla:",
+      "Mecanismo:"
+    ]
+  },
+  "docs": {
+    "ignore": [
+      "node_modules",
+      ".git",
+      "dist",
+      "coverage",
+      "playwright-report",
+      "test-results"
+    ],
+    "ignoreFiles": [],
+    "externalPaths": []
+  },
+  "status": {
+    "file": "STATUS.md"
+  },
+  "sdd": {
+    "kit": "ninguno",
+    "skillRoots": [
+      "~/.claude/skills",
+      ".claude/skills"
+    ],
+    "phases": [],
+    "routes": []
+  },
+  "tracker": {
+    "$comment": "Forja: github. Ningún script del arnés la conoce — lo único que se lee es `issuePattern`. Ver docs/trazabilidad.md.",
+    "kind": "github",
+    "issuePattern": "(^|[^A-Za-z0-9_])#[0-9]+",
+    "issueExample": "#123 · Closes #123",
+    "newIssueHint": [
+      "Bug o mejora acotada:  gh issue create --title \"…\"",
+      "Tamaño feature:        abrí el ítem madre y sus tareas"
+    ],
+    "artifactsIn": "tracker",
+    "specsDir": "specs",
+    "allowedInRepo": [
+      "specs/README.md"
+    ]
+  },
+  "commitMsg": {
+    "$comment": "Qué cuenta como CÓDIGO para exigir registro. La documentación no pide ítem: es el registro, no el cambio.",
+    "codePattern": "^(src/|scripts/|\\.claude/)",
+    "ignoreExtensions": [
+      ".md",
+      ".png",
+      ".jpg",
+      ".jpeg",
+      ".svg",
+      ".webp",
+      ".ico"
+    ],
+    "skipSubjects": [
+      "Merge ",
+      "Revert ",
+      "fixup! ",
+      "squash! "
+    ],
+    "escapeLine": "sin-issue:"
+  }
+}

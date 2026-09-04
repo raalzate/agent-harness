@@ -1,0 +1,285 @@
+{
+  "$comment": "App Laravel con Pest/PHPUnit. Particularidades del stack: el framework genera y cachea configuración (`bootstrap/cache`, rutas, vistas compiladas) y un agente que edita un derivado ahí produce un bug que desaparece al limpiar la caché — imposible de reproducir; y `php artisan migrate:fresh` es un `DROP DATABASE` con otro nombre, así que la mitad del valor está en `bash.deny`.",
+  "gate": {
+    "command": "composer gate",
+    "fastCommand": "composer gate-fast",
+    "marker": ".git/gate-dirty",
+    "codeGlobs": [
+      "app/",
+      "routes/",
+      "database/"
+    ],
+    "codeExtensions": [
+      ".php"
+    ],
+    "installHooksCommand": "git config core.hooksPath .githooks",
+    "signals": [
+      {
+        "name": "self-test del arnés",
+        "command": [
+          "node",
+          "scripts/harness-selftest.mjs"
+        ],
+        "why": "un hook roto falla en silencio: ninguna otra señal lo ve"
+      },
+      {
+        "name": "link-check de docs",
+        "command": [
+          "node",
+          "scripts/docs-linkcheck.mjs"
+        ],
+        "why": "mover un doc rompe punteros de la memoria del agente"
+      },
+      {
+        "name": "lint de convenciones",
+        "command": [
+          "node",
+          "scripts/repo-lint.mjs"
+        ],
+        "why": "las reglas de arquitectura de este repo que ningún linter de PHP conoce"
+      },
+      {
+        "name": "estilo",
+        "command": [
+          "vendor/bin/pint",
+          "--test"
+        ],
+        "why": "sin `--test`, pint reformatea y sale 0: la señal se lee verde mientras cambia archivos"
+      },
+      {
+        "name": "análisis estático",
+        "command": [
+          "vendor/bin/phpstan",
+          "analyse",
+          "--no-progress"
+        ],
+        "why": "PHP no tiene compilador: phpstan es lo único que ve un método que no existe antes de que lo vea un usuario"
+      },
+      {
+        "name": "tests",
+        "command": [
+          "vendor/bin/pest",
+          "--parallel"
+        ],
+        "why": "el comportamiento, con la base de tests en memoria"
+      },
+      {
+        "name": "migraciones aplican en limpio",
+        "command": [
+          "php",
+          "artisan",
+          "migrate",
+          "--env=testing",
+          "--force"
+        ],
+        "why": "una migración que sólo funciona sobre la base de alguien rompe el deploy: acá corre sobre una base vacía"
+      },
+      {
+        "name": "dependencias sin CVE",
+        "command": [
+          "composer",
+          "audit"
+        ],
+        "fastSkip": true,
+        "why": "en PHP el paquete transitivo es el vector: sin esta señal la CVE se descubre en el pentest anual"
+      },
+      {
+        "name": "artefactos en su lugar",
+        "command": [
+          "node",
+          "scripts/artifacts-check.mjs"
+        ],
+        "why": "un plan suelto en el repo cuando el trabajo vive en el gestor parte el registro en dos, y ninguna otra señal lo mira"
+      }
+    ]
+  },
+  "protectedPaths": [
+    {
+      "pattern": "^\\.env",
+      "reason": ".env* lleva APP_KEY y las credenciales: lo edita el humano. Cambiar APP_KEY invalida cookies y datos cifrados."
+    },
+    {
+      "pattern": "^composer\\.lock$",
+      "reason": "el lock lo mueve composer, no se edita a mano."
+    },
+    {
+      "pattern": "^database/migrations/.*\\.php$",
+      "reason": "una migración ya aplicada es inmutable: editarla deja los entornos divergentes. Se escribe una nueva. Excepción: la pide el humano y el cambio lo hace él."
+    },
+    {
+      "pattern": "^\\.git/",
+      "reason": "historia de git: fuera del alcance del agente."
+    },
+    {
+      "pattern": "^(vendor|node_modules|public/build|storage/framework|bootstrap/cache)/",
+      "reason": "dependencias y caché generada del framework: editar un archivo ahí produce un bug que desaparece al limpiar la caché, y nadie lo puede reproducir."
+    }
+  ],
+  "bash": {
+    "deny": [
+      {
+        "pattern": "--no-ver[i]fy",
+        "reason": "saltarse la verificación está prohibido: si el gate estorba, se arregla el gate."
+      },
+      {
+        "pattern": "git\\s+reset\\s+--hard",
+        "reason": "destruye trabajo sin commitear."
+      },
+      {
+        "pattern": "artisan\\s+migrate:(fresh|reset|rollback)\\b",
+        "reason": "`migrate:fresh` es un DROP de todas las tablas con otro nombre. Si hace falta rehacer la base local, lo corre el humano sabiendo qué pierde."
+      },
+      {
+        "pattern": "artisan\\s+db:wipe\\b",
+        "reason": "borra el esquema completo, sin confirmación y sin backup."
+      },
+      {
+        "pattern": "artisan\\s+(tinker|queue:flush)\\b",
+        "reason": "tinker es una sesión interactiva contra la app real (y contra su base); `queue:flush` tira los jobs fallidos que son la evidencia del incidente."
+      },
+      {
+        "pattern": "composer\\s+(update|remove)\\b(?![^|;&]*\\s\\S+/\\S+)",
+        "reason": "un `composer update` pelado mueve todo el árbol en un commit irrevisable. Actualizá un paquete: `composer update vendor/paquete`."
+      },
+      {
+        "pattern": "\\bsed\\s+(-[a-zA-Z]*\\s+)*-i\\b.*\\b(app|routes|database)\\b",
+        "reason": "edición masiva in-place sobre el árbol de fuentes."
+      }
+    ]
+  },
+  "reuse": [
+    {
+      "pattern": "\\bDB::(select|statement|raw)\\(",
+      "appliesTo": "^app/(Http|Livewire)/",
+      "reason": "el SQL vive en los repositorios de `app/Repositories`: ahí está el scope de tenant que evita servirle a un cliente los datos de otro. Un `DB::raw` en un controlador se olvida ese `where`.",
+      "see": "app/Repositories"
+    }
+  ],
+  "lint": {
+    "command": [
+      "node",
+      "scripts/repo-lint.mjs"
+    ],
+    "fileFlag": "--file"
+  },
+  "purity": [
+    {
+      "dir": "app/Domain",
+      "forbiddenImports": [
+        "Illuminate\\\\Http",
+        "Illuminate\\\\Support\\\\Facades",
+        "Illuminate\\\\Database\\\\Eloquent"
+      ],
+      "except": [],
+      "reason": "el dominio no conoce el framework: nada de facades ni de Eloquent. Es lo que permite testearlo sin levantar Laravel, y lo que sobrevive a la próxima subida de versión mayor."
+    }
+  ],
+  "purityImportSyntax": [
+    "^\\s*use\\s+{mod}",
+    "^\\s*use\\s+function\\s+{mod}"
+  ],
+  "forbiddenDeps": {
+    "manifest": "composer.json",
+    "matcher": "\"{pkg}\"\\s*:",
+    "packages": [
+      "barryvdh/laravel-debugbar",
+      "laravel/telescope"
+    ],
+    "reason": "debugbar y telescope guardan cada petición con sus parámetros: en producción eso es un volcado de datos personales y un agujero de rendimiento. Van en `require-dev`, nunca en `require`."
+  },
+  "patterns": [
+    {
+      "id": "NMASUNO",
+      "pattern": "foreach\\s*\\([^)]*\\)\\s*\\{[\\s\\S]{0,200}->(load|first|get)\\(",
+      "appliesTo": "^app/",
+      "message": "una consulta dentro de un foreach es el N+1: cien filas son cien viajes a la base. Cargá la relación antes con `with()`."
+    },
+    {
+      "id": "DDDEJADO",
+      "pattern": "\\b(dd|dump|var_dump)\\(",
+      "appliesTo": "^(app|routes)/",
+      "message": "un `dd()` olvidado corta la respuesta a mitad en producción y muestra el estado interno al usuario. Usá el logger."
+    },
+    {
+      "id": "MASIVO",
+      "pattern": "::(create|update|fill)\\(\\s*\\$request->all\\(\\)",
+      "appliesTo": "^app/",
+      "message": "pasar `$request->all()` a un modelo deja que el cliente escriba cualquier columna (`is_admin`, `saldo`). Validá y pasá sólo los campos esperados."
+    },
+    {
+      "id": "ENVENCODIGO",
+      "pattern": "\\benv\\(",
+      "appliesTo": "^app/",
+      "message": "`env()` fuera de `config/` devuelve null cuando la configuración está cacheada (o sea, en producción). Leé la clave con `config()`."
+    }
+  ],
+  "tests": {
+    "filePattern": "(^|/)tests/|Test\\.php$",
+    "onlyPattern": ""
+  },
+  "incidents": {
+    "file": "docs/gotchas.md",
+    "heading": "### GOTCHA",
+    "requiredLines": [
+      "Síntoma:",
+      "Causa:",
+      "Regla:",
+      "Mecanismo:"
+    ]
+  },
+  "docs": {
+    "ignore": [
+      "vendor",
+      "node_modules",
+      "storage",
+      "bootstrap/cache",
+      ".git"
+    ],
+    "ignoreFiles": [],
+    "externalPaths": []
+  },
+  "status": {
+    "file": "STATUS.md"
+  },
+  "sdd": {
+    "kit": "ninguno",
+    "skillRoots": [
+      "~/.claude/skills",
+      ".claude/skills"
+    ],
+    "phases": [],
+    "routes": []
+  },
+  "tracker": {
+    "$comment": "Forja: bitbucket con Jira. Ningún script del arnés la conoce — lo único que se lee es `issuePattern`. Ver docs/trazabilidad.md.",
+    "kind": "jira",
+    "issuePattern": "\\b(WEB|BILL)-[0-9]+\\b",
+    "issueExample": "WEB-123",
+    "newIssueHint": [
+      "Jira no trae CLI oficial: abrí el ticket en la web y pegá su clave acá.",
+      "OJO: el patrón ancla los prefijos reales. `[A-Z]{2,}-[0-9]+` cazaría UTF-8 y SHA-256."
+    ],
+    "artifactsIn": "tracker",
+    "specsDir": "specs",
+    "allowedInRepo": [
+      "specs/README.md"
+    ]
+  },
+  "commitMsg": {
+    "$comment": "Qué cuenta como CÓDIGO para exigir registro. La documentación no pide ítem: es el registro, no el cambio. Las vistas Blade sí piden: un cambio de plantilla es un cambio de comportamiento visible.",
+    "codePattern": "^(app/|routes/|database/|resources/views/)",
+    "ignoreExtensions": [
+      ".md",
+      ".png",
+      ".jpg",
+      ".svg"
+    ],
+    "skipSubjects": [
+      "Merge ",
+      "Revert ",
+      "fixup! ",
+      "squash! "
+    ],
+    "escapeLine": "sin-issue:"
+  }
+}

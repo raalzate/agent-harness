@@ -1,0 +1,292 @@
+{
+  "$comment": "App iOS en Swift (SwiftUI + Swift Package Manager). Particularidad del stack: casi nada del gate se puede correr en un contenedor —`xcodebuild` necesita macOS y un simulador—, así que las señales pesadas declaran `skipIfMissing`/`fastSkip` y CI corre en un runner de macOS. Lo que sí corre en cualquier parte es el lint del arnés, y ahí está el retorno: `project.pbxproj` protegido (un merge mal resuelto ahí rompe el proyecto para todo el equipo) y los patrones de fuerza (`try!`, `as!`, `fatalError`) que en iOS terminan en un crash reportado por el usuario, no en un test rojo.",
+  "gate": {
+    "command": "make gate",
+    "fastCommand": "make gate-fast",
+    "marker": ".git/gate-dirty",
+    "codeGlobs": [
+      "Sources/",
+      "App/",
+      "Packages/"
+    ],
+    "codeExtensions": [
+      ".swift"
+    ],
+    "installHooksCommand": "git config core.hooksPath .githooks",
+    "signals": [
+      {
+        "name": "self-test del arnés",
+        "command": [
+          "node",
+          "scripts/harness-selftest.mjs"
+        ],
+        "why": "un hook roto falla en silencio: ninguna otra señal lo ve"
+      },
+      {
+        "name": "link-check de docs",
+        "command": [
+          "node",
+          "scripts/docs-linkcheck.mjs"
+        ],
+        "why": "mover un doc rompe punteros de la memoria del agente"
+      },
+      {
+        "name": "lint de convenciones",
+        "command": [
+          "node",
+          "scripts/repo-lint.mjs"
+        ],
+        "why": "las reglas de arquitectura de este repo, y la única señal que corre sin macOS ni simulador"
+      },
+      {
+        "name": "formato",
+        "command": [
+          "swiftformat",
+          "--lint",
+          "."
+        ],
+        "skipIfMissing": "/usr/local/bin/swiftformat",
+        "why": "sin `--lint` swiftformat reescribe y sale 0: verde mientras cambia archivos"
+      },
+      {
+        "name": "swiftlint",
+        "command": [
+          "swiftlint",
+          "--strict"
+        ],
+        "skipIfMissing": ".swiftlint.yml",
+        "why": "sin `--strict` los avisos no fallan, y un aviso que no falla no existe"
+      },
+      {
+        "name": "tests del paquete de dominio",
+        "command": [
+          "swift",
+          "test",
+          "--package-path",
+          "Packages/Domain"
+        ],
+        "why": "es la única suite que corre sin simulador: en segundos y en cualquier máquina. Por eso el dominio vive en su propio paquete"
+      },
+      {
+        "name": "build y tests de la app",
+        "command": [
+          "xcodebuild",
+          "test",
+          "-scheme",
+          "App",
+          "-destination",
+          "platform=iOS Simulator,name=iPhone 15",
+          "-quiet"
+        ],
+        "fastSkip": true,
+        "skipIfMissing": "App.xcodeproj",
+        "why": "la app entera sólo compila con Xcode y un simulador: es la señal más lenta y la que no se puede correr en un contenedor Linux"
+      },
+      {
+        "name": "artefactos en su lugar",
+        "command": [
+          "node",
+          "scripts/artifacts-check.mjs"
+        ],
+        "why": "un plan suelto en el repo cuando el trabajo vive en el gestor parte el registro en dos, y ninguna otra señal lo mira"
+      }
+    ]
+  },
+  "protectedPaths": [
+    {
+      "pattern": "\\.mobileprovision$|\\.p12$|\\.p8$|^fastlane/Matchfile$",
+      "reason": "perfiles y certificados de firma: con ellos se publica en nombre de la empresa. Nunca los toca el agente."
+    },
+    {
+      "pattern": "^\\.env|^Secrets\\.plist$",
+      "reason": "credenciales; además, todo lo que va en un plist del bundle se puede leer descomprimiendo el .ipa."
+    },
+    {
+      "pattern": "project\\.pbxproj$|\\.xcworkspace/",
+      "reason": "el archivo del proyecto es un formato generado y con conflictos ilegibles: un merge mal resuelto ahí deja a todo el equipo sin poder compilar. Se cambia desde Xcode."
+    },
+    {
+      "pattern": "^Package\\.resolved$",
+      "reason": "el pin de versiones lo mueve SPM al resolver, no se edita a mano."
+    },
+    {
+      "pattern": "^\\.git/",
+      "reason": "historia de git: fuera del alcance del agente."
+    },
+    {
+      "pattern": "^(build|\\.build|DerivedData|Carthage|Pods)/",
+      "reason": "derivados y dependencias: se regeneran."
+    }
+  ],
+  "bash": {
+    "deny": [
+      {
+        "pattern": "--no-ver[i]fy",
+        "reason": "saltarse la verificación está prohibido: si el gate estorba, se arregla el gate."
+      },
+      {
+        "pattern": "git\\s+reset\\s+--hard",
+        "reason": "destruye trabajo sin commitear."
+      },
+      {
+        "pattern": "fastlane\\s+(release|deliver|pilot|match)\\b",
+        "reason": "publicar en App Store o TestFlight es irreversible para quien ya actualizó, y `match` puede regenerar los certificados del equipo. Lo hace CI desde un tag."
+      },
+      {
+        "pattern": "xcrun\\s+simctl\\s+(erase|delete)\\b",
+        "reason": "borra el estado del simulador, incluido el de la sesión que alguien estaba reproduciendo."
+      },
+      {
+        "pattern": "rm\\s+-rf?\\s+[^|;&]*(DerivedData|~/Library/Developer)",
+        "reason": "vaciar DerivedData son veinte minutos de recompilación para toda la máquina. Si hace falta, lo corre el humano."
+      },
+      {
+        "pattern": "\\bsed\\s+(-[a-zA-Z]*\\s+)*-i\\b.*\\b(Sources|App|Packages)\\b",
+        "reason": "edición masiva in-place sobre el árbol de fuentes."
+      }
+    ]
+  },
+  "reuse": [
+    {
+      "pattern": "URLSession\\.shared\\.(data|dataTask)",
+      "appliesTo": "^(App|Sources)/(?!Networking/)",
+      "reason": "las llamadas pasan por `Sources/Networking/APIClient.swift`: ahí están el token, el reintento y el timeout. `URLSession.shared` usa el timeout por default de 60 s, que en una red móvil mala deja la pantalla en blanco un minuto.",
+      "see": "Sources/Networking/APIClient.swift"
+    }
+  ],
+  "lint": {
+    "command": [
+      "node",
+      "scripts/repo-lint.mjs"
+    ],
+    "fileFlag": "--file"
+  },
+  "purity": [
+    {
+      "dir": "Packages/Domain/Sources",
+      "forbiddenImports": [
+        "UIKit",
+        "SwiftUI",
+        "CoreData"
+      ],
+      "except": [],
+      "reason": "el dominio no importa UI ni persistencia: es lo único que compila y testea sin simulador, o sea la única suite rápida del repo. La regla es la que mantiene ese tiempo bajo."
+    }
+  ],
+  "purityImportSyntax": [
+    "^\\s*import\\s+{mod}\\b",
+    "^\\s*@testable\\s+import\\s+{mod}\\b"
+  ],
+  "forbiddenDeps": {
+    "manifest": "Package.swift",
+    "matcher": "\\.package\\([^)]*{pkg}",
+    "packages": [
+      "Alamofire"
+    ],
+    "reason": "`URLSession` con async/await cubre lo que se usaba de Alamofire: la dependencia sólo agrega peso al binario y una migración pendiente. La capa está en `Sources/Networking`."
+  },
+  "patterns": [
+    {
+      "id": "FUERZA",
+      "pattern": "(try!|as!|\\.unsafelyUnwrapped|!\\s*\\)\\s*$)",
+      "appliesTo": "^(App|Sources|Packages)/(?!.*Tests/)",
+      "message": "en iOS un desempaquetado forzado no es una excepción capturable: es un crash en el teléfono del usuario y una reseña de una estrella. Usá `guard let` o `try?` con el camino de error explícito."
+    },
+    {
+      "id": "FATAL",
+      "pattern": "fatalError\\(|preconditionFailure\\(",
+      "appliesTo": "^(App|Sources|Packages)/(?!.*Tests/)",
+      "message": "`fatalError` mata la app sin manera de recuperarse. En un caso imposible de verdad, dejá el motivo escrito y revisalo con alguien."
+    },
+    {
+      "id": "PRINT",
+      "pattern": "^\\s*print\\(",
+      "appliesTo": "^(App|Sources|Packages)/(?!.*Tests/)",
+      "message": "`print` queda en el binario de release y a veces imprime el token en la consola del dispositivo. Usá el logger (`Logger` de OSLog) con su categoría."
+    },
+    {
+      "id": "HILOPRINCIPAL",
+      "pattern": "DispatchQueue\\.main\\.sync",
+      "appliesTo": "^(App|Sources|Packages)/",
+      "message": "`main.sync` llamado desde el hilo principal es un deadlock inmediato: la app se congela y iOS la mata. Usá `.async`, o `@MainActor`."
+    },
+    {
+      "id": "URLFIJA",
+      "pattern": "https?://(?!localhost|127\\.0\\.0\\.1)[a-z0-9.-]+\\.[a-z]{2,}",
+      "appliesTo": "^(App|Sources)/(?!Configuration/)",
+      "message": "una URL de servidor en el código no se puede cambiar sin publicar una versión nueva y esperar la revisión de Apple. Va en `Sources/Configuration`, por entorno."
+    }
+  ],
+  "tests": {
+    "filePattern": "(^|/)Tests?/|Tests\\.swift$",
+    "onlyPattern": ""
+  },
+  "incidents": {
+    "file": "docs/gotchas.md",
+    "heading": "### GOTCHA",
+    "requiredLines": [
+      "Síntoma:",
+      "Causa:",
+      "Regla:",
+      "Mecanismo:"
+    ]
+  },
+  "docs": {
+    "ignore": [
+      "build",
+      ".build",
+      "DerivedData",
+      "Pods",
+      ".git"
+    ],
+    "ignoreFiles": [],
+    "externalPaths": []
+  },
+  "status": {
+    "file": "STATUS.md"
+  },
+  "sdd": {
+    "kit": "ninguno",
+    "skillRoots": [
+      "~/.claude/skills",
+      ".claude/skills"
+    ],
+    "phases": [],
+    "routes": []
+  },
+  "tracker": {
+    "$comment": "Forja: azure boards. Ningún script del arnés la conoce — lo único que se lee es `issuePattern`. Ver docs/trazabilidad.md.",
+    "kind": "azure",
+    "issuePattern": "\\bAB#[0-9]+\\b",
+    "issueExample": "AB#4821",
+    "newIssueHint": [
+      "az boards work-item create --type Bug --title \"…\"",
+      "La referencia `AB#123` en el commit es la que cierra el ítem al mergear"
+    ],
+    "artifactsIn": "tracker",
+    "specsDir": "specs",
+    "allowedInRepo": [
+      "specs/README.md"
+    ]
+  },
+  "commitMsg": {
+    "$comment": "Qué cuenta como CÓDIGO para exigir registro. La documentación no pide ítem: es el registro, no el cambio. Los .strings de traducción tampoco.",
+    "codePattern": "^(App/|Sources/|Packages/)",
+    "ignoreExtensions": [
+      ".md",
+      ".png",
+      ".jpg",
+      ".jpeg",
+      ".svg",
+      ".strings",
+      ".xcassets"
+    ],
+    "skipSubjects": [
+      "Merge ",
+      "Revert ",
+      "fixup! ",
+      "squash! "
+    ],
+    "escapeLine": "sin-issue:"
+  }
+}
