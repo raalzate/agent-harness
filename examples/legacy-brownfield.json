@@ -1,0 +1,182 @@
+{
+  "$comment": "Repo heredado, sin tests y sin dueño claro. Es el ejemplo más importante de esta carpeta y el que más se parece a la realidad: acá el arnés arranca con CUATRO frenos, no con veinte. Cada regla que se agrega antes de tener una cicatriz enseña al equipo a ignorar los bloqueos, y en un repo así los bloqueos son lo único que impide que el agente reescriba medio sistema. El gate arranca en lo que HOY sale verde (que el proyecto compile) y crece con `/lesson`, un freno por incidente. La lista de `patterns` vacía es una decisión, no un olvido.",
+  "gate": {
+    "$comment": "Sin tests todavía: el gate arranca en «compila y el arnés está sano». Es un gate honesto y VERDE, que es la única clase de gate que un equipo respeta. La señal de tests entra el día que exista la primera suite.",
+    "command": "./gate.sh",
+    "marker": ".git/gate-dirty",
+    "codeGlobs": [
+      "src/"
+    ],
+    "installHooksCommand": "git config core.hooksPath .githooks",
+    "signals": [
+      {
+        "name": "self-test del arnés",
+        "command": [
+          "node",
+          "scripts/harness-selftest.mjs"
+        ],
+        "why": "un hook roto falla en silencio: ninguna otra señal lo ve, y acá el arnés es la única red que hay"
+      },
+      {
+        "name": "lint de convenciones",
+        "command": [
+          "node",
+          "scripts/repo-lint.mjs"
+        ],
+        "why": "las cuatro reglas que este equipo sí puede defender hoy"
+      },
+      {
+        "name": "compila",
+        "command": [
+          "make",
+          "build"
+        ],
+        "why": "es lo ÚNICO verificable hoy, y ya atrapa el 80% de lo que rompe un cambio a ciegas en este código"
+      },
+      {
+        "name": "tests de las zonas rescatadas",
+        "command": [
+          "make",
+          "test"
+        ],
+        "skipIfMissing": "tests",
+        "why": "la cobertura crece por zonas: cada módulo que se toca sale con su primer test. `skipIfMissing` para que el gate no arranque rojo el día uno — un gate rojo desde el principio se aprende a ignorar"
+      }
+    ]
+  },
+  "protectedPaths": [
+    {
+      "pattern": "^\\.env|^config/production\\.",
+      "reason": "credenciales de producción versionadas (una deuda conocida, ver docs/gotchas.md): hasta que salgan del repo, no las toca el agente."
+    },
+    {
+      "pattern": "^\\.git/",
+      "reason": "historia de git: fuera del alcance del agente."
+    },
+    {
+      "pattern": "^src/pagos/",
+      "reason": "el módulo de pagos no tiene tests y factura de verdad. Cualquier cambio ahí lo hace un humano con alguien mirando. Es la cicatriz más cara de este repo (ver docs/gotchas.md)."
+    },
+    {
+      "pattern": "^(vendor|lib/externo|dist)/",
+      "reason": "dependencias vendorizadas con parches locales sin documentar: tocarlas es abrir la caja. Se reemplazan por módulo, con plan."
+    }
+  ],
+  "bash": {
+    "$comment": "En un repo sin tests, `bash.deny` vale más que en ningún otro: no hay suite que avise que algo se rompió, así que lo único que queda es no dejar que se rompa de forma irreversible.",
+    "deny": [
+      {
+        "pattern": "--no-ver[i]fy",
+        "reason": "saltarse la verificación está prohibido: si el gate estorba, se arregla el gate."
+      },
+      {
+        "pattern": "git\\s+(reset\\s+--hard|clean\\s+-[a-z]*f|checkout\\s+--\\s+\\.)",
+        "reason": "acá no hay suite que reconstruya lo perdido: destruir trabajo sin commitear es definitivo."
+      },
+      {
+        "pattern": "\\bsed\\s+(-[a-zA-Z]*\\s+)*-i\\b",
+        "reason": "una edición masiva in-place sobre este código no se puede revisar ni revertir con confianza: mostrá la lista de archivos y el diff propuesto primero."
+      },
+      {
+        "pattern": "\\b(mysql|psql)\\b[^|;&]*\\b(DROP|TRUNCATE|ALTER)\\b",
+        "reason": "el esquema de esta base no está en migraciones: un ALTER a mano no queda registrado en ninguna parte y nadie sabe reproducirlo."
+      },
+      {
+        "pattern": "(rsync|scp|ssh)\\s+[^|;&]*prod",
+        "reason": "el deploy de este sistema es manual (deuda conocida): lo hace un humano siguiendo el runbook, nunca el agente."
+      }
+    ]
+  },
+  "lint": {
+    "command": [
+      "node",
+      "scripts/repo-lint.mjs"
+    ],
+    "fileFlag": "--file"
+  },
+  "purity": [],
+  "forbiddenDeps": {
+    "$comment": "Vacío a propósito: la lista de dependencias prohibidas de OTRO repo es ruido acá. La primera entrada la va a poner el próximo incidente.",
+    "manifest": "",
+    "packages": [],
+    "reason": ""
+  },
+  "patterns": [
+    {
+      "$comment": "Un solo patrón, y con cicatriz: el incidente está escrito en docs/gotchas.md. Los demás entran de a uno, cada vez que algo cueste tiempo.",
+      "id": "CONEXIONNUEVA",
+      "pattern": "new\\s+(Connection|PDO|MysqlClient)\\(",
+      "appliesTo": "^src/",
+      "message": "cada conexión nueva se suma a las 40 que este sistema ya deja abiertas: al pasar el límite de la base, el sitio entero deja de responder (pasó el 2026-07-11, ver docs/gotchas.md). Usá la conexión compartida de `src/db.php`."
+    }
+  ],
+  "tests": {
+    "$comment": "`filePattern` declarado aunque casi no haya tests: es lo que hace que el primer test que alguien escriba ya quede cubierto por la regla ONLY, sin tener que acordarse de volver acá.",
+    "filePattern": "(^|/)tests?/",
+    "onlyPattern": ""
+  },
+  "incidents": {
+    "file": "docs/gotchas.md",
+    "heading": "### GOTCHA",
+    "requiredLines": [
+      "Síntoma:",
+      "Causa:",
+      "Regla:",
+      "Mecanismo:"
+    ]
+  },
+  "docs": {
+    "ignore": [
+      "vendor",
+      "dist",
+      ".git",
+      "lib/externo"
+    ],
+    "ignoreFiles": [],
+    "externalPaths": []
+  },
+  "status": {
+    "file": "STATUS.md"
+  },
+  "sdd": {
+    "kit": "ninguno",
+    "skillRoots": [
+      "~/.claude/skills",
+      ".claude/skills"
+    ],
+    "phases": [],
+    "routes": []
+  },
+  "tracker": {
+    "$comment": "Forja: github. Ningún script del arnés la conoce — lo único que se lee es `issuePattern`. Ver docs/trazabilidad.md.",
+    "kind": "github",
+    "issuePattern": "(^|[^A-Za-z0-9_])#[0-9]+",
+    "issueExample": "#123 · Closes #123",
+    "newIssueHint": [
+      "gh issue create --title \"…\"",
+      "En este repo el ítem vale doble: es la única documentación de por qué el código quedó así"
+    ],
+    "artifactsIn": "tracker",
+    "specsDir": "specs",
+    "allowedInRepo": [
+      "specs/README.md"
+    ]
+  },
+  "commitMsg": {
+    "$comment": "Qué cuenta como CÓDIGO para exigir registro. Sin tests y sin historia escrita, el mensaje de commit ES la documentación del sistema.",
+    "codePattern": "^src/",
+    "ignoreExtensions": [
+      ".md",
+      ".png",
+      ".jpg",
+      ".svg"
+    ],
+    "skipSubjects": [
+      "Merge ",
+      "Revert ",
+      "fixup! ",
+      "squash! "
+    ],
+    "escapeLine": "sin-issue:"
+  }
+}

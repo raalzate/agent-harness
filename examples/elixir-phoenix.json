@@ -1,0 +1,300 @@
+{
+  "$comment": "Servicio Phoenix (Elixir/OTP). Particularidad del stack: la tolerancia a fallos la da el árbol de supervisión, y es exactamente lo que un cambio bienintencionado rompe sin que ningún test lo note — por eso `application.ex` está en `invariants` y no en un comentario. La segunda: los avisos del compilador de Elixir señalan bugs reales (una función que no existe, una cláusula que nunca se alcanza), así que el gate compila con `--warnings-as-errors`; sin eso, la señal se lee verde con el bug adentro.",
+  "gate": {
+    "command": "mix gate",
+    "fastCommand": "mix gate.fast",
+    "marker": ".git/gate-dirty",
+    "codeGlobs": [
+      "lib/",
+      "test/support/"
+    ],
+    "codeExtensions": [
+      ".ex",
+      ".exs"
+    ],
+    "installHooksCommand": "git config core.hooksPath .githooks",
+    "signals": [
+      {
+        "name": "self-test del arnés",
+        "command": [
+          "node",
+          "scripts/harness-selftest.mjs"
+        ],
+        "why": "un hook roto falla en silencio: ninguna otra señal lo ve"
+      },
+      {
+        "name": "link-check de docs",
+        "command": [
+          "node",
+          "scripts/docs-linkcheck.mjs"
+        ],
+        "why": "mover un doc rompe punteros de la memoria del agente"
+      },
+      {
+        "name": "lint de convenciones",
+        "command": [
+          "node",
+          "scripts/repo-lint.mjs"
+        ],
+        "why": "las reglas de este repo que ni el compilador ni credo conocen (empezando por el árbol de supervisión)"
+      },
+      {
+        "name": "formato",
+        "command": [
+          "mix",
+          "format",
+          "--check-formatted"
+        ],
+        "why": "sin `--check-formatted`, mix format reescribe y sale 0: verde mientras cambia archivos"
+      },
+      {
+        "name": "compila sin avisos",
+        "command": [
+          "mix",
+          "compile",
+          "--warnings-as-errors"
+        ],
+        "why": "en Elixir un aviso ES un bug (función inexistente, cláusula inalcanzable, variable sin usar que era un typo): sin `--warnings-as-errors` pasa a producción"
+      },
+      {
+        "name": "credo",
+        "command": [
+          "mix",
+          "credo",
+          "--strict"
+        ],
+        "why": "olores conocidos del lenguaje, fuera de la discusión del review"
+      },
+      {
+        "name": "tests",
+        "command": [
+          "mix",
+          "test",
+          "--warnings-as-errors"
+        ],
+        "why": "el comportamiento, con la base de tests en sandbox por proceso"
+      },
+      {
+        "name": "dialyzer",
+        "command": [
+          "mix",
+          "dialyzer",
+          "--quiet"
+        ],
+        "fastSkip": true,
+        "skipIfMissing": "priv/plts",
+        "why": "es lo único que ve un contrato de tipos roto entre módulos; la PLT tarda minutos, así que vive en CI y se omite si no está construida localmente"
+      },
+      {
+        "name": "artefactos en su lugar",
+        "command": [
+          "node",
+          "scripts/artifacts-check.mjs"
+        ],
+        "why": "un plan suelto en el repo cuando el trabajo vive en el gestor parte el registro en dos, y ninguna otra señal lo mira"
+      }
+    ]
+  },
+  "protectedPaths": [
+    {
+      "pattern": "^\\.env|^config/(prod|runtime)\\.secret\\.exs$",
+      "reason": "credenciales y el SECRET_KEY_BASE: cambiarlo invalida todas las sesiones y los tokens firmados. Lo edita el humano."
+    },
+    {
+      "pattern": "^mix\\.lock$",
+      "reason": "el lock lo mueve `mix deps.get`, no se edita a mano."
+    },
+    {
+      "pattern": "^priv/repo/migrations/.*\\.exs$",
+      "reason": "una migración ya aplicada es inmutable: editarla deja los entornos divergentes y el próximo deploy falla en otro lugar. Se escribe una nueva."
+    },
+    {
+      "pattern": "^\\.git/",
+      "reason": "historia de git: fuera del alcance del agente."
+    },
+    {
+      "pattern": "^(_build|deps|priv/static/assets|cover)/",
+      "reason": "derivados y dependencias: se regeneran."
+    }
+  ],
+  "bash": {
+    "deny": [
+      {
+        "pattern": "--no-ver[i]fy",
+        "reason": "saltarse la verificación está prohibido: si el gate estorba, se arregla el gate."
+      },
+      {
+        "pattern": "git\\s+reset\\s+--hard",
+        "reason": "destruye trabajo sin commitear."
+      },
+      {
+        "pattern": "mix\\s+ecto\\.(drop|reset)\\b",
+        "reason": "borra la base local completa. Si hace falta rehacerla, lo corre el humano sabiendo qué pierde."
+      },
+      {
+        "pattern": "mix\\s+deps\\.(clean\\s+--all|update\\s+--all)\\b",
+        "reason": "mover todo el árbol de dependencias de una vez es un commit irrevisable, y limpiar todo son diez minutos de recompilación."
+      },
+      {
+        "pattern": "mix\\s+hex\\.publish\\b",
+        "reason": "publicar en Hex es irreversible: una versión no se puede borrar. Lo hace CI desde un tag."
+      },
+      {
+        "pattern": "(mix\\s+release[^|;&]*--overwrite|iex\\s+--remsh)",
+        "reason": "`--remsh` es una consola dentro del nodo en producción: cualquier expresión ahí corre en el sistema vivo, sin diff ni revisión."
+      },
+      {
+        "pattern": "\\bsed\\s+(-[a-zA-Z]*\\s+)*-i\\b.*\\blib\\b",
+        "reason": "edición masiva in-place sobre el árbol de fuentes."
+      }
+    ]
+  },
+  "reuse": [
+    {
+      "pattern": "(HTTPoison|:httpc|Finch\\.build)\\.",
+      "appliesTo": "^lib/(?!mi_app/http/)",
+      "reason": "las llamadas salientes pasan por `lib/mi_app/http`, donde están el pool de Finch, el timeout y el reintento. Un cliente armado en cada módulo abre su propio pool y ninguno respeta el circuito abierto.",
+      "see": "lib/mi_app/http/client.ex"
+    }
+  ],
+  "lint": {
+    "command": [
+      "node",
+      "scripts/repo-lint.mjs"
+    ],
+    "fileFlag": "--file"
+  },
+  "purity": [
+    {
+      "dir": "lib/mi_app/core",
+      "forbiddenImports": [
+        "Phoenix",
+        "Ecto.Repo",
+        "MiAppWeb"
+      ],
+      "except": [],
+      "reason": "el núcleo son funciones puras sobre estructuras: sin web ni repo. Es lo único que se testea sin sandbox de base y lo que sobrevive al día que la interfaz deje de ser Phoenix."
+    }
+  ],
+  "purityImportSyntax": [
+    "^\\s*(?:alias|import|require|use)\\s+{mod}\\b"
+  ],
+  "forbiddenDeps": {
+    "manifest": "mix.exs",
+    "matcher": "\\{:{pkg},",
+    "packages": [
+      "httpoison",
+      "poison"
+    ],
+    "reason": "httpoison arrastra hackney (su propio pool, difícil de instrumentar) y poison quedó atrás de jason en velocidad y en mantenimiento. El proyecto usa Finch + Jason; si aparecen, alguien copió un tutorial viejo."
+  },
+  "invariants": [
+    {
+      "$comment": "El freno más valioso del stack: el árbol de supervisión es la tolerancia a fallos, y sacar un hijo o cambiar la estrategia no rompe ningún test — se ve recién cuando algo se cae en producción y no vuelve a levantar.",
+      "file": "lib/mi_app/application.ex",
+      "required": [
+        "MiApp.Repo",
+        "MiAppWeb.Endpoint",
+        "Supervisor.start_link"
+      ],
+      "forbidden": [
+        "strategy: :one_for_all"
+      ],
+      "reason": "sacar un hijo del árbol de supervisión deja un subsistema sin reiniciarse, y `:one_for_all` tira TODO el árbol cuando muere cualquier hijo: un pico de errores de la base se convierte en una caída total. Se cambia con revisión."
+    }
+  ],
+  "patterns": [
+    {
+      "id": "IOINSPECT",
+      "pattern": "IO\\.(inspect|puts)\\(",
+      "appliesTo": "^lib/(?!.*/test/)",
+      "message": "`IO.inspect` queda en producción imprimiendo estructuras completas (a veces con el token adentro) y sin nivel de log. Usá `Logger` con su metadata."
+    },
+    {
+      "id": "PROCESODESNUDO",
+      "pattern": "\\b(spawn|spawn_link|Task\\.start)\\(",
+      "appliesTo": "^lib/",
+      "message": "un proceso fuera del árbol de supervisión muere en silencio y nadie lo reinicia: el trabajo simplemente deja de hacerse. Usá `Task.Supervisor` o un hijo del árbol."
+    },
+    {
+      "id": "ATOMODINAMICO",
+      "pattern": "String\\.to_atom\\(",
+      "appliesTo": "^lib/",
+      "message": "los átomos no se liberan nunca: convertir entrada del usuario a átomo es una fuga de memoria que tira el nodo entero (y no hay ctrl-Z). Usá `String.to_existing_atom/1`."
+    },
+    {
+      "id": "SQLCRUDO",
+      "pattern": "Repo\\.query!?\\(\\s*\"[^\"]*#\\{",
+      "appliesTo": "^lib/",
+      "message": "interpolar en SQL crudo es inyección. Pasá los valores como parámetros: `Repo.query(sql, [valor])`."
+    }
+  ],
+  "tests": {
+    "filePattern": "(^|/)test/|_test\\.exs$",
+    "onlyPattern": "@tag\\s+:only\\b"
+  },
+  "incidents": {
+    "file": "docs/gotchas.md",
+    "heading": "### GOTCHA",
+    "requiredLines": [
+      "Síntoma:",
+      "Causa:",
+      "Regla:",
+      "Mecanismo:"
+    ]
+  },
+  "docs": {
+    "ignore": [
+      "_build",
+      "deps",
+      "cover",
+      ".git"
+    ],
+    "ignoreFiles": [],
+    "externalPaths": []
+  },
+  "status": {
+    "file": "STATUS.md"
+  },
+  "sdd": {
+    "kit": "ninguno",
+    "skillRoots": [
+      "~/.claude/skills",
+      ".claude/skills"
+    ],
+    "phases": [],
+    "routes": []
+  },
+  "tracker": {
+    "$comment": "Forja: gitea. Ningún script del arnés la conoce — lo único que se lee es `issuePattern`. Ver docs/trazabilidad.md.",
+    "kind": "gitea",
+    "issuePattern": "(^|[^A-Za-z0-9_])#[0-9]+",
+    "issueExample": "#123 · Closes #123",
+    "newIssueHint": [
+      "tea issue create --title \"…\"",
+      "Un cambio en el árbol de supervisión abre su propio ítem: es una decisión de arquitectura"
+    ],
+    "artifactsIn": "tracker",
+    "specsDir": "specs",
+    "allowedInRepo": [
+      "specs/README.md"
+    ]
+  },
+  "commitMsg": {
+    "$comment": "Qué cuenta como CÓDIGO para exigir registro. La documentación no pide ítem: es el registro, no el cambio.",
+    "codePattern": "^(lib/|config/|priv/repo/)",
+    "ignoreExtensions": [
+      ".md",
+      ".png",
+      ".jpg",
+      ".svg"
+    ],
+    "skipSubjects": [
+      "Merge ",
+      "Revert ",
+      "fixup! ",
+      "squash! "
+    ],
+    "escapeLine": "sin-issue:"
+  }
+}

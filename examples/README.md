@@ -19,6 +19,10 @@ hacer las preguntas de [`../docs/portar.md`](../docs/portar.md) en ese stack.
 | [`swift-ios.json`](swift-ios.json) | app iOS con SwiftUI + SPM | Azure Boards `AB#4821` | casi ninguna señal corre sin macOS: `skipIfMissing` en swiftlint y en `xcodebuild`, y el dominio en su propio paquete para tener **una** suite rápida; `project.pbxproj` protegido; `try!`/`as!`/`fatalError` prohibidos |
 | [`cpp-cmake.json`](cpp-cmake.json) | proyecto C++ con CMake + CTest | Gitea `#123` | la **misma** suite dos veces (ASan+UBSan y TSan): la carrera no la caza correr los tests otra vez, la caza el detector; `--Werror` en clang-format y `-Werror` en el build porque un aviso que no falla no existe |
 | [`data-airflow.json`](data-airflow.json) | DAGs de Airflow + modelos dbt + notebooks | GitLab `#123` | el único que declara `lint.sourceExtensions` a mano (`.sql` y `.ipynb` no están en el default: sin declararlas, el gate se ensucia con archivos que el barrido no lee); frenos sobre **datos**, no sintaxis (`if_exists='replace'`, `--full-refresh`, SQL destructivo, notebooks con salidas) |
+| [`elixir-phoenix.json`](elixir-phoenix.json) | servicio Phoenix (Elixir/OTP) | Gitea `#123` | el árbol de supervisión —la tolerancia a fallos del stack— entra en `invariants`, porque sacarle un hijo no rompe ningún test; `--warnings-as-errors` porque en Elixir un aviso ES un bug; `String.to_atom` prohibido (fuga que tira el nodo) |
+| [`unity-game.json`](unity-game.json) | juego en Unity (C#) | Jira `GAME-412` | `protectedPaths` vale más que el resto junto: los `.meta` llevan el GUID con que las escenas referencian assets y reescribir uno vacía la escena sin que el diff muestre nada; una señal verifica que ningún asset viaje sin su `.meta`; los patrones frenan lo que asigna memoria en `Update()` |
+| [`embedded-c.json`](embedded-c.json) | firmware C para microcontrolador (Zephyr) | Azure Boards `AB#1187` | el más estricto, y con razón: sin ctrl-Z en equipos de campo. `malloc`/`printf`/espera activa prohibidos, watchdog en `invariants`, una señal que falla si el binario no entra en la flash, y flashear en `bash.deny` porque toca hardware físico |
+| [`legacy-brownfield.json`](legacy-brownfield.json) | repo heredado, sin tests y sin dueño | GitHub `#123` | **el más parecido a la realidad**: arranca con cuatro frenos, `patterns` con **una** regla (la que tiene cicatriz) y `forbiddenDeps` vacío a propósito. El gate arranca en lo que hoy sale verde —que compile— y crece con `/lesson`, un freno por incidente |
 | [`monorepo.json`](monorepo.json) | workspace con varios paquetes | Azure Boards `AB#123` | el gate corre el workspace completo; `skipIfMissing` para clones parciales |
 | [`infra-terraform.json`](infra-terraform.json) | repo de infraestructura | Gitea `#123` | el arnés se invierte: `bash.deny` es la mitad del valor (planear sí, aplicar no) |
 
@@ -26,7 +30,7 @@ La columna **Forja** está a propósito: seis gestores distintos con el mismo me
 script del arnés conoce ninguno — lo único que cambia es `tracker.issuePattern`. Ver
 [trazabilidad.md](../docs/trazabilidad.md).
 
-Los dieciséis archivos los verifica el gate (sección 8 del self-test): parsean, sus regex compilan,
+Los veinte archivos los verifica el gate (sección 8 del self-test): parsean, sus regex compilan,
 cada señal declara su `why`, y un manifiesto que no es clave-valor trae su `matcher`. Un ejemplo
 roto viaja igual que un script roto.
 
