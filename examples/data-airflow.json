@@ -1,0 +1,289 @@
+{
+  "$comment": "Plataforma de datos: DAGs de Airflow, modelos dbt y notebooks. Es el único ejemplo donde `lint.sourceExtensions` se declara a mano: `.ipynb` y `.sql` no están en el default agnóstico, y sin declararlos el gate se ensucia por un notebook que el barrido del lint no lee — PATRON y PUREZA quedan ciegas justo donde vive la mitad del código. La otra particularidad del stack: casi todo freno acá es sobre DATOS, no sobre sintaxis (un `DROP`, un `df.to_sql(if_exists='replace')` o un notebook con salidas commiteadas cuestan más que cualquier bug de tipos).",
+  "gate": {
+    "command": "make gate",
+    "fastCommand": "make gate-fast",
+    "marker": ".git/gate-dirty",
+    "codeGlobs": [
+      "dags/",
+      "transforms/",
+      "models/"
+    ],
+    "codeExtensions": [
+      ".py",
+      ".sql",
+      ".ipynb"
+    ],
+    "installHooksCommand": "git config core.hooksPath .githooks",
+    "signals": [
+      {
+        "name": "self-test del arnés",
+        "command": [
+          "node",
+          "scripts/harness-selftest.mjs"
+        ],
+        "why": "un hook roto falla en silencio: ninguna otra señal lo ve"
+      },
+      {
+        "name": "link-check de docs",
+        "command": [
+          "node",
+          "scripts/docs-linkcheck.mjs"
+        ],
+        "why": "mover un doc rompe punteros de la memoria del agente"
+      },
+      {
+        "name": "lint de convenciones",
+        "command": [
+          "node",
+          "scripts/repo-lint.mjs"
+        ],
+        "why": "las reglas de esta plataforma que ni ruff ni dbt conocen"
+      },
+      {
+        "name": "ruff",
+        "command": [
+          "ruff",
+          "check",
+          "."
+        ],
+        "why": "el lint del lenguaje; rápido y sin discusión de estilo en los reviews"
+      },
+      {
+        "name": "los DAGs importan",
+        "command": [
+          "python",
+          "-c",
+          "from airflow.models import DagBag; b=DagBag('dags', include_examples=False); assert not b.import_errors, b.import_errors"
+        ],
+        "why": "un DAG que no importa NO aparece en la UI y nadie recibe un error: el pipeline simplemente deja de correr esa noche"
+      },
+      {
+        "name": "tests",
+        "command": [
+          "pytest",
+          "-q"
+        ],
+        "why": "el comportamiento de las transformaciones con datos de muestra, sin tocar el warehouse"
+      },
+      {
+        "name": "dbt compila",
+        "command": [
+          "dbt",
+          "compile",
+          "--target",
+          "ci"
+        ],
+        "skipIfMissing": "profiles.yml",
+        "why": "una referencia rota en un modelo se ve recién al correr contra el warehouse; compilar la caza sin gastar cómputo. OMITIDO si no hay credenciales locales"
+      },
+      {
+        "name": "notebooks sin salidas",
+        "command": [
+          "sh",
+          "-c",
+          "! git ls-files -z '*.ipynb' | xargs -0 -r grep -l '\"execution_count\": [0-9]'"
+        ],
+        "why": "una salida commiteada mete datos de producción en el repo y hace que cada diff sea ilegible: es la fuga de datos más común en un repo de datos"
+      },
+      {
+        "name": "artefactos en su lugar",
+        "command": [
+          "node",
+          "scripts/artifacts-check.mjs"
+        ],
+        "why": "un plan suelto en el repo cuando el trabajo vive en el gestor parte el registro en dos, y ninguna otra señal lo mira"
+      }
+    ]
+  },
+  "protectedPaths": [
+    {
+      "pattern": "^\\.env|^profiles\\.yml$|^\\.dbt/",
+      "reason": "credenciales del warehouse: con ellas se lee y se borra producción. Las edita el humano."
+    },
+    {
+      "pattern": "^migrations/.*\\.sql$",
+      "reason": "una migración ya aplicada es inmutable: editarla deja los entornos divergentes y el próximo deploy falla en otro lugar. Se escribe una nueva."
+    },
+    {
+      "pattern": "^\\.git/",
+      "reason": "historia de git: fuera del alcance del agente."
+    },
+    {
+      "pattern": "^(target|dbt_packages|logs|\\.ipynb_checkpoints)/",
+      "reason": "derivados de dbt y de Jupyter: se regeneran."
+    },
+    {
+      "pattern": "^data/",
+      "reason": "los datos no viven en git (tamaño, PII, versionado). Se referencian por DVC o por la ruta del lake."
+    }
+  ],
+  "bash": {
+    "deny": [
+      {
+        "pattern": "--no-ver[i]fy",
+        "reason": "saltarse la verificación está prohibido: si el gate estorba, se arregla el gate."
+      },
+      {
+        "pattern": "git\\s+reset\\s+--hard",
+        "reason": "destruye trabajo sin commitear."
+      },
+      {
+        "pattern": "dbt\\s+run[^|;&]*--target\\s+prod",
+        "reason": "reescribe tablas de producción. Corré contra `--target dev`; a prod la lleva el scheduler."
+      },
+      {
+        "pattern": "dbt\\s+run[^|;&]*--full-refresh",
+        "reason": "un full-refresh tira y reconstruye modelos incrementales: horas de cómputo y una ventana en que los tableros muestran datos incompletos."
+      },
+      {
+        "pattern": "airflow\\s+dags\\s+(delete|backfill)\\b",
+        "reason": "borrar un DAG borra su historial de corridas; un backfill dispara cientos de tareas contra sistemas de producción. Lo decide el humano."
+      },
+      {
+        "pattern": "(psql|bq|snowsql|mysql)[^|;&]*\\b(DROP|TRUNCATE|DELETE)\\b",
+        "reason": "SQL destructivo a mano contra un warehouse no tiene ctrl-Z ni backup por defecto."
+      },
+      {
+        "pattern": "\\bsed\\s+(-[a-zA-Z]*\\s+)*-i\\b.*\\b(dags|models|transforms)\\b",
+        "reason": "edición masiva in-place sobre el árbol de fuentes."
+      }
+    ]
+  },
+  "reuse": [
+    {
+      "pattern": "(create_engine|snowflake\\.connector\\.connect|bigquery\\.Client)\\(",
+      "appliesTo": "^(dags|transforms)/(?!io/)",
+      "reason": "las conexiones salen de `transforms/io/warehouse.py`, que lee la credencial del secret manager y aplica el timeout. Una conexión armada en un DAG termina con la contraseña en el código y sin cerrar.",
+      "see": "transforms/io/warehouse.py"
+    }
+  ],
+  "lint": {
+    "command": [
+      "node",
+      "scripts/repo-lint.mjs"
+    ],
+    "fileFlag": "--file",
+    "$sourceExtensions": "Declarada porque `.sql` y `.ipynb` NO están en el default agnóstico: sin esta lista, el gate se ensucia por archivos que el barrido no lee y las reglas de patrón quedan ciegas ahí. El self-test cruza las dos listas y falla si divergen.",
+    "sourceExtensions": [
+      ".py",
+      ".pyi",
+      ".sql",
+      ".ipynb"
+    ]
+  },
+  "purity": [
+    {
+      "dir": "transforms/logic",
+      "forbiddenImports": [
+        "airflow",
+        "sqlalchemy",
+        "snowflake",
+        "google.cloud"
+      ],
+      "except": [],
+      "reason": "la lógica de negocio recibe y devuelve DataFrames: sin orquestador ni conexión. Es lo único que se puede testear en un segundo, y por eso es lo único con cobertura exigida."
+    }
+  ],
+  "forbiddenDeps": {
+    "manifest": "requirements.txt",
+    "packages": [
+      "pandas-gbq"
+    ],
+    "reason": "`pandas-gbq` mueve el resultado entero a memoria del worker y arrastra su propia cadena de auth: los workers mueren por OOM con una tabla mediana. Se consulta con el cliente oficial y se procesa por lotes."
+  },
+  "patterns": [
+    {
+      "id": "REEMPLAZA",
+      "pattern": "if_exists\\s*=\\s*['\"]replace['\"]",
+      "appliesTo": "^(dags|transforms)/",
+      "message": "`if_exists='replace'` TIRA la tabla destino: si el DAG falla a mitad, quedó vacía y los tableros muestran cero. Escribí a una tabla temporal y hacé swap."
+    },
+    {
+      "id": "FECHAHOY",
+      "pattern": "(datetime\\.now\\(|date\\.today\\(|pendulum\\.now\\()",
+      "appliesTo": "^dags/",
+      "message": "un DAG que lee la hora del reloj no es reproducible: un reintento de ayer procesa los datos de hoy. Usá la fecha lógica de la corrida (`data_interval_start`)."
+    },
+    {
+      "id": "SELECTTODO",
+      "pattern": "SELECT\\s+\\*\\s+FROM",
+      "appliesTo": "^(models|transforms)/",
+      "message": "`SELECT *` en un modelo se rompe callado cuando la tabla origen agrega una columna, y en un warehouse por columnas cuesta plata real. Nombrá las columnas."
+    },
+    {
+      "id": "SECRETO",
+      "pattern": "(password|api_key|token)\\s*=\\s*['\"][^'\"]{6,}",
+      "appliesTo": "^(dags|transforms|models)/",
+      "message": "una credencial en el código queda en el historial de git para siempre. Leela de una conexión de Airflow o del secret manager."
+    }
+  ],
+  "tests": {
+    "filePattern": "(^|/)tests?/|(^|/)test_[^/]+\\.py$",
+    "onlyPattern": ""
+  },
+  "incidents": {
+    "file": "docs/gotchas.md",
+    "heading": "### GOTCHA",
+    "requiredLines": [
+      "Síntoma:",
+      "Causa:",
+      "Regla:",
+      "Mecanismo:"
+    ]
+  },
+  "docs": {
+    "ignore": [
+      "target",
+      "dbt_packages",
+      "logs",
+      ".git",
+      ".ipynb_checkpoints"
+    ],
+    "ignoreFiles": [],
+    "externalPaths": []
+  },
+  "status": {
+    "file": "STATUS.md"
+  },
+  "sdd": {
+    "kit": "ninguno",
+    "skillRoots": [
+      "~/.claude/skills",
+      ".claude/skills"
+    ],
+    "phases": [],
+    "routes": []
+  },
+  "tracker": {
+    "$comment": "Forja: gitlab. Ningún script del arnés la conoce — lo único que se lee es `issuePattern`. Ver docs/trazabilidad.md.",
+    "kind": "gitlab",
+    "issuePattern": "(^|[^A-Za-z0-9_])#[0-9]+",
+    "issueExample": "#123 · Closes #123",
+    "newIssueHint": [
+      "glab issue create --title \"…\"",
+      "Un cambio de modelo que altera un tablero abre además el ítem de aviso a negocio"
+    ],
+    "artifactsIn": "repo",
+    "specsDir": "docs/specs",
+    "allowedInRepo": []
+  },
+  "commitMsg": {
+    "$comment": "Qué cuenta como CÓDIGO para exigir registro. La documentación no pide ítem: es el registro, no el cambio.",
+    "codePattern": "^(dags/|transforms/|models/)",
+    "ignoreExtensions": [
+      ".md",
+      ".png",
+      ".jpg",
+      ".svg",
+      ".yml"
+    ],
+    "skipSubjects": [
+      "Merge ",
+      "Revert ",
+      "fixup! ",
+      "squash! "
+    ],
+    "escapeLine": "sin-issue:"
+  }
+}

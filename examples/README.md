@@ -11,14 +11,22 @@ hacer las preguntas de [`../docs/portar.md`](../docs/portar.md) en ese stack.
 | [`go.json`](go.json) | servicio Go | Jira `PROJ-123` | `vet`/`build`/`test -race` no se reemplazan; artefactos **en el repo**, no en el gestor |
 | [`dotnet.json`](dotnet.json) | servicio ASP.NET Core con xUnit | Azure Boards `AB#1234` | `forbiddenDeps.matcher` para `<PackageReference>` y `purityImportSyntax` para `using`: sin los dos, DEPS y PUREZA salen verdes con la violación puesta |
 | [`jvm-spring.json`](jvm-spring.json) | servicio Spring Boot con Maven | Jira `PAY-123` | `matcher` para `<artifactId>` en XML; `@Autowired` en campo como patrón prohibido; migraciones de Flyway inmutables |
+| [`front-react.json`](front-react.json) | SPA React + Vite con Playwright | GitHub `#123` | el bundle es **público**: `VITE_*` con un secreto, `dangerouslySetInnerHTML` y `key={index}` son patrones prohibidos; los e2e entran con `skipIfMissing` porque una señal que a veces no puede correr enseña a ignorar el rojo |
+| [`android-kotlin.json`](android-kotlin.json) | app Android/Kotlin con Gradle | GitLab `#123` | `matcher` para la notación corta de Gradle (`"grupo:artefacto:version"`); `!!` y `GlobalScope` prohibidos; el keystore y los esquemas de Room en `protectedPaths` |
+| [`rust.json`](rust.json) | workspace de crates + binario | Linear `ENG-123` | `clippy -- -D warnings` (sin `-D`, clippy imprime y sale 0: verde con los avisos puestos); `unsafe` acotado a un crate; `cargo publish` en `bash.deny` porque una versión de crates.io no se borra |
+| [`ruby-rails.json`](ruby-rails.json) | monolito Rails con RSpec | GitHub `#123` | sin compilador la suite ES la señal, así que el freno de mayor retorno es ONLY (`:focus`/`fit` dejan la suite corriendo tres tests y el gate verde en veinte segundos); `db/schema.rb` protegido por ser derivado |
+| [`php-laravel.json`](php-laravel.json) | app Laravel con Pest | Jira `WEB-123` | `bootstrap/cache` y `storage/framework` protegidos (editar un derivado ahí da un bug que se cura solo al limpiar caché); `migrate:fresh` es un DROP con otro nombre y vive en `bash.deny`; `env()` fuera de `config/` como patrón |
+| [`swift-ios.json`](swift-ios.json) | app iOS con SwiftUI + SPM | Azure Boards `AB#4821` | casi ninguna señal corre sin macOS: `skipIfMissing` en swiftlint y en `xcodebuild`, y el dominio en su propio paquete para tener **una** suite rápida; `project.pbxproj` protegido; `try!`/`as!`/`fatalError` prohibidos |
+| [`cpp-cmake.json`](cpp-cmake.json) | proyecto C++ con CMake + CTest | Gitea `#123` | la **misma** suite dos veces (ASan+UBSan y TSan): la carrera no la caza correr los tests otra vez, la caza el detector; `--Werror` en clang-format y `-Werror` en el build porque un aviso que no falla no existe |
+| [`data-airflow.json`](data-airflow.json) | DAGs de Airflow + modelos dbt + notebooks | GitLab `#123` | el único que declara `lint.sourceExtensions` a mano (`.sql` y `.ipynb` no están en el default: sin declararlas, el gate se ensucia con archivos que el barrido no lee); frenos sobre **datos**, no sintaxis (`if_exists='replace'`, `--full-refresh`, SQL destructivo, notebooks con salidas) |
 | [`monorepo.json`](monorepo.json) | workspace con varios paquetes | Azure Boards `AB#123` | el gate corre el workspace completo; `skipIfMissing` para clones parciales |
 | [`infra-terraform.json`](infra-terraform.json) | repo de infraestructura | Gitea `#123` | el arnés se invierte: `bash.deny` es la mitad del valor (planear sí, aplicar no) |
 
-La columna **Forja** está a propósito: cinco gestores distintos con el mismo mecanismo. Ningún
+La columna **Forja** está a propósito: seis gestores distintos con el mismo mecanismo. Ningún
 script del arnés conoce ninguno — lo único que cambia es `tracker.issuePattern`. Ver
 [trazabilidad.md](../docs/trazabilidad.md).
 
-Los ocho archivos los verifica el gate (sección 8 del self-test): parsean, sus regex compilan,
+Los dieciséis archivos los verifica el gate (sección 8 del self-test): parsean, sus regex compilan,
 cada señal declara su `why`, y un manifiesto que no es clave-valor trae su `matcher`. Un ejemplo
 roto viaja igual que un script roto.
 

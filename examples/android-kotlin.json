@@ -1,0 +1,285 @@
+{
+  "$comment": "App Android en Kotlin con Gradle. Dos cosas que sólo pasan acá: `forbiddenDeps.matcher` tiene que cazar la notación corta de Gradle (`implementation \"grupo:artefacto:version\"`), donde el `pkg` que se escribe en `packages` es `grupo:artefacto` — con el matcher clave-valor por default, DEPS sale VERDE con la dependencia prohibida presente; y el gate NO corre el build de release (firma, minificación, veinte minutos): esa señal vive en CI y acá se declara `fastSkip`.",
+  "gate": {
+    "command": "./gradlew --quiet gate",
+    "fastCommand": "./gradlew --quiet gateFast",
+    "marker": ".git/gate-dirty",
+    "codeGlobs": [
+      "app/src/",
+      "core/src/",
+      "feature/"
+    ],
+    "codeExtensions": [
+      ".kt",
+      ".kts",
+      ".java",
+      ".gradle"
+    ],
+    "installHooksCommand": "git config core.hooksPath .githooks",
+    "signals": [
+      {
+        "name": "self-test del arnés",
+        "command": [
+          "node",
+          "scripts/harness-selftest.mjs"
+        ],
+        "why": "un hook roto falla en silencio: ninguna otra señal lo ve"
+      },
+      {
+        "name": "link-check de docs",
+        "command": [
+          "node",
+          "scripts/docs-linkcheck.mjs"
+        ],
+        "why": "mover un doc rompe punteros de la memoria del agente"
+      },
+      {
+        "name": "lint de convenciones",
+        "command": [
+          "node",
+          "scripts/repo-lint.mjs"
+        ],
+        "why": "las reglas de arquitectura de este repo que Android Lint no conoce"
+      },
+      {
+        "name": "formato",
+        "command": [
+          "./gradlew",
+          "--quiet",
+          "ktlintCheck"
+        ],
+        "why": "un diff de formato entierra el diff real; en un equipo con IDEs distintos aparece en cada PR"
+      },
+      {
+        "name": "tests unitarios",
+        "command": [
+          "./gradlew",
+          "--quiet",
+          "testDebugUnitTest"
+        ],
+        "why": "el comportamiento sin emulador: es la única suite que se puede exigir en cada commit"
+      },
+      {
+        "name": "android lint",
+        "command": [
+          "./gradlew",
+          "--quiet",
+          "lintDebug"
+        ],
+        "why": "atrapa lo que compila y explota en el dispositivo: permisos faltantes, APIs sobre el minSdk, leaks de contexto"
+      },
+      {
+        "name": "APK de release",
+        "command": [
+          "./gradlew",
+          "--quiet",
+          "assembleRelease"
+        ],
+        "fastSkip": true,
+        "skipIfMissing": "keystore.properties",
+        "why": "R8 y la minificación rompen lo que debug no toca (reflexión, serialización). Sin keystore local reporta OMITIDO en vez de fallarle a quien recién clonó"
+      },
+      {
+        "name": "artefactos en su lugar",
+        "command": [
+          "node",
+          "scripts/artifacts-check.mjs"
+        ],
+        "why": "un plan suelto en el repo cuando el trabajo vive en el gestor parte el registro en dos, y ninguna otra señal lo mira"
+      }
+    ]
+  },
+  "protectedPaths": [
+    {
+      "pattern": "^(keystore\\.properties|local\\.properties)$|\\.jks$|\\.keystore$",
+      "reason": "claves de firma y rutas del SDK de cada máquina: nunca las toca el agente y nunca entran al repo."
+    },
+    {
+      "pattern": "^gradle/wrapper/gradle-wrapper\\.jar$|^gradle/wrapper/gradle-wrapper\\.properties$",
+      "reason": "el wrapper se cambia con `gradle wrapper`, no a mano: una versión editada a mano rompe el build de todo el equipo."
+    },
+    {
+      "pattern": "^gradle/libs\\.versions\\.toml$",
+      "reason": "el catálogo de versiones es una decisión del equipo: subir una versión ahí mueve todos los módulos a la vez."
+    },
+    {
+      "pattern": "^\\.git/",
+      "reason": "historia de git: fuera del alcance del agente."
+    },
+    {
+      "pattern": "^(build|\\.gradle|\\.idea)/|/build/",
+      "reason": "salida de Gradle y del IDE: se regenera, no se edita."
+    },
+    {
+      "pattern": "/schemas/.*\\.json$",
+      "reason": "los esquemas exportados de Room son el historial de migraciones: cambiar uno ya publicado corrompe las bases instaladas."
+    }
+  ],
+  "bash": {
+    "deny": [
+      {
+        "pattern": "--no-ver[i]fy",
+        "reason": "saltarse la verificación está prohibido: si el gate estorba, se arregla el gate."
+      },
+      {
+        "pattern": "git\\s+reset\\s+--hard",
+        "reason": "destruye trabajo sin commitear."
+      },
+      {
+        "pattern": "gradlew.*\\s(publish|bundleRelease|publishReleaseBundle)\\b",
+        "reason": "subir a Play es irreversible para los usuarios que ya actualizaron: lo hace CI desde un tag."
+      },
+      {
+        "pattern": "gradlew.*\\s--refresh-dependencies\\b",
+        "reason": "vuelve a bajar el árbol completo: media hora de build y ningún cambio visible en el diff."
+      },
+      {
+        "pattern": "adb\\s+(uninstall|shell\\s+pm\\s+clear)\\b",
+        "reason": "borra los datos del dispositivo de prueba, incluidos los de la sesión que alguien estaba reproduciendo."
+      },
+      {
+        "pattern": "\\bsed\\s+(-[a-zA-Z]*\\s+)*-i\\b.*\\b(app|core|feature)\\b",
+        "reason": "edición masiva in-place sobre el árbol de fuentes."
+      }
+    ]
+  },
+  "reuse": [
+    {
+      "pattern": "OkHttpClient\\(\\)|Retrofit\\.Builder\\(\\)",
+      "appliesTo": "^(app|feature)/",
+      "reason": "el cliente HTTP se construye una vez en el módulo `core:network` y se inyecta. Uno por pantalla duplica el pool de conexiones y la caché en disco.",
+      "see": "core/network/src/main/kotlin/NetworkModule.kt"
+    }
+  ],
+  "lint": {
+    "command": [
+      "node",
+      "scripts/repo-lint.mjs"
+    ],
+    "fileFlag": "--file"
+  },
+  "purity": [
+    {
+      "dir": "core/domain/src/main",
+      "forbiddenImports": [
+        "android.",
+        "androidx.",
+        "retrofit2",
+        "androidx.room"
+      ],
+      "except": [],
+      "reason": "el dominio no importa Android: es lo único que corre en la JVM sin Robolectric ni emulador, o sea la única capa con tests rápidos de verdad. La regla es la que mantiene ese tiempo bajo."
+    }
+  ],
+  "purityImportSyntax": [
+    "^\\s*import\\s+(?:static\\s+)?{mod}",
+    "^\\s*import\\s+{mod}\\b"
+  ],
+  "forbiddenDeps": {
+    "$comment": "El `pkg` es `grupo:artefacto` porque el matcher lee la notación corta de Gradle. Con un version catalog, el manifiesto pasa a `gradle/libs.versions.toml` y el matcher a clave-valor.",
+    "manifest": "app/build.gradle.kts",
+    "matcher": "[\"']{pkg}[:\"']",
+    "packages": [
+      "com.squareup.okhttp:okhttp",
+      "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.5.0"
+    ],
+    "reason": "okhttp 2 (grupo viejo `com.squareup.okhttp`) convive con la 3 sin avisar y se resuelve la vieja en runtime. Si aparece, alguien copió un snippet de 2016."
+  },
+  "patterns": [
+    {
+      "id": "NONNULL",
+      "pattern": "!!\\s*[.)\\n]",
+      "appliesTo": "^(app|core|feature)/(?!.*/src/test/)",
+      "message": "`!!` cambia un null en un crash en producción. Usá `?.`, `requireNotNull` con mensaje, o hacé el tipo no nulo en la frontera."
+    },
+    {
+      "id": "GLOBALSCOPE",
+      "pattern": "GlobalScope\\.launch|runBlocking\\s*\\{",
+      "appliesTo": "^(app|core|feature)/(?!.*/src/test/)",
+      "message": "GlobalScope sobrevive a la pantalla que lo lanzó (leak + crash al volver); runBlocking en el hilo principal congela la UI. Usá el scope del ViewModel."
+    },
+    {
+      "id": "LOG",
+      "pattern": "(Log\\.[dviwe]\\(|System\\.out\\.println\\()",
+      "appliesTo": "^(app|core|feature)/(?!.*/src/test/)",
+      "message": "los logs de Android quedan en el dispositivo del usuario y a veces llevan datos personales. Usá el logger del proyecto, que respeta el nivel de build."
+    },
+    {
+      "id": "CONTEXTOESTATICO",
+      "pattern": "(companion\\s+object[\\s\\S]{0,120}(var|lateinit\\s+var)\\s+\\w*[Cc]ontext|static\\s+Context)",
+      "appliesTo": "^(app|core|feature)/",
+      "message": "un Context en campo estático mantiene viva la Activity entera: es el leak clásico de Android. Pasalo por parámetro o inyectá el Application."
+    }
+  ],
+  "tests": {
+    "filePattern": "(^|/)src/(test|androidTest)/|[Tt]ests?\\.(kt|java)$",
+    "onlyPattern": ""
+  },
+  "incidents": {
+    "file": "docs/gotchas.md",
+    "heading": "### GOTCHA",
+    "requiredLines": [
+      "Síntoma:",
+      "Causa:",
+      "Regla:",
+      "Mecanismo:"
+    ]
+  },
+  "docs": {
+    "ignore": [
+      "build",
+      ".gradle",
+      ".idea",
+      ".git"
+    ],
+    "ignoreFiles": [],
+    "externalPaths": []
+  },
+  "status": {
+    "file": "STATUS.md"
+  },
+  "sdd": {
+    "kit": "ninguno",
+    "skillRoots": [
+      "~/.claude/skills",
+      ".claude/skills"
+    ],
+    "phases": [],
+    "routes": []
+  },
+  "tracker": {
+    "$comment": "Forja: gitlab. Ningún script del arnés la conoce — lo único que se lee es `issuePattern`. Ver docs/trazabilidad.md.",
+    "kind": "gitlab",
+    "issuePattern": "(^|[^A-Za-z0-9_])#[0-9]+",
+    "issueExample": "#123 · Closes #123",
+    "newIssueHint": [
+      "glab issue create --title \"…\"",
+      "Tamaño feature: abrí el épico y sus tareas antes de escribir código"
+    ],
+    "artifactsIn": "tracker",
+    "specsDir": "specs",
+    "allowedInRepo": [
+      "specs/README.md"
+    ]
+  },
+  "commitMsg": {
+    "$comment": "Qué cuenta como CÓDIGO para exigir registro. La documentación no pide ítem: es el registro, no el cambio. Los .xml de recursos tampoco: un string traducido no es un cambio de comportamiento.",
+    "codePattern": "^(app/|core/|feature/|buildSrc/)",
+    "ignoreExtensions": [
+      ".md",
+      ".png",
+      ".jpg",
+      ".jpeg",
+      ".svg",
+      ".webp",
+      ".xml"
+    ],
+    "skipSubjects": [
+      "Merge ",
+      "Revert ",
+      "fixup! ",
+      "squash! "
+    ],
+    "escapeLine": "sin-issue:"
+  }
+}

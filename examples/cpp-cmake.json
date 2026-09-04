@@ -1,0 +1,296 @@
+{
+  "$comment": "Proyecto C++ con CMake y CTest. Particularidad del stack: el compilador es estricto pero ciego a lo que más cuesta —memoria y concurrencia—, así que el gate lleva DOS corridas de la misma suite (una con ASan/UBSan y otra con TSan): un test que pasa sin sanitizers y falla con ellos es un bug que en producción se ve como un cuelgue aleatorio un mes después. La otra: `-Werror` en la configuración del build, porque un aviso que no falla no existe.",
+  "gate": {
+    "command": "make gate",
+    "fastCommand": "make gate-fast",
+    "marker": ".git/gate-dirty",
+    "codeGlobs": [
+      "src/",
+      "include/",
+      "lib/"
+    ],
+    "codeExtensions": [
+      ".cpp",
+      ".hpp",
+      ".cc",
+      ".h"
+    ],
+    "installHooksCommand": "git config core.hooksPath .githooks",
+    "signals": [
+      {
+        "name": "self-test del arnés",
+        "command": [
+          "node",
+          "scripts/harness-selftest.mjs"
+        ],
+        "why": "un hook roto falla en silencio: ninguna otra señal lo ve"
+      },
+      {
+        "name": "link-check de docs",
+        "command": [
+          "node",
+          "scripts/docs-linkcheck.mjs"
+        ],
+        "why": "mover un doc rompe punteros de la memoria del agente"
+      },
+      {
+        "name": "lint de convenciones",
+        "command": [
+          "node",
+          "scripts/repo-lint.mjs"
+        ],
+        "why": "las reglas de arquitectura de este repo que ni el compilador ni clang-tidy conocen"
+      },
+      {
+        "name": "formato",
+        "command": [
+          "sh",
+          "-c",
+          "git ls-files -z '*.cpp' '*.hpp' '*.cc' '*.h' | xargs -0 clang-format --dry-run --Werror"
+        ],
+        "why": "sin `--Werror`, clang-format imprime el diff y sale 0: la señal se lee verde con el archivo mal formateado"
+      },
+      {
+        "name": "build con -Werror",
+        "command": [
+          "cmake",
+          "--build",
+          "build",
+          "--parallel"
+        ],
+        "why": "el compilador es la señal principal del stack, y con `-Werror` en el preset un aviso nuevo falla en vez de sumarse a los mil que nadie lee"
+      },
+      {
+        "name": "clang-tidy",
+        "command": [
+          "sh",
+          "-c",
+          "run-clang-tidy -p build -quiet src include"
+        ],
+        "skipIfMissing": "build/compile_commands.json",
+        "why": "caza lo que compila y está mal (punteros crudos, casts de C, uso después de mover). OMITIDO si no está configurado el build: sin `compile_commands.json` no puede correr"
+      },
+      {
+        "name": "tests con ASan+UBSan",
+        "command": [
+          "ctest",
+          "--preset",
+          "asan",
+          "--output-on-failure"
+        ],
+        "why": "un desbordamiento o un use-after-free pasa los tests normales y en producción es un cuelgue aleatorio imposible de reproducir; con sanitizers falla en la línea exacta"
+      },
+      {
+        "name": "tests con TSan",
+        "command": [
+          "ctest",
+          "--preset",
+          "tsan",
+          "--output-on-failure"
+        ],
+        "fastSkip": true,
+        "why": "las condiciones de carrera no son deterministas: no las caza correr la suite otra vez, las caza el detector. Es la señal más lenta y la única que ve ese error"
+      },
+      {
+        "name": "artefactos en su lugar",
+        "command": [
+          "node",
+          "scripts/artifacts-check.mjs"
+        ],
+        "why": "un plan suelto en el repo cuando el trabajo vive en el gestor parte el registro en dos, y ninguna otra señal lo mira"
+      }
+    ]
+  },
+  "protectedPaths": [
+    {
+      "pattern": "^\\.env|\\.pem$|\\.key$",
+      "reason": "credenciales y llaves de firma: las edita el humano."
+    },
+    {
+      "pattern": "^(third_party|external|vendor)/",
+      "reason": "dependencias vendorizadas: se actualizan por su versión, no parcheando el árbol. Un parche local se pierde en la próxima subida y nadie sabe que existía."
+    },
+    {
+      "pattern": "^conan\\.lock$|^vcpkg\\.json$",
+      "reason": "el pin de dependencias lo mueve el gestor, y una versión distinta de una librería nativa cambia el ABI: se decide en equipo."
+    },
+    {
+      "pattern": "^\\.git/",
+      "reason": "historia de git: fuera del alcance del agente."
+    },
+    {
+      "pattern": "^(build|cmake-build-[a-z]+|out)/",
+      "reason": "salida de CMake: se regenera, no se edita."
+    },
+    {
+      "pattern": "\\.pb\\.(h|cc)$|_generated\\.h$",
+      "reason": "código generado (protobuf, flatbuffers): se regenera desde su .proto, editarlo se pierde en el próximo build."
+    }
+  ],
+  "bash": {
+    "deny": [
+      {
+        "pattern": "--no-ver[i]fy",
+        "reason": "saltarse la verificación está prohibido: si el gate estorba, se arregla el gate."
+      },
+      {
+        "pattern": "git\\s+reset\\s+--hard",
+        "reason": "destruye trabajo sin commitear."
+      },
+      {
+        "pattern": "rm\\s+-rf?\\s+[^|;&]*(build|out)\\b",
+        "reason": "borrar el directorio de build son veinte minutos de recompilación. Reconfigurá el preset en vez de barrer."
+      },
+      {
+        "pattern": "git\\s+submodule\\s+(update\\s+--remote|deinit)\\b",
+        "reason": "mover un submódulo cambia miles de líneas y a veces el ABI de una librería: es una decisión del equipo, no un efecto colateral."
+      },
+      {
+        "pattern": "(sudo\\s+)?(make\\s+install|cmake\\s+--install)\\b",
+        "reason": "instalar en el sistema deja archivos fuera del repo que después nadie encuentra ni desinstala."
+      },
+      {
+        "pattern": "\\bsed\\s+(-[a-zA-Z]*\\s+)*-i\\b.*\\b(src|include|lib)\\b",
+        "reason": "edición masiva in-place sobre el árbol de fuentes."
+      }
+    ]
+  },
+  "reuse": [
+    {
+      "pattern": "\\b(new|delete)\\s",
+      "appliesTo": "^(src|lib)/(?!memory/)",
+      "reason": "la propiedad de la memoria se expresa con `std::unique_ptr`/`make_shared`, y los pools están en `src/memory`. Un `new` suelto es una fuga esperando la primera excepción entre el new y el delete.",
+      "see": "src/memory/pool.hpp"
+    }
+  ],
+  "lint": {
+    "command": [
+      "node",
+      "scripts/repo-lint.mjs"
+    ],
+    "fileFlag": "--file"
+  },
+  "purity": [
+    {
+      "dir": "lib/core",
+      "forbiddenImports": [
+        "boost/asio",
+        "grpcpp",
+        "sqlite3",
+        "windows.h"
+      ],
+      "except": [],
+      "reason": "el núcleo es cabeceras estándar y nada más: es lo que compila igual en Linux, macOS y Windows, y lo único cuyos tests corren en un segundo. Cada dependencia que entra ahí se paga en todas las plataformas."
+    }
+  ],
+  "purityImportSyntax": [
+    "^\\s*#include\\s*[<\"]{mod}"
+  ],
+  "forbiddenDeps": {
+    "manifest": "vcpkg.json",
+    "matcher": "\"{pkg}\"",
+    "packages": [
+      "boost"
+    ],
+    "reason": "boost entero son diez minutos de compilación por máquina y por CI, para usar dos utilidades que hoy están en la biblioteca estándar. Si hace falta un módulo suelto, se agrega ese módulo."
+  },
+  "patterns": [
+    {
+      "id": "CCAST",
+      "pattern": "\\((char|int|void|unsigned|long|float|double)\\s*\\*\\)\\s*\\w",
+      "appliesTo": "^(src|lib|include)/",
+      "message": "un cast estilo C apaga toda la verificación de tipos y esconde un error de alineación o de const. Usá `static_cast`/`reinterpret_cast`, que dicen lo que hacen."
+    },
+    {
+      "id": "MALLOC",
+      "pattern": "\\b(malloc|free|strcpy|sprintf|gets)\\s*\\(",
+      "appliesTo": "^(src|lib|include)/",
+      "message": "las funciones de C sin límite de tamaño son el desbordamiento clásico. Usá contenedores y `std::format`/`snprintf`."
+    },
+    {
+      "id": "USINGNAMESPACE",
+      "pattern": "^\\s*using\\s+namespace\\s+std\\s*;",
+      "appliesTo": "^(include|lib)/",
+      "message": "`using namespace std` en una cabecera se lo come todo el que la incluye y produce ambigüedades a cientos de archivos de distancia. Calificá con `std::`."
+    },
+    {
+      "id": "CATCHTODO",
+      "pattern": "catch\\s*\\(\\s*\\.\\.\\.\\s*\\)\\s*\\{\\s*\\}",
+      "appliesTo": "^(src|lib)/",
+      "message": "un catch(...) vacío se traga hasta un error de memoria: el programa sigue en estado inválido y falla mucho más lejos. Registrá y relanzá, o manejá el caso concreto."
+    },
+    {
+      "id": "IOSTREAM",
+      "pattern": "std::(cout|cerr)\\s*<<",
+      "appliesTo": "^(src|lib)/(?!.*_test\\.)",
+      "message": "escribir directo a la consola desde una librería ensucia el stdout de quien la usa (y a veces es su salida de datos). Usá el logger del proyecto."
+    }
+  ],
+  "tests": {
+    "filePattern": "(^|/)tests?/|_test\\.(cpp|cc)$",
+    "onlyPattern": ""
+  },
+  "incidents": {
+    "file": "docs/gotchas.md",
+    "heading": "### GOTCHA",
+    "requiredLines": [
+      "Síntoma:",
+      "Causa:",
+      "Regla:",
+      "Mecanismo:"
+    ]
+  },
+  "docs": {
+    "ignore": [
+      "build",
+      "out",
+      "third_party",
+      "external",
+      ".git"
+    ],
+    "ignoreFiles": [],
+    "externalPaths": []
+  },
+  "status": {
+    "file": "STATUS.md"
+  },
+  "sdd": {
+    "kit": "ninguno",
+    "skillRoots": [
+      "~/.claude/skills",
+      ".claude/skills"
+    ],
+    "phases": [],
+    "routes": []
+  },
+  "tracker": {
+    "$comment": "Forja: gitea. Ningún script del arnés la conoce — lo único que se lee es `issuePattern`. Ver docs/trazabilidad.md.",
+    "kind": "gitea",
+    "issuePattern": "(^|[^A-Za-z0-9_])#[0-9]+",
+    "issueExample": "#123 · Closes #123",
+    "newIssueHint": [
+      "tea issue create --title \"…\"",
+      "Un cambio de ABI abre además el ítem de aviso a los consumidores de la librería"
+    ],
+    "artifactsIn": "repo",
+    "specsDir": "docs/specs",
+    "allowedInRepo": []
+  },
+  "commitMsg": {
+    "$comment": "Qué cuenta como CÓDIGO para exigir registro. La documentación no pide ítem: es el registro, no el cambio. Los CMakeLists sí: cambiar flags de build es cambiar comportamiento.",
+    "codePattern": "^(src/|include/|lib/|CMakeLists\\.txt$|cmake/)",
+    "ignoreExtensions": [
+      ".md",
+      ".png",
+      ".jpg",
+      ".svg"
+    ],
+    "skipSubjects": [
+      "Merge ",
+      "Revert ",
+      "fixup! ",
+      "squash! "
+    ],
+    "escapeLine": "sin-issue:"
+  }
+}

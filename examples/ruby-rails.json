@@ -1,0 +1,302 @@
+{
+  "$comment": "Monolito Rails con RSpec. Particularidad del stack: en Ruby no hay compilador ni tipos, así que la única red es la suite — y por eso el freno de mayor retorno acá es ONLY (`tests.onlyPattern`): un `:focus` olvidado deja la suite corriendo TRES tests y el gate sale verde en veinte segundos. Segunda: el `schema.rb` es un derivado del historial de migraciones y editarlo a mano desincroniza a todo el equipo.",
+  "gate": {
+    "command": "bin/gate",
+    "fastCommand": "bin/gate --fast",
+    "marker": ".git/gate-dirty",
+    "codeGlobs": [
+      "app/",
+      "lib/",
+      "config/"
+    ],
+    "codeExtensions": [
+      ".rb"
+    ],
+    "installHooksCommand": "git config core.hooksPath .githooks",
+    "signals": [
+      {
+        "name": "self-test del arnés",
+        "command": [
+          "node",
+          "scripts/harness-selftest.mjs"
+        ],
+        "why": "un hook roto falla en silencio: ninguna otra señal lo ve"
+      },
+      {
+        "name": "link-check de docs",
+        "command": [
+          "node",
+          "scripts/docs-linkcheck.mjs"
+        ],
+        "why": "mover un doc rompe punteros de la memoria del agente"
+      },
+      {
+        "name": "lint de convenciones",
+        "command": [
+          "node",
+          "scripts/repo-lint.mjs"
+        ],
+        "why": "las reglas de este repo que rubocop no expresa (y el freno de `:focus`, que es el que más veces salvó el gate)"
+      },
+      {
+        "name": "rubocop",
+        "command": [
+          "bundle",
+          "exec",
+          "rubocop",
+          "--parallel"
+        ],
+        "why": "estilo y olores conocidos, fuera de la discusión del review"
+      },
+      {
+        "name": "tests",
+        "command": [
+          "bundle",
+          "exec",
+          "rspec"
+        ],
+        "why": "sin compilador ni tipos, la suite es la ÚNICA verificación del stack: acá no es una señal más, es la señal"
+      },
+      {
+        "name": "esquema sincronizado",
+        "command": [
+          "sh",
+          "-c",
+          "bin/rails db:migrate:status | grep -q '^\\s*down' && { bin/rails db:migrate:status; exit 1; } || true"
+        ],
+        "why": "una migración sin aplicar en la base de tests hace que la suite pase con un esquema viejo: verde local, rojo en el deploy"
+      },
+      {
+        "name": "seguridad (brakeman)",
+        "command": [
+          "bundle",
+          "exec",
+          "brakeman",
+          "--quiet",
+          "--no-pager"
+        ],
+        "why": "caza la inyección y el mass assignment por análisis estático; en Rails son los dos agujeros clásicos y ningún test los busca"
+      },
+      {
+        "name": "gemas sin CVE",
+        "command": [
+          "bundle",
+          "exec",
+          "bundle-audit",
+          "check",
+          "--update"
+        ],
+        "fastSkip": true,
+        "why": "la CVE llega por una gema transitiva; sin señal se descubre en el pentest anual"
+      },
+      {
+        "name": "artefactos en su lugar",
+        "command": [
+          "node",
+          "scripts/artifacts-check.mjs"
+        ],
+        "why": "un plan suelto en el repo cuando el trabajo vive en el gestor parte el registro en dos, y ninguna otra señal lo mira"
+      }
+    ]
+  },
+  "protectedPaths": [
+    {
+      "pattern": "^\\.env|^config/master\\.key$|^config/credentials/",
+      "reason": "las credenciales cifradas de Rails y su llave: con la llave se abre todo. Las edita el humano."
+    },
+    {
+      "pattern": "^Gemfile\\.lock$",
+      "reason": "el lock lo mueve bundler, no se edita a mano."
+    },
+    {
+      "pattern": "^db/(schema\\.rb|structure\\.sql)$",
+      "reason": "es un DERIVADO de las migraciones: se regenera al migrar. Editado a mano queda distinto del de cada compañero y el diff aparece en el PR de otro."
+    },
+    {
+      "pattern": "^db/migrate/.*\\.rb$",
+      "reason": "una migración ya aplicada es inmutable: editarla deja los entornos divergentes. Se escribe una nueva."
+    },
+    {
+      "pattern": "^\\.git/",
+      "reason": "historia de git: fuera del alcance del agente."
+    },
+    {
+      "pattern": "^(vendor|tmp|log|public/assets|public/packs)/",
+      "reason": "dependencias y derivados: se regeneran."
+    }
+  ],
+  "bash": {
+    "deny": [
+      {
+        "pattern": "--no-ver[i]fy",
+        "reason": "saltarse la verificación está prohibido: si el gate estorba, se arregla el gate."
+      },
+      {
+        "pattern": "git\\s+reset\\s+--hard",
+        "reason": "destruye trabajo sin commitear."
+      },
+      {
+        "pattern": "(rails|rake)\\s+db:(drop|reset|schema:load)\\b",
+        "reason": "borran la base local completa. Si hace falta, lo corre el humano sabiendo qué datos pierde."
+      },
+      {
+        "pattern": "(rails|rake)\\s+(console|c)\\b(?![^|;&]*--sandbox)",
+        "reason": "una consola contra la app real escribe en la base sin dejar rastro en el diff. Con `--sandbox` la transacción se revierte al salir."
+      },
+      {
+        "pattern": "bundle\\s+update\\b(?![^|;&]*\\s\\S)",
+        "reason": "un `bundle update` pelado mueve todo el árbol de gemas en un commit que nadie puede revisar. Actualizá una: `bundle update <gema>`."
+      },
+      {
+        "pattern": "(cap\\s+production|heroku\\s+.*\\s-a\\s+\\S*prod)",
+        "reason": "desplegar es visible para los usuarios en minutos: lo hace CI desde la rama principal."
+      },
+      {
+        "pattern": "\\bsed\\s+(-[a-zA-Z]*\\s+)*-i\\b.*\\b(app|lib|config)\\b",
+        "reason": "edición masiva in-place sobre el árbol de fuentes."
+      }
+    ]
+  },
+  "reuse": [
+    {
+      "pattern": "Net::HTTP|RestClient\\.",
+      "appliesTo": "^app/(?!clients/)",
+      "reason": "las llamadas salientes pasan por `app/clients`, donde están el timeout, el reintento y el circuit breaker. `Net::HTTP` sin timeout cuelga el worker de Puma hasta que muere el request entero.",
+      "see": "app/clients"
+    }
+  ],
+  "lint": {
+    "command": [
+      "node",
+      "scripts/repo-lint.mjs"
+    ],
+    "fileFlag": "--file"
+  },
+  "purity": [
+    {
+      "dir": "app/domain",
+      "forbiddenImports": [
+        "active_record",
+        "action_controller",
+        "rails"
+      ],
+      "except": [],
+      "reason": "el dominio son objetos Ruby planos: sin ActiveRecord ni controladores. Sus tests corren sin cargar el entorno de Rails, o sea en milisegundos en vez de treinta segundos."
+    }
+  ],
+  "purityImportSyntax": [
+    "^\\s*require(?:_relative)?\\s+['\"]{mod}",
+    "^\\s*include\\s+{mod}\\b"
+  ],
+  "forbiddenDeps": {
+    "manifest": "Gemfile",
+    "matcher": "^\\s*gem\\s+['\"]{pkg}['\"]",
+    "packages": [
+      "paperclip",
+      "protected_attributes"
+    ],
+    "reason": "paperclip está retirado (se migra a ActiveStorage) y `protected_attributes` revive el modelo de seguridad de Rails 3. Si aparecen, alguien copió una respuesta vieja."
+  },
+  "patterns": [
+    {
+      "id": "SQLCRUDO",
+      "pattern": "where\\(\\s*[\"'][^\"']*#\\{",
+      "appliesTo": "^app/",
+      "message": "interpolar en un `where` es inyección SQL. Pasá los valores como parámetros: `where(\"x = ?\", valor)`."
+    },
+    {
+      "id": "NMASUNO",
+      "pattern": "\\.each\\s*(do|\\{)[\\s\\S]{0,200}\\.(find|where|first)\\(",
+      "appliesTo": "^app/",
+      "message": "una consulta dentro de un `each` es el N+1: cien filas son cien viajes a la base. Precargá con `includes`."
+    },
+    {
+      "id": "PUTS",
+      "pattern": "^\\s*(puts|p)\\s",
+      "appliesTo": "^(app|lib)/",
+      "message": "`puts` escribe al stdout del servidor sin nivel ni contexto de request. Usá `Rails.logger`."
+    },
+    {
+      "id": "SALTAVALIDACION",
+      "pattern": "\\.(save|update_attribute)\\(\\s*validate:\\s*false|update_column",
+      "appliesTo": "^app/",
+      "message": "guardar salteando validaciones mete en la base filas que el modelo considera inválidas: el bug aparece meses después en otro lado. Si la validación estorba, corregí la validación."
+    },
+    {
+      "id": "TIEMPOLOCAL",
+      "pattern": "Time\\.now|Date\\.today",
+      "appliesTo": "^(app|lib)/",
+      "message": "`Time.now` usa la zona del servidor y no la de la app: los reportes salen corridos una hora dos veces al año. Usá `Time.current` / `Date.current`."
+    }
+  ],
+  "tests": {
+    "filePattern": "(^|/)spec/|_spec\\.rb$",
+    "onlyPattern": "(:focus\\b|\\bfit\\s|\\bfdescribe\\s|\\bfcontext\\s)"
+  },
+  "incidents": {
+    "file": "docs/gotchas.md",
+    "heading": "### GOTCHA",
+    "requiredLines": [
+      "Síntoma:",
+      "Causa:",
+      "Regla:",
+      "Mecanismo:"
+    ]
+  },
+  "docs": {
+    "ignore": [
+      "vendor",
+      "tmp",
+      "log",
+      "node_modules",
+      ".git",
+      "public/assets"
+    ],
+    "ignoreFiles": [],
+    "externalPaths": []
+  },
+  "status": {
+    "file": "STATUS.md"
+  },
+  "sdd": {
+    "kit": "ninguno",
+    "skillRoots": [
+      "~/.claude/skills",
+      ".claude/skills"
+    ],
+    "phases": [],
+    "routes": []
+  },
+  "tracker": {
+    "$comment": "Forja: github. Ningún script del arnés la conoce — lo único que se lee es `issuePattern`. Ver docs/trazabilidad.md.",
+    "kind": "github",
+    "issuePattern": "(^|[^A-Za-z0-9_])#[0-9]+",
+    "issueExample": "#123 · Closes #123",
+    "newIssueHint": [
+      "Bug o mejora acotada:  gh issue create --title \"…\"",
+      "Tamaño feature:        abrí el ítem madre y sus tareas"
+    ],
+    "artifactsIn": "tracker",
+    "specsDir": "specs",
+    "allowedInRepo": [
+      "specs/README.md"
+    ]
+  },
+  "commitMsg": {
+    "$comment": "Qué cuenta como CÓDIGO para exigir registro. La documentación no pide ítem: es el registro, no el cambio. Las vistas ERB sí: un cambio de plantilla es comportamiento visible.",
+    "codePattern": "^(app/|lib/|config/|db/migrate/)",
+    "ignoreExtensions": [
+      ".md",
+      ".png",
+      ".jpg",
+      ".svg"
+    ],
+    "skipSubjects": [
+      "Merge ",
+      "Revert ",
+      "fixup! ",
+      "squash! "
+    ],
+    "escapeLine": "sin-issue:"
+  }
+}
