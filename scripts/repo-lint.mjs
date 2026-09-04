@@ -30,7 +30,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 // La lista de extensiones «esto es código» es UNA y vive con los hooks: tener una copia acá
 // es tener dos verdades, y ya divergieron (un `.pyi` ensuciaba el gate y el barrido no lo leía).
-import { codeExtensions, importSyntax } from "../.claude/hooks/harness.mjs";
+import { codeExtensions, depsMatcher, importSyntax } from "../.claude/hooks/harness.mjs";
 
 const REPO_ROOT = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
 
@@ -219,12 +219,11 @@ function checkFile(relPath, contenidoDado = null) {
 /**
  * DEPS — dependencias que el proyecto decidió no tener (con su motivo).
  *
- * `forbiddenDeps.matcher` es una plantilla con `{pkg}`: el default sólo entiende
- * manifiestos clave-valor (`package.json`, `requirements.txt`), así que un `.csproj`
- * (`<PackageReference Include="X"/>`), un `pom.xml` o un `build.gradle` necesitan el
- * suyo. Sin `matcher`, la regla salía verde con la dependencia prohibida presente.
+ * `forbiddenDeps.matcher` es una plantilla con `{pkg}`: el default (en `harness.mjs`, con los
+ * otros defaults agnósticos) sólo entiende manifiestos clave-valor, así que un `.csproj`
+ * (`<PackageReference Include="X"/>`), un `pom.xml` o un `build.gradle` necesitan el suyo.
+ * Sin `matcher`, la regla salía verde con la dependencia prohibida presente.
  */
-const DEPS_MATCHER_DEFAULT = "^\\s*[\"']?{pkg}[\"']?\\s*[:=]";
 
 function checkDeps(contenidoDado = null) {
   const spec = config.forbiddenDeps;
@@ -237,7 +236,7 @@ function checkDeps(contenidoDado = null) {
       return; // sin manifiesto (proyecto de otro stack): la regla no aplica
     }
   }
-  const matcher = spec.matcher ?? DEPS_MATCHER_DEFAULT;
+  const matcher = depsMatcher(spec.matcher);
   for (const pkg of spec.packages) {
     const hit = new RegExp(matcher.split("{pkg}").join(escape(pkg)), "m").exec(manifest);
     if (hit) {

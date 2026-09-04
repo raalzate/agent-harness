@@ -54,6 +54,24 @@ export const DEFAULT_IMPORT_SYNTAX = [
   "^\\s*#include\\s*[<\"]{mod}", //       C, C++, Objective-C
 ];
 
+/**
+ * Cómo se escribe «el manifiesto declara el paquete X». Plantilla con `{pkg}`.
+ *
+ * Default agnóstico de la regla DEPS: sólo entiende manifiestos clave-valor (`package.json`,
+ * `requirements.txt`, `go.mod`, un `.toml`). Un `.csproj`, un `pom.xml` o la notación corta de
+ * Gradle declaran su propio `forbiddenDeps.matcher` — sin él, DEPS sale VERDE con la dependencia
+ * prohibida presente.
+ *
+ * Vive acá con los otros dos defaults por el mismo motivo: estaba cableado en `repo-lint.mjs` y
+ * el self-test no podía fabricar la muestra de un manifiesto sin copiarlo, o sea sin crear la
+ * segunda verdad que este archivo existe para evitar.
+ */
+export const DEFAULT_DEPS_MATCHER = "^\\s*[\"']?{pkg}[\"']?\\s*[:=]";
+
+/** El matcher declarado, o el agnóstico de clave-valor. */
+export const depsMatcher = (declarado) =>
+  typeof declarado === "string" && declarado.trim() ? declarado : DEFAULT_DEPS_MATCHER;
+
 /** La sintaxis declarada, o el superconjunto agnóstico. */
 export const importSyntax = (declaradas) =>
   Array.isArray(declaradas) && declaradas.length ? declaradas : DEFAULT_IMPORT_SYNTAX;
