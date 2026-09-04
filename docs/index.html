@@ -29,6 +29,10 @@
   --term-ink:   #c9d3de;
   --term-faint: #6b7885;
   --term-rule:  #232d38;
+  --bar-bg:     #0a4f54;
+  --bar-ink:    #ffffff;
+  --bar-ink-2:  rgba(255,255,255,.72);
+  --bar-rule:   rgba(255,255,255,.22);
 
   --f-display: "Archivo", "Helvetica Neue", Arial, sans-serif;
   --f-body:    "Source Serif 4", Georgia, "Times New Roman", serif;
@@ -63,6 +67,10 @@
     --term-ink:   #ccd6e0;
     --term-faint: #6b7885;
     --term-rule:  #1b232c;
+    --bar-bg:     #121a22;
+    --bar-ink:    #e6ebf1;
+    --bar-ink-2:  #9aa6b3;
+    --bar-rule:   #2b343e;
   }
 }
 :root[data-theme="dark"] {
@@ -83,6 +91,10 @@
   --term-ink:   #ccd6e0;
   --term-faint: #6b7885;
   --term-rule:  #1b232c;
+  --bar-bg:     #121a22;
+  --bar-ink:    #e6ebf1;
+  --bar-ink-2:  #9aa6b3;
+  --bar-rule:   #2b343e;
 }
 
 *, *::before, *::after { box-sizing: border-box; }
@@ -122,12 +134,9 @@ section { border-top: 1px solid var(--rule-soft); }
 .stack-tight { display: flex; flex-direction: column; gap: .55rem; }
 
 /* ── Encabezado / héroe ────────────────────────────────────────────────── */
-header { border-top: 4px solid var(--ink); }
-.masthead { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: .75rem 1.5rem; padding-block: 1rem; border-bottom: 1px solid var(--rule); font-family: var(--f-mono); font-size: var(--step--1); color: var(--ink-soft); }
-.masthead .name { font-family: var(--f-display); font-weight: 700; letter-spacing: -.01em; font-size: 1.15rem; color: var(--ink); }
-.masthead nav { display: flex; gap: 1.1rem; flex-wrap: wrap; }
-.masthead nav a { color: var(--ink-soft); text-decoration: none; }
-.masthead nav a:hover { color: var(--accent-ink); text-decoration: underline; }
+/* El héroe se alinea con la reja del shell (96rem) y ya no lleva regla arriba:
+   la barra pegada es la que corta la página. */
+header .wrap { max-width: 96rem; }
 
 .hero { padding-block: clamp(2.5rem, 7vw, 5.5rem) clamp(2rem, 5vw, 3.5rem); display: grid; gap: clamp(2rem, 5vw, 3.5rem); grid-template-columns: minmax(0, 1fr); }
 @media (min-width: 60rem) { .hero { grid-template-columns: minmax(0, 27rem) minmax(0, 1fr); align-items: start; } }
@@ -235,35 +244,115 @@ footer { border-top: 4px solid var(--ink); }
 .verdict-key .v1::before { background: var(--verde); }
 .verdict-key .v2::before { background: var(--rojo); }
 .verdict-key .v3::before { background: var(--ocre); }
+
+/* ── Marco de navegación: barra superior + nav lateral + TOC ────────────
+   El contenido y su diseño no cambian: lo que se agrega es el marco de un
+   sitio de documentación (barra pegada, árbol a la izquierda, «en esta
+   página» a la derecha), porque en una sola página de once secciones el
+   lector no sabe dónde está ni cuánto falta. */
+:root { --topbar-h: 3.4rem; --nav-w: 15.5rem; --toc-w: 14.5rem; }
+
+.skip { position: absolute; left: -9999px; }
+.skip:focus { left: .5rem; top: .5rem; z-index: 60; background: var(--surface); color: var(--ink); padding: .5rem .8rem; border: 1px solid var(--rule); border-radius: 3px; }
+
+.topbar { position: sticky; top: 0; z-index: 40; background: var(--bar-bg); color: var(--bar-ink); box-shadow: 0 1px 0 var(--bar-rule); }
+.topbar-inner { max-width: 96rem; margin: 0 auto; padding-inline: clamp(.75rem, 2vw, 1.25rem); min-height: var(--topbar-h); display: flex; align-items: center; gap: .75rem; flex-wrap: nowrap; }
+.topbar a { color: var(--bar-ink); }
+.brand { font-family: var(--f-display); font-weight: 700; font-size: 1.02rem; letter-spacing: -.01em; text-decoration: none; white-space: nowrap; }
+.brand .ver { font-family: var(--f-mono); font-weight: 500; font-size: .68em; color: var(--bar-ink-2); margin-left: .45rem; }
+.tabs { display: flex; gap: 1rem; margin-left: 1.25rem; font-family: var(--f-mono); font-size: var(--step--1); overflow-x: auto; scrollbar-width: none; }
+.tabs::-webkit-scrollbar { display: none; }
+.tabs a { color: var(--bar-ink-2); text-decoration: none; white-space: nowrap; padding: .9rem 0 .8rem; border-bottom: 2px solid transparent; }
+.tabs a:hover { color: var(--bar-ink); }
+.tabs a[aria-current="true"] { color: var(--bar-ink); border-bottom-color: currentColor; }
+.topbar .push { margin-left: auto; }
+.search { position: relative; display: flex; align-items: center; }
+.search input { font-family: var(--f-mono); font-size: var(--step--1); color: var(--bar-ink); background: color-mix(in srgb, var(--bar-ink) 12%, transparent); border: 1px solid var(--bar-rule); border-radius: 3px; padding: .38rem .55rem .38rem 1.85rem; width: clamp(7rem, 16vw, 12rem); }
+.search input::placeholder { color: var(--bar-ink-2); }
+.search input:focus { outline: 2px solid var(--bar-ink-2); outline-offset: 1px; }
+.search::before { content: "⌕"; position: absolute; left: .5rem; font-size: 1.05rem; line-height: 1; color: var(--bar-ink-2); pointer-events: none; }
+.topbar .repo { font-family: var(--f-mono); font-size: var(--step--1); text-decoration: none; color: var(--bar-ink-2); white-space: nowrap; }
+.topbar .repo:hover { color: var(--bar-ink); }
+.drawer-btn { display: none; appearance: none; background: transparent; border: 1px solid var(--bar-rule); border-radius: 3px; color: var(--bar-ink); font-family: var(--f-mono); font-size: 1rem; line-height: 1; padding: .4rem .55rem; cursor: pointer; }
+
+/* Tres columnas: nav · contenido · TOC. Cada corte agrega una columna. */
+.shell { max-width: 96rem; margin: 0 auto; display: grid; grid-template-columns: minmax(0, 1fr); align-items: start; }
+@media (min-width: 66rem) { .shell { grid-template-columns: var(--nav-w) minmax(0, 1fr); } }
+@media (min-width: 90rem) { .shell { grid-template-columns: var(--nav-w) minmax(0, 1fr) var(--toc-w); } }
+
+.sidenav, .tocnav { font-family: var(--f-mono); font-size: var(--step--1); line-height: 1.5; }
+.sidenav { position: sticky; top: var(--topbar-h); align-self: start; max-height: calc(100vh - var(--topbar-h)); overflow-y: auto; padding: 1.4rem .75rem 3rem; border-right: 1px solid var(--rule-soft); }
+.sidenav .nav-title { text-transform: uppercase; letter-spacing: .1em; color: var(--ink-faint); margin: 0 0 .5rem .5rem; }
+.sidenav .grupo { text-transform: uppercase; letter-spacing: .09em; color: var(--ink-faint); margin: 1.35rem 0 .35rem .5rem; }
+.sidenav .grupo:first-of-type { margin-top: .25rem; }
+.sidenav a { display: block; padding: .34rem .5rem; color: var(--ink-soft); text-decoration: none; border-left: 2px solid transparent; }
+.sidenav a:hover { background: var(--surface); color: var(--ink); }
+.sidenav a[aria-current="true"] { color: var(--accent-ink); background: var(--surface); border-left-color: var(--accent); font-weight: 700; }
+.sidenav .ext::after { content: " ↗"; color: var(--ink-faint); }
+.sidenav .vacio { color: var(--ink-faint); padding: .5rem; display: none; }
+.sidenav[data-filtrando="vacio"] .vacio { display: block; }
+.sidenav[data-filtrando] .grupo[hidden] { display: none; }
+
+.tocnav { position: sticky; top: var(--topbar-h); align-self: start; max-height: calc(100vh - var(--topbar-h)); overflow-y: auto; padding: 1.4rem .75rem 3rem; border-left: 1px solid var(--rule-soft); }
+.tocnav .nav-title { text-transform: uppercase; letter-spacing: .1em; color: var(--ink-faint); margin: 0 0 .5rem .55rem; }
+.tocnav ul { list-style: none; margin: 0; padding: 0; }
+.tocnav a { display: block; padding: .26rem .55rem; color: var(--ink-faint); text-decoration: none; border-left: 1px solid var(--rule-soft); }
+.tocnav a:hover { color: var(--ink); }
+.tocnav a[aria-current="true"] { color: var(--accent-ink); border-left-color: var(--accent); }
+.tocnav .sub a { padding-left: 1.35rem; }
+@media (max-width: 90rem) { .tocnav { display: none; } }
+
+/* Dentro del contenido la sección ya no necesita su propio ancho ni el riel
+   en columna: el riel pasa a ser una línea sobre el título. */
+.content { min-width: 0; }
+.content .wrap { max-width: none; margin: 0; }
+.content .sec-inner { grid-template-columns: minmax(0, 1fr); gap: .9rem; padding-block: clamp(2.25rem, 5vw, 3.75rem); }
+.content .rail { position: static; text-align: left; border-right: 0; padding: 0; }
+.content .rail b { display: inline; font-size: 1em; }
+.content .rail b::after { content: " · "; color: var(--ink-faint); font-weight: 400; }
+.content section:first-child { border-top: 0; }
+
+@media (max-width: 66rem) {
+  .drawer-btn { display: inline-flex; }
+  .tabs { display: none; }
+  .sidenav { position: fixed; top: var(--topbar-h); left: 0; bottom: 0; width: min(20rem, 84vw); max-height: none; background: var(--paper); z-index: 38; transform: translateX(-102%); transition: transform .18s ease; }
+  .sidenav[data-open="true"] { transform: none; box-shadow: 0 12px 44px -10px rgba(6,10,14,.45); }
+  .scrim { position: fixed; inset: var(--topbar-h) 0 0; background: rgba(8,12,17,.42); z-index: 37; }
+}
+@media (prefers-reduced-motion: reduce) { .sidenav { transition: none; } }
 </style>
 </head>
 <body>
 
-<header>
-  <div class="wrap">
-    <div class="masthead">
-      <span class="name">Agent&nbsp;Harness</span>
-      <nav>
-        <a href="#quickstart">Quick&nbsp;start</a>
-        <a href="#tesis">Tesis</a>
-        <a href="#leyes">Método</a>
-        <a href="#piezas">Piezas</a>
-        <a href="#freno">Un freno</a>
-        <a href="#registro">Registro</a>
-        <a href="#portar">Portar</a>
-        <a href="#perfiles">Perfiles</a>
-        <a href="#stacks">Stacks</a>
-        <a href="#documentacion">Docs</a>
-        <a href="https://github.com/raalzate/agent-harness">Repo&nbsp;↗</a>
-      </nav>
-    </div>
+<a class="skip" href="#contenido">Ir al contenido</a>
 
+<div class="topbar">
+  <div class="topbar-inner">
+    <button class="drawer-btn" type="button" id="drawer-btn" aria-controls="sidenav" aria-expanded="false" aria-label="Abrir la navegación">☰</button>
+    <a class="brand" href="#top">Agent&nbsp;Harness<span class="ver">v1.1.0</span></a>
+    <nav class="tabs" id="tabs" aria-label="Secciones del sitio">
+      <a href="#tesis" data-grupo="empezar">Empezar</a>
+      <a href="#leyes" data-grupo="metodo">Método</a>
+      <a href="#portar" data-grupo="portar">Portar</a>
+      <a href="#documentacion" data-grupo="referencia">Referencia</a>
+    </nav>
+    <span class="push"></span>
+    <label class="search">
+      <span class="skip">Buscar en la navegación</span>
+      <input id="buscar" type="search" placeholder="Buscar…  /" autocomplete="off" spellcheck="false">
+    </label>
+    <a class="repo" href="https://github.com/raalzate/agent-harness">GitHub&nbsp;↗</a>
+  </div>
+</div>
+
+<header id="top">
+  <div class="wrap">
     <div class="hero">
       <div>
         <h1><span class="sub">Arnés de agente portable</span>El gate<br>es el<br>entregable.</h1>
         <p class="thesis"><em>Una regla sin un comando que la haga fallar es una sugerencia.</em></p>
         <p class="hero-cta">
-          <a class="btn btn-1" href="#quickstart">Quick start — 10 min</a>
+          <a class="btn btn-1" href="#quickstart">Quick start — 4 comandos</a>
           <a class="btn btn-2" href="https://github.com/raalzate/agent-harness">Ver el repo ↗</a>
           <span class="btn-nota">un ejemplo que corre, no una demo</span>
         </p>
@@ -290,78 +379,41 @@ footer { border-top: 4px solid var(--ink); }
   </div>
 </header>
 
-<main>
+<div class="shell">
 
-<section id="quickstart">
-  <div class="wrap sec-inner">
-    <p class="rail"><b>10 min</b>un ejemplo que corre</p>
-    <div>
-      <div class="col stack">
-        <p class="eyebrow">Quick start</p>
-        <h2 style="font-size:var(--step-2)">La forma más rápida de entender esto es verlo frenar algo</h2>
-        <p>Un to-do de consola de <strong>cuatro archivos</strong> con una separación normal:
-          <code>src/lib/</code> decide (lógica pura), <code>src/almacen.mjs</code> es el único que
-          toca el archivo de datos, <code>src/cli.mjs</code> orquesta. Tres convenciones que al
-          principio viven <em>en la cabeza de quien escribió el código</em> — que es el punto de
-          partida de cualquier repo.</p>
-        <p>Al final de los diez minutos las tres son frenos que muerden, y el gate es una línea.
-          <strong>Cero código nuevo:</strong> sólo un JSON.</p>
-      </div>
+<aside class="sidenav" id="sidenav" aria-label="Navegación de la documentación">
+  <p class="nav-title">Navegación</p>
+  <nav id="nav-arbol">
+    <p class="grupo" data-grupo="empezar">Empezar</p>
+    <a href="#tesis" data-grupo="empezar" data-k="tesis por que contexto modelo repo">Por qué un arnés</a>
+    <a href="#quickstart" data-grupo="empezar" data-k="quick start instalar 10 minutos ejemplo todo comandos">Quick start</a>
 
-      <ol class="steps">
-        <li><div><h3>La app y sus tres convenciones</h3><p>Cuatro archivos y tres tests, copiar y pegar. <code>node --test</code> → <code>pass 3</code>.</p></div></li>
-        <li><div><h3>Instalar el arnés</h3><p><code>harness-init.mjs . --apply</code>. Detecta el stack por el manifiesto y aplica su perfil: extensiones, sintaxis de import, manifiesto de dependencias, derivados.</p></div></li>
-        <li><div><h3>Copiar un config ya escrito</h3><p><code>cp examples/quickstart.json .claude/harness.config.json</code> → <code>SELF-TEST VERDE</code>. Son 250 líneas comentadas: es el 80&nbsp;% de entender el arnés.</p></div></li>
-        <li><div><h3>Verlos morder, y romper el gate a propósito</h3><p>Tres hooks contestando <code>exit=2</code> con su motivo, y el gate en rojo con archivo, línea y regla. Un freno que nunca se vio fallar es una esperanza.</p></div></li>
-      </ol>
+    <p class="grupo" data-grupo="metodo">Método</p>
+    <a href="#leyes" data-grupo="metodo" data-k="leyes principios constitucion once">Once leyes</a>
+    <a href="#piezas" data-grupo="metodo" data-k="piezas hooks gate self-test lint">Las cinco piezas</a>
+    <a href="#freno" data-grupo="metodo" data-k="freno regla json bloqueo config">Anatomía de un freno</a>
+    <a href="#registro" data-grupo="metodo" data-k="registro trazabilidad commit issue pr">Trazabilidad</a>
 
-      <div class="pair">
-        <figure class="panel">
-          <figcaption>las cuatro reglas del ejemplo</figcaption>
-          <pre><code><span class="k">purity</span>          src/lib no importa node:fs
-                <span class="s">si la lógica lee el disco, testearla
-                exige un archivo de verdad</span>
+    <p class="grupo" data-grupo="portar">Portar</p>
+    <a href="#portar" data-grupo="portar" data-k="portar instalador otro repo pasos">Portarlo a tu repo</a>
+    <a href="#perfiles" data-grupo="portar" data-k="perfiles stack dotnet jvm python go rust front">Perfiles de stack</a>
+    <a href="#stacks" data-grupo="portar" data-k="stacks senal gate ci comando">La señal de tu stack</a>
 
-<span class="k">reuse</span>           sólo almacen.mjs lee tareas.json
-                <span class="s">un segundo lector duplica la
-                validación y se desincroniza</span>
+    <p class="grupo" data-grupo="referencia">Referencia</p>
+    <a href="#documentacion" data-grupo="referencia" data-k="documentacion documentos indice 17">Los 17 documentos</a>
+    <a href="#limites" data-grupo="referencia" data-k="limites no es sandbox linter criterio">Límites declarados</a>
 
-<span class="k">protectedPaths</span>  tareas.json no lo edita el agente
-                <span class="s">son datos del usuario, y no hay backup</span>
+    <p class="grupo" data-grupo="externo">En el repo</p>
+    <a class="ext" href="https://github.com/raalzate/agent-harness/blob/main/docs/quickstart.md" data-grupo="externo" data-k="quickstart md diez minutos">quickstart.md</a>
+    <a class="ext" href="https://github.com/raalzate/agent-harness/blob/main/docs/metodo.md" data-grupo="externo" data-k="metodo md leyes ciclo">metodo.md</a>
+    <a class="ext" href="https://github.com/raalzate/agent-harness/blob/main/docs/portar.md" data-grupo="externo" data-k="portar md receta">portar.md</a>
+    <a class="ext" href="https://github.com/raalzate/agent-harness/blob/main/docs/config-reference.md" data-grupo="externo" data-k="config reference claves">config-reference.md</a>
+    <a class="ext" href="https://github.com/raalzate/agent-harness/blob/main/docs/gotchas.md" data-grupo="externo" data-k="gotchas incidentes">gotchas.md</a>
+  </nav>
+  <p class="vacio">Sin resultados. La tabla de <a href="#documentacion">documentación</a> tiene los 17 documentos.</p>
+</aside>
 
-<span class="k">bash.deny</span>       nada de `rm … tareas.json`
-                <span class="s">es el único estado del programa</span></code></pre>
-        </figure>
-        <figure class="panel blocked">
-          <figcaption>$ npm run gate — tras importar node:fs en src/lib</figcaption>
-          <pre><code>──▶ lint de convenciones
-repo-lint: 1 problema(s)
-
-  src/lib/puntaje.mjs:1  <span class="hdr">[PUREZA]</span>
-  `src/lib` no importa `node:fs`.
-  `src/lib` decide, el resto orquesta: si la
-  lógica lee el disco, testearla exige un
-  archivo de verdad y deja de ser lógica.
-
-    ✗ lint de convenciones
-
-<span class="hdr">GATE ROJO</span> — señales fallidas:
-  lint de convenciones</code></pre>
-        </figure>
-      </div>
-
-      <div class="col cta-box">
-        <p class="eyebrow">Empezar por acá</p>
-        <p style="margin-top:.5rem"><a href="https://github.com/raalzate/agent-harness/blob/main/docs/quickstart.md"><strong>docs/quickstart.md</strong></a>
-          — los siete pasos, con la salida real de cada comando.</p>
-        <p style="margin-top:.9rem;color:var(--ink-soft)">Las salidas de ese documento no están
-          redactadas: una señal del gate <strong>extrae la app del propio markdown</strong>, la
-          instala, copia el config del ejemplo y verifica las nueve cosas que promete. Si el arnés
-          cambia y el quick start deja de funcionar, se pone rojo el gate — no el lector.</p>
-      </div>
-    </div>
-  </div>
-</section>
+<main class="content" id="contenido">
 
 <section id="tesis">
   <div class="wrap sec-inner">
@@ -381,6 +433,121 @@ repo-lint: 1 problema(s)
       <p>Este repo no es una guía sobre eso. Es la infraestructura, y <strong>se audita a sí
         misma</strong>: su propio gate son las señales del arnés. Un repo de buenas prácticas que no
         las cumple no convence a nadie.</p>
+    </div>
+  </div>
+</section>
+
+<section id="quickstart">
+  <div class="wrap sec-inner">
+    <p class="rail"><b>4 comandos</b>en el repo que ya tenés</p>
+    <div>
+      <div class="col stack">
+        <p class="eyebrow">Quick start</p>
+        <h2 style="font-size:var(--step-2)">Cuatro comandos, en tu repo, sea del stack que sea</h2>
+        <p>No hay app de juguete que crear ni carpetas que inventar: el arnés se instala
+          <strong>en el repositorio en el que ya trabajás</strong>. El instalador detecta el stack
+          por su manifiesto y aplica su perfil. <strong>Cero código nuevo:</strong> lo único
+          específico de tu repo es un JSON.</p>
+      </div>
+
+      <div class="pair">
+        <figure class="panel">
+          <figcaption>copiar y pegar — cualquier stack</figcaption>
+          <pre><code><span class="s"># 1 · instalar (dry-run primero: nunca sobreescribe)</span>
+git clone https://github.com/raalzate/agent-harness /tmp/ah
+node /tmp/ah/scripts/harness-init.mjs .
+node /tmp/ah/scripts/harness-init.mjs . --apply
+
+<span class="s"># 2 · el único archivo específico de tu repo</span>
+cp /tmp/ah/examples/&lt;tu-stack&gt;.json \
+   .claude/harness.config.json
+
+<span class="s"># 3 · ¿los frenos muerden?</span>
+node scripts/harness-selftest.mjs
+<span class="k">                       # SELF-TEST VERDE</span>
+
+<span class="s"># 4 · ¿qué significa «terminado»?</span>
+bash scripts/gate.sh
+<span class="k">                       # GATE VERDE — entregable.</span>
+
+<span class="s"># (el paso que ninguna herramienta hace por vos:</span>
+<span class="s">#  poner en gate.signals el comando que en TU</span>
+<span class="s">#  stack no se puede omitir — dotnet test, mvn</span>
+<span class="s">#  verify, pytest, go test ./…)</span></code></pre>
+        </figure>
+        <figure class="panel">
+          <figcaption>de qué manifiesto sale tu perfil</figcaption>
+          <pre><code><span class="k">*.csproj *.sln</span>       → dotnet
+<span class="k">pom.xml</span>              → jvm-maven
+<span class="k">build.gradle[.kts]</span>   → jvm-gradle
+<span class="k">pyproject.toml</span>       → python
+<span class="k">go.mod</span>               → go
+<span class="k">Cargo.toml</span>           → rust
+<span class="k">package.json</span>         → node
+<span class="k">angular|vite|next…</span>   → front
+
+<span class="s">Detecta varios (un monorepo con front y
+back): los lista y NO elige por vos.</span>
+
+<span class="s">Configs de ejemplo publicadas, listas para
+copiar en el paso 2:</span>
+examples/{dotnet, jvm-spring, python, go,
+          node-typescript, monorepo,
+          infra-terraform, quickstart}.json</code></pre>
+        </figure>
+      </div>
+
+      <div class="col stack" style="margin-top:1.75rem">
+        <h3 style="font-size:var(--step-1)">Y ahora, verlos morder</h3>
+        <p>Un freno que nunca se vio fallar es una esperanza. Cada uno de estos devuelve
+          <code>exit=2</code> con el motivo escrito — que es lo único que el agente lee cuando lo
+          frenás. Las reglas de abajo son las de tu config: el arnés no trae ninguna puesta.</p>
+      </div>
+
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>Lo que intentás</th><th class="mono">Qué contesta el arnés</th></tr></thead>
+          <tbody>
+            <tr><td>borrar en lote</td><td class="mono">exit=2 — antes de un borrado amplio: commit o backup, y la lista a la vista</td></tr>
+            <tr><td>editar una ruta protegida</td><td class="mono">exit=2 — secreto, lockfile o derivado: no lo edita el agente</td></tr>
+            <tr><td>un 2.º lector del mismo estado</td><td class="mono">exit=2 — ya existe el dueño de ese dato; la validación se desincroniza</td></tr>
+            <tr><td>IO en la capa pura</td><td class="mono">GATE ROJO — [PUREZA] con archivo, línea y regla</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="pair">
+        <figure class="panel blocked">
+          <figcaption>$ bash scripts/gate.sh — con IO en la capa pura</figcaption>
+          <pre><code>──▶ lint de convenciones
+repo-lint: 1 problema(s)
+
+  &lt;capa pura&gt;/puntaje.*:1  <span class="hdr">[PUREZA]</span>
+  la capa pura no importa el IO del stack
+  (node:fs · System.IO · java.io · os).
+  La capa pura decide, el resto orquesta: si
+  la lógica lee el disco, testearla exige un
+  archivo de verdad y deja de ser lógica.
+
+    ✗ lint de convenciones
+
+<span class="hdr">GATE ROJO</span> — señales fallidas:
+  lint de convenciones</code></pre>
+        </figure>
+        <div class="cta-box" style="margin-top:0">
+          <p class="eyebrow">Los comandos con su salida real</p>
+          <p style="margin-top:.5rem"><a href="https://github.com/raalzate/agent-harness/blob/main/docs/quickstart.md"><strong>docs/quickstart.md</strong></a>
+            — los siete pasos con la salida de cada comando, sobre una app de cuatro archivos
+            <strong>en Node</strong> para que sea copiable sin instalar nada más.
+            Para llevarlo a otro stack:
+            <a href="https://github.com/raalzate/agent-harness/blob/main/docs/portar.md">portar.md</a>
+            y <a href="https://github.com/raalzate/agent-harness/blob/main/docs/perfiles.md">perfiles.md</a>.</p>
+          <p style="margin-top:.9rem;color:var(--ink-soft)">Esas salidas no están redactadas: una
+            señal del gate <strong>extrae la app del propio markdown</strong>, la instala, copia el
+            config y verifica las nueve cosas que promete. Si el arnés cambia y el quick start deja
+            de funcionar, se pone rojo el gate — no el lector.</p>
+        </div>
+      </div>
     </div>
   </div>
 </section>
@@ -838,6 +1005,13 @@ DRY-RUN: 38 archivo(s) a copiar, 0 conservado(s).</code></pre>
 
 </main>
 
+<aside class="tocnav" aria-label="En esta página">
+  <p class="nav-title">En esta página</p>
+  <ul id="toc"></ul>
+</aside>
+
+</div>
+
 <footer>
   <div class="wrap foot">
     <span>Agent Harness · Apache-2.0 · <a href="https://github.com/raalzate/agent-harness">github.com/raalzate/agent-harness</a> · sin dependencias</span>
@@ -998,6 +1172,148 @@ DRY-RUN: 38 archivo(s) a copiar, 0 conservado(s).</code></pre>
   });
 
   pintar("verde", true);
+})();
+</script>
+
+<script>
+(function () {
+  // El marco de navegación se arma DESDE el DOM: agregar una sección no obliga a
+  // tocar el TOC, y una sección sin `id` no puede aparecer a medias.
+  var slug = function (t) {
+    return t.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 48);
+  };
+
+  var secciones = Array.prototype.slice.call(document.querySelectorAll(".content section[id]"));
+  var toc = document.getElementById("toc");
+  var entradas = [];   // { id, nivel } en orden de documento
+
+  secciones.forEach(function (sec) {
+    var h2 = sec.querySelector("h2");
+    if (!h2) return;
+    entradas.push({ id: sec.id, nivel: 2, sec: sec.id });
+    toc.appendChild(item(sec.id, h2.textContent.trim(), ""));
+
+    Array.prototype.slice.call(sec.querySelectorAll("h3")).forEach(function (h3) {
+      if (!h3.id) h3.id = sec.id + "-" + slug(h3.textContent);
+      entradas.push({ id: h3.id, nivel: 3, sec: sec.id });
+      toc.appendChild(item(h3.id, h3.textContent.trim(), "sub"));
+    });
+  });
+
+  function item(id, texto, clase) {
+    var li = document.createElement("li");
+    if (clase) li.className = clase;
+    var a = document.createElement("a");
+    a.href = "#" + id;
+    a.textContent = texto;
+    li.appendChild(a);
+    return li;
+  }
+
+  var enlacesToc = {};
+  Array.prototype.slice.call(toc.querySelectorAll("a")).forEach(function (a) {
+    enlacesToc[a.getAttribute("href").slice(1)] = a;
+  });
+  var enlacesNav = {};
+  Array.prototype.slice.call(document.querySelectorAll("#nav-arbol a[href^='#']")).forEach(function (a) {
+    enlacesNav[a.getAttribute("href").slice(1)] = a;
+  });
+  var tabs = Array.prototype.slice.call(document.querySelectorAll("#tabs a"));
+
+  var activo = null;
+  function marcar() {
+    var corte = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--topbar-h")) * 16 + 28;
+    var actual = null;
+    entradas.forEach(function (e) {
+      var el = document.getElementById(e.id);
+      if (el && el.getBoundingClientRect().top <= corte) actual = e;
+    });
+    // Antes de la primera sección no hay nada activo: el héroe no es una sección.
+    if (actual && activo && actual.id === activo.id) return;
+    activo = actual;
+    for (var k in enlacesToc) enlacesToc[k].removeAttribute("aria-current");
+    for (var n in enlacesNav) enlacesNav[n].removeAttribute("aria-current");
+    tabs.forEach(function (t) { t.removeAttribute("aria-current"); });
+    if (!actual) return;
+    if (enlacesToc[actual.id]) enlacesToc[actual.id].setAttribute("aria-current", "true");
+    var nav = enlacesNav[actual.sec];
+    if (nav) {
+      nav.setAttribute("aria-current", "true");
+      var g = nav.dataset.grupo;
+      tabs.forEach(function (t) { if (t.dataset.grupo === g) t.setAttribute("aria-current", "true"); });
+    }
+  }
+
+  var pedido = false;
+  function agendar() {
+    if (pedido) return;
+    pedido = true;
+    requestAnimationFrame(function () { pedido = false; marcar(); });
+  }
+  addEventListener("scroll", agendar, { passive: true });
+  addEventListener("resize", agendar);
+  marcar();
+
+  // Buscador: filtra el árbol de navegación. Sin índice ni dependencias — lo que
+  // se busca son los títulos y las palabras clave declaradas en cada enlace.
+  var caja = document.getElementById("buscar");
+  var lateral = document.getElementById("sidenav");
+  var arbol = document.getElementById("nav-arbol");
+  var items = Array.prototype.slice.call(arbol.querySelectorAll("a"));
+  var grupos = Array.prototype.slice.call(arbol.querySelectorAll(".grupo"));
+
+  function filtrar() {
+    var q = caja.value.trim().toLowerCase();
+    if (!q) {
+      items.forEach(function (a) { a.hidden = false; });
+      grupos.forEach(function (g) { g.hidden = false; });
+      lateral.removeAttribute("data-filtrando");
+      return;
+    }
+    var vistos = 0;
+    items.forEach(function (a) {
+      var heno = (a.textContent + " " + (a.dataset.k || "")).toLowerCase();
+      a.hidden = heno.indexOf(q) === -1;
+      if (!a.hidden) vistos++;
+    });
+    grupos.forEach(function (g) {
+      g.hidden = !items.some(function (a) { return a.dataset.grupo === g.dataset.grupo && !a.hidden; });
+    });
+    lateral.setAttribute("data-filtrando", vistos ? "si" : "vacio");
+  }
+
+  caja.addEventListener("input", filtrar);
+  caja.addEventListener("keydown", function (e) {
+    if (e.key === "Escape") { caja.value = ""; filtrar(); caja.blur(); }
+    if (e.key === "Enter") {
+      var primero = items.filter(function (a) { return !a.hidden; })[0];
+      if (primero) { primero.click(); caja.blur(); }
+    }
+  });
+  addEventListener("keydown", function (e) {
+    if (e.key === "/" && document.activeElement !== caja) { e.preventDefault(); caja.focus(); }
+  });
+
+  // Cajón en pantalla angosta.
+  var boton = document.getElementById("drawer-btn");
+  var scrim = null;
+  function cajon(abrir) {
+    lateral.setAttribute("data-open", String(abrir));
+    boton.setAttribute("aria-expanded", String(abrir));
+    if (abrir && !scrim) {
+      scrim = document.createElement("div");
+      scrim.className = "scrim";
+      scrim.addEventListener("click", function () { cajon(false); });
+      document.body.appendChild(scrim);
+    } else if (!abrir && scrim) {
+      scrim.remove();
+      scrim = null;
+    }
+  }
+  boton.addEventListener("click", function () { cajon(lateral.getAttribute("data-open") !== "true"); });
+  arbol.addEventListener("click", function (e) { if (e.target.tagName === "A") cajon(false); });
+  addEventListener("keydown", function (e) { if (e.key === "Escape") cajon(false); });
 })();
 </script>
 
