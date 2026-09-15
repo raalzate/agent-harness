@@ -38,7 +38,7 @@ Después, en tu repo:
 ```bash
 git config core.hooksPath .githooks   # el pre-commit real, no el .sample
 node scripts/harness-selftest.mjs     # ¿los frenos muerden?
-bash scripts/gate.sh                  # ¿el gate corre?
+node scripts/gate.mjs                  # ¿el gate corre?
 ```
 
 Lo que el instalador **no** puede hacer por vos es lo que da el valor: decidir cuáles son las
@@ -56,7 +56,8 @@ guiado paso a paso en **[docs/portar.md](docs/portar.md)**.
   commands/              /gate · /lesson · /harness-audit · /harness-port
   skills/nuevo-freno/    convierte una regla en prosa en un freno ejecutable
 scripts/
-  gate.sh                el gate: ejecuta las señales declaradas en el config
+  gate.mjs               el gate: ejecuta las señales declaradas en el config (Node: corre en Windows)
+  gate.sh                envoltorio de una línea sobre gate.mjs, para quien ya lo invoca
   repo-lint.mjs          las reglas del repo que ningún compilador ve (8 clases)
   harness-selftest.mjs   prueba de vida: ¿cada regla tiene un comando que la hace fallar?
   docs-linkcheck.mjs     que la memoria del agente no apunte a la nada

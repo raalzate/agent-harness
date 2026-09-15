@@ -32,6 +32,7 @@ El orden que funciona: **el método** (qué se hace y por qué) → **el caso** 
 | [trazabilidad.md](trazabilidad.md) | Que el trabajo quede registrado, en cualquier forja —GitHub, GitLab, Azure Boards, Jira, Gitea—: el hook que lo hace inevitable, cómo se configura el patrón de referencia, y dónde viven los artefactos de una feature. |
 | [codegraph.md](codegraph.md) | **El índice del código es obligatorio.** Qué cuesta leer el repo a mano, cómo se instala codegraph, cómo se consulta y qué mecanismo lo exige. |
 | [cicd.md](cicd.md) | **El pipeline.** El mismo gate en tres lugares (humano, agente, CI), las cuatro reglas del pipeline y qué hacer cuando el gate tarda. |
+| [multiplataforma.md](multiplataforma.md) | **Windows, macOS y Linux.** Qué corre con qué intérprete, las seis trampas que hacían que un freno no fallara sino que desapareciera, y la matriz de CI que lo demuestra. |
 | [multi-proyecto.md](multi-proyecto.md) | **Varios proyectos.** Monorepo, varios repos o una plataforma entera: dónde va el gate, qué viaja entre repos y qué no, cómo se actualiza el arnés en N proyectos sin quedar desparejo. |
 | [recetas.md](recetas.md) | Recetas por situación: cómo se ve el gate en cada stack, cómo se agrega una señal, cómo se mide si el arnés está vivo. |
 

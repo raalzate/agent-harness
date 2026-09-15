@@ -34,7 +34,7 @@ tocás una clave.
 | Clave | Qué hace |
 |---|---|
 | `command` / `fastCommand` | lo que el agente y los mensajes de error le dicen al humano que corra. **No** es lo que se ejecuta: eso son las `signals` |
-| `marker` | archivo que marca "hay código editado sin gate verde". Lo escribe `post-edit-check`, lo borra `gate.sh` al terminar verde, lo lee el hook `Stop` |
+| `marker` | archivo que marca "hay código editado sin gate verde". Lo escribe `post-edit-check`, lo borra `gate.mjs` al terminar verde, lo lee el hook `Stop` |
 | `codeGlobs` | qué rutas cuentan como **código**. Editar un `.md` no ensucia el gate; editar `src/` sí |
 | `codeExtensions` | qué **extensiones** cuentan como código. Vacío = el hook usa un superconjunto agnóstico (JS, .NET, JVM, Python, Go, Rust, C/C++). Estaba cableada en `post-edit-check.mjs`: por eso el freno de mayor retorno estaba muerto en todo repo que no fuera JS/TS |
 | `installHooksCommand` | el comando que instala los hooks de git **en este repo**. Lo nombra `session-start` cuando `core.hooksPath` no está puesto: un aviso que cita un comando inexistente se ignora completo |
@@ -479,7 +479,7 @@ cumplir. El detalle de qué viaja y qué no está en [perfiles.md](perfiles.md).
 
 | Clave | Lo leen |
 |---|---|
-| `gate` (`command`, `marker`, `signals`) | `scripts/gate.sh`, `gate-stop.mjs`, `session-start.mjs`, self-test |
+| `gate` (`command`, `marker`, `signals`) | `scripts/gate.mjs`, `gate-stop.mjs`, `session-start.mjs`, self-test |
 | `gate.codeGlobs`, `gate.codeExtensions` | `post-edit-check.mjs` (¿ensucia el gate y se lintea?), self-test |
 | `gate.installHooksCommand` | `session-start.mjs` (el aviso de pre-commit sin instalar), self-test |
 | `protectedPaths` | `protected-paths.mjs`, `.githooks/pre-commit`, self-test |

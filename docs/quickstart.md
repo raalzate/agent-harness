@@ -123,7 +123,7 @@ Falta el manifiesto y los hooks de git:
 ```bash
 node -e 'const fs=require("fs");const p=JSON.parse(fs.readFileSync("package.json","utf8"));
 p.type="module";
-p.scripts={...p.scripts,gate:"bash scripts/gate.sh","gate:fast":"bash scripts/gate.sh fast",
+p.scripts={...p.scripts,gate:"node scripts/gate.mjs","gate:fast":"node scripts/gate.mjs fast",
   selftest:"node scripts/harness-selftest.mjs",lint:"node scripts/repo-lint.mjs",
   test:"node --test","hooks:install":"git config core.hooksPath .githooks"};
 fs.writeFileSync("package.json",JSON.stringify(p,null,2)+"\n");'

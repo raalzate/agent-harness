@@ -8,7 +8,8 @@
 
 El producto **es el arnés**: hooks, gate, self-test, subagentes, comandos y docs para que otro repo
 —en cualquier lenguaje— tenga reglas que se hacen cumplir solas. No hay aplicación, no hay UI, no
-hay dependencias: corre con `node` y `bash`.
+hay dependencias: corre con `node` en Windows, macOS y Linux (los hooks de git son de shell, y
+en Windows los ejecuta el bash que trae Git for Windows).
 
 Consecuencia práctica: este repo se audita a sí mismo. Su gate son las señales del propio arnés, y
 si algo acá no cumple lo que el arnés predica, eso **es** el bug.
@@ -93,6 +94,7 @@ npm run lint:rules     # ¿qué reglas están activas y de dónde salen?
 | el índice del código (obligatorio) | `docs/codegraph.md` |
 | el pipeline y sus reglas (GitHub, GitLab, Azure, Bitbucket, Jenkins) | `docs/cicd.md` |
 | monorepo, varios repos, plataforma | `docs/multi-proyecto.md` |
+| que corra en Windows, macOS y Linux | `docs/multiplataforma.md` |
 | qué principio ágil tiene mecanismo | `docs/agilidad.md` |
 | diseño: acoplamiento, cohesión, ADR | `docs/arquitectura.md` |
 | cómo se instala en otro repo | `docs/portar.md` |
@@ -110,5 +112,7 @@ lee cada clave": esa tabla es lo que evita romper algo al tocar una clave.
 
 - Español, comentarios que explican el **porqué** y no el qué, siguiendo el archivo vecino.
 - Sin dependencias. Nunca. Es lo que hace al arnés copiable en cualquier repo.
+- **El camino de entrada de todo freno es `node`.** Un script de shell puede existir, pero nunca
+  ser el único camino: en Windows el freno no falla, desaparece (`docs/multiplataforma.md`).
 - Los mensajes al agente (bloqueos, salidas del gate) son cortos y accionables: qué pasó, por qué
   importa, qué hacer.

@@ -48,8 +48,8 @@ viajar con las ajenas es el error del final de este documento. El detalle del co
 En tu repo, agregá al manifiesto (`package.json`, `Makefile`, `justfile`, lo que uses):
 
 ```
-gate       → bash scripts/gate.sh
-gate:fast  → bash scripts/gate.sh fast
+gate       → node scripts/gate.mjs
+gate:fast  → node scripts/gate.mjs fast
 ```
 
 Y activá el pre-commit real:
@@ -100,7 +100,7 @@ Y grabate la regla: **fast verde no es entregable**, y una señal **omitida no e
 Verificación del paso:
 
 ```bash
-bash scripts/gate.sh          # ¿corre? ¿falla cuando algo está roto de verdad?
+node scripts/gate.mjs          # ¿corre? ¿falla cuando algo está roto de verdad?
 ```
 
 Probá que el gate puede ponerse rojo. Un gate que nunca falló todavía no es un gate: es una

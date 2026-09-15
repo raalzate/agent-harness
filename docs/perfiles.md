@@ -35,7 +35,7 @@ que sí servían.
 | `forbiddenDeps.manifest` + `matcher` | `forbiddenDeps.packages` — qué dependencia se vetó |
 | `protectedPaths` de derivados (`bin/`, `obj/`, `target/`) | `reuse` — el boilerplate que este repo ya resolvió |
 | `tests.filePattern` / `onlyPattern` | `singleSource`, `invariants` |
-| `installHooksCommand` y el alias del gate donde el stack tiene uno estándar (`npm run gate`; en los demás queda `bash scripts/gate.sh`, que siempre funciona) | `bash.deny` propio del stack (`terraform apply`, `kubectl delete`) |
+| `installHooksCommand` y el alias del gate donde el stack tiene uno estándar (`npm run gate`; en los demás queda `node scripts/gate.mjs`, que siempre funciona) | `bash.deny` propio del stack (`terraform apply`, `kubectl delete`) |
 | `commitMsg.ignoreExtensions` (`.resx`, `.rst`: son del lenguaje) | `commitMsg.codePattern` — **layout del equipo**: en un repo el código vive en `src/`, en otro en `services/` |
 | `docs.ignore` — directorios derivados | |
 
@@ -57,7 +57,7 @@ verifica lo que no corresponde es peor que no tener gate, porque enseña a ignor
 
 Lo que el perfil deja son **candidatas comentadas** en `gate.$signalHints`: nombre, comando y `why`.
 Se confirman leyendo el CI real del repo y se mueven a `gate.signals`. El `$` del nombre no es
-decorativo: `scripts/gate.sh` sólo ejecuta `gate.signals`, así que una candidata sin revisar no
+decorativo: `scripts/gate.mjs` sólo ejecuta `gate.signals`, así que una candidata sin revisar no
 corre nunca.
 
 ## Lo que ningún perfil arregla
@@ -75,7 +75,7 @@ En CI son dos líneas más, no un problema — el runner ya instala tu SDK, y no
         with: { dotnet-version: '8.0.x' }
       - uses: actions/setup-node@v4        # el arnés (sin `npm ci`: no tiene dependencias)
         with: { node-version: 20 }
-      - run: bash scripts/gate.sh
+      - run: node scripts/gate.mjs
 ```
 
 **El banco prueba el encaje, no la escala.** Los repos de juguete tienen un módulo y cinco
