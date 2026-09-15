@@ -397,5 +397,64 @@
       "squash! "
     ],
     "escapeLine": "sin-issue:"
+  },
+  "workflow": {
+    "$comment": "EL CICLO DE DESARROLLO. Viaja con el modelo más común (una rama larga + ramas de trabajo cortas); cambialo por el de tu equipo antes de encenderlo. Lo verifica `.githooks/pre-push` → `node scripts/ciclo-check.mjs --push`. Sin `branchPattern` ni `maxAgeDays`, el freno no corre. Los tres modelos en config: docs/ciclo-desarrollo.md · ejemplos: examples/trunk-based.json y examples/git-flow.json.",
+    "model": "trunk-based",
+    "branchPattern": "^(feat|fix|docs|chore|refactor|test|ci|perf)/[a-z0-9][a-z0-9._-]*$",
+    "branchExamples": [
+      "fix/timeout-en-el-login"
+    ],
+    "longLived": [
+      "main",
+      "master"
+    ],
+    "baseBranch": "main",
+    "mergeInto": [
+      {
+        "branch": ".*",
+        "into": [
+          "main"
+        ]
+      }
+    ],
+    "maxAgeDays": 5,
+    "staleAction": "warn",
+    "reason": "una rama por tarea, con nombre que dice de qué es: es lo que hace legible `git branch -a` cuando hay quince abiertas.",
+    "staleReason": "una rama que no se integra hace días es un lote grande esperando: el merge es más caro y el rojo aparece tarde."
+  },
+  "xp": {
+    "$comment": "Prácticas de XP con mecanismo. TODAS viajan APAGADAS a propósito: una regla instalada sin cicatriz detrás se desactiva en una semana y se lleva puestas a las que servían (P14). Encendé la que tu equipo ya decidió, empezando por `testFirst`. Las lee `.githooks/commit-msg` → `node scripts/ciclo-check.mjs --commit`. Ver docs/ciclo-desarrollo.md.",
+    "testFirst": {
+      "enabled": false,
+      "testPattern": "(^|/)(__tests__|tests?)/|\\.(test|spec)\\.[cm]?[jt]sx?$",
+      "escapeLine": "sin-test:",
+      "reason": "un arreglo sin prueba no tiene cómo demostrar que arregló algo."
+    },
+    "smallBatch": {
+      "enabled": false,
+      "maxFiles": 20,
+      "maxLines": 600,
+      "ignorePattern": "^docs/",
+      "escapeLine": "lote-grande:",
+      "reason": "un lote grande no se revisa: se aprueba."
+    },
+    "refactorSeparate": {
+      "enabled": false,
+      "subjectPattern": "^refactor(\\(|:)",
+      "escapeLine": "refactor-mixto:",
+      "reason": "si cambian las expectativas, no era un refactor: son dos commits."
+    },
+    "pairing": {
+      "enabled": false,
+      "trailer": "Co-authored-by:",
+      "escapeLine": "solo:",
+      "reason": "el código que escribió una sola persona lo entiende una sola persona."
+    }
+  },
+  "install": {
+    "activators": {
+      "scripts/ciclo-check.mjs": "workflow.branchPattern"
+    }
   }
 }

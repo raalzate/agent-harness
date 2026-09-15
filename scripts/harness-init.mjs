@@ -201,6 +201,7 @@ const COPIAR = [
   "scripts/harness-selftest.mjs",
   "scripts/docs-linkcheck.mjs",
   "scripts/artifacts-check.mjs",
+  "scripts/ciclo-check.mjs",
   // Documentos AGNÓSTICOS que el arnés instalado cita: sin ellos, el propio arnés arranca
   // apuntando a la nada en el repo destino (P10 violado por el instalador). Lo destapó el
   // banco de perfiles: `docs-linkcheck` del repo portado salía rojo el primer día.
@@ -214,6 +215,7 @@ const COPIAR = [
   "docs/cicd.md",
   "docs/arquitectura.md",
   "docs/agilidad.md",
+  "docs/ciclo-desarrollo.md",
   "docs/multi-proyecto.md",
   "docs/multiplataforma.md",
   ".githooks/pre-commit",

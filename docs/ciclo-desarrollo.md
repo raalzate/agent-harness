@@ -47,7 +47,7 @@ es la forma más rápida de que nadie crea en el resto.
 }
 ```
 
-**Git flow**: dos ramas largas y familias con destino distinto → `examples/git-flow.json`.
+**Git flow**: dos ramas largas y familias con destino distinto (el ejemplo `git-flow` del repo del arnés).
 
 ```json
 "workflow": {
@@ -65,7 +65,7 @@ es la forma más rápida de que nadie crea en el resto.
 ```
 
 **GitHub flow / GitLab flow**: como trunk-based, con `maxAgeDays` más largo y las ramas de entorno
-en `longLived` (`staging`, `production`) → `examples/trunk-based.json` es el punto de partida.
+en `longLived` (`staging`, `production`); el ejemplo `trunk-based` es el punto de partida.
 
 ### Cuánto vale cada freno
 
@@ -165,5 +165,5 @@ Las prácticas apagadas se prueban con un **cebo** (`--config <ruta>`), sin escr
 
 Ver también: [agilidad.md](agilidad.md) (qué principio ágil tiene mecanismo),
 [trazabilidad.md](trazabilidad.md) (el registro del trabajo),
-[cicd.md](cicd.md) (el pipeline), [config-reference.md](config-reference.md) (cada clave),
+[cicd.md](cicd.md) (el pipeline), y la referencia de cada clave del config en el repo del arnés,
 [buenas-practicas.md](buenas-practicas.md) (la guía de fondo).

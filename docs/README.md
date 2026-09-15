@@ -19,6 +19,7 @@ El orden que funciona: **el método** (qué se hace y por qué) → **el caso** 
 | [decisions/0004-contrato-de-hooks.md](decisions/0004-contrato-de-hooks.md) | El contrato de exit codes, y por qué un arnés roto **deja pasar** en vez de bloquear. |
 | [decisions/0005-indice-obligatorio.md](decisions/0005-indice-obligatorio.md) | Por qué el índice del código pasó de recomendación a requisito, y por qué su señal se omite en vez de fallar. |
 | [agilidad.md](agilidad.md) | **Qué principio ágil tiene mecanismo y cuál es prosa.** Diez principios con el comando que falla cuando se violan, y la lista explícita de lo que este arnés NO hace cumplir. |
+| [ciclo-desarrollo.md](ciclo-desarrollo.md) | **El modelo de ramas y las prácticas de XP, declarados.** `workflow` (trunk-based, git flow, GitHub flow) y `xp` (test primero, lote chico, refactor separado, de a dos): qué se verifica con un comando, qué se declara y no se finge verificado. |
 | [arquitectura.md](arquitectura.md) | **Diseño con comando.** Qué documentación de arquitectura es obligatoria (y cuándo va un ADR), y la traducción de bajo acoplamiento / alta cohesión a reglas del config que fallan. |
 
 ## 2. Cómo (la práctica)
