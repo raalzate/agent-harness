@@ -782,6 +782,138 @@ const huerfanasDe = (cfg) => {
   }
 }
 
+// 3f-bis. El ciclo de desarrollo: modelo de ramas (`workflow`) y prácticas de XP (`xp`).
+//     El freno entra por `node scripts/ciclo-check.mjs`, así que estos casos NO necesitan
+//     bash: corren igual en Windows, que es donde un freno de sólo-shell no falla sino que
+//     desaparece. Las muestras salen del config: el self-test no sabe qué modelo usa el repo.
+{
+  const script = abs("scripts/ciclo-check.mjs");
+  const wf = config.workflow ?? {};
+  const reglasXp = config.xp ?? {};
+
+  if (!fs.existsSync(script)) {
+    skip("ciclo de desarrollo", "el repo no trae scripts/ciclo-check.mjs");
+  } else {
+    // --- modelo de ramas -------------------------------------------------------------
+    const rama = (nombre, cfg) =>
+      spawnSync("node", [script, "--branch", nombre, ...(cfg ? ["--config", cfg] : [])], {
+        cwd: REPO_ROOT,
+        encoding: "utf8",
+      });
+
+    if (!wf.branchPattern) {
+      skip("ciclo: el nombre de la rama sigue el modelo", "el repo no declara `workflow.branchPattern`");
+    } else {
+      const valida = (wf.branchExamples ?? [])[0] ?? sampleFromPattern(wf.branchPattern);
+      // La muestra inválida se fabrica del patrón, no de un literal: un espacio adelante
+      // rompe cualquier patrón de rama razonable. Si ESE patrón la aceptara, el caso se
+      // reporta omitido antes que mentir.
+      const invalida = `ZZ ${valida ?? "rama"}`;
+      const patronAcepta = (() => {
+        try {
+          return new RegExp(wf.branchPattern).test(invalida);
+        } catch {
+          return true;
+        }
+      })();
+
+      if (!valida || patronAcepta) {
+        skip("ciclo: el nombre de la rama sigue el modelo", "`workflow.branchPattern` no se reduce a un ejemplo");
+      } else {
+        const mala = rama(invalida);
+        if (mala.status === 1) ok("ciclo: una rama que no sigue el modelo no se empuja");
+        else bad("ciclo: una rama fuera del modelo", `exit ${mala.status}: el nombre inválido pasa`);
+
+        const buena = rama(valida);
+        if (buena.status === 0) ok(`ciclo: \`${valida}\` (rama del modelo) pasa`);
+        else bad("ciclo: una rama del modelo pasa", `exit ${buena.status}: el freno bloquea de más — ${buena.stderr.trim().slice(0, 160)}`);
+
+        for (const larga of (wf.longLived ?? config.branches?.protected ?? []).slice(0, 2)) {
+          const r = rama(larga);
+          if (r.status === 0) ok(`ciclo: \`${larga}\` (rama larga del modelo) no sigue el patrón de trabajo, y está bien`);
+          else bad(`ciclo: \`${larga}\` exenta del patrón`, `exit ${r.status}: el freno bloquea la rama del propio modelo`);
+        }
+      }
+    }
+
+    // --- prácticas de XP -------------------------------------------------------------
+    // Repo git NUEVO por caso, igual que en commit-msg: lo staged de un caso anterior
+    // contaminaría el siguiente. `--config` permite el CEBO de una práctica apagada acá
+    // sin escribir nada en el árbol de fuentes (P7).
+    const correr = (archivos, mensaje, configOverride) => {
+      const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "harness-ciclo-"));
+      try {
+        const git = (...a) => spawnSync("git", a, { cwd: tmp, encoding: "utf8" });
+        git("init", "-q");
+        git("config", "user.email", "selftest@example.com");
+        git("config", "user.name", "selftest");
+        const rutaCfg = path.join(tmp, "cfg.json");
+        fs.writeFileSync(rutaCfg, JSON.stringify(configOverride ?? config));
+        for (const [rel, contenido] of Object.entries(archivos)) {
+          const dest = path.join(tmp, rel);
+          fs.mkdirSync(path.dirname(dest), { recursive: true });
+          fs.writeFileSync(dest, contenido);
+        }
+        for (const rel of Object.keys(archivos)) git("add", rel);
+        const msgFile = path.join(tmp, "MSG");
+        fs.writeFileSync(msgFile, mensaje);
+        const res = spawnSync("node", [script, "--commit", msgFile, "--config", rutaCfg], { cwd: tmp, encoding: "utf8" });
+        return { status: res.status, stderr: res.stderr ?? "" };
+      } finally {
+        fs.rmSync(tmp, { recursive: true, force: true });
+      }
+    };
+
+    // Una práctica POR CEBO, y sola: con las demás encendidas, el caso de «lote chico
+    // declarado» salía rojo por el mensaje de «test primero» y el veredicto no decía
+    // nada sobre la práctica que se estaba probando.
+    const conXp = (practica, cambios) => ({
+      ...config,
+      xp: { [practica]: { ...(reglasXp[practica] ?? {}), enabled: true, ...cambios } },
+    });
+
+    const rutaCodigo = sampleFromPattern(config.commitMsg?.codePattern ?? "");
+    const prefijo = rutaCodigo ? (rutaCodigo.endsWith("/") ? rutaCodigo : `${rutaCodigo}/`) : null;
+    const patronTest = reglasXp.testFirst?.testPattern ?? config.tests?.filePattern;
+    const muestraTest = patronTest ? sampleFromPattern(patronTest) : null;
+    const archivoTest = muestraTest ? (muestraTest.endsWith("/") ? `${muestraTest}caso.mjs` : muestraTest) : null;
+
+    if (!prefijo || !archivoTest) {
+      skip("ciclo (XP): prácticas del equipo", "`commitMsg.codePattern` o el patrón de tests no se reducen a un ejemplo");
+    } else {
+      const archivoCodigo = `${prefijo}ejemplo.mjs`;
+      const casos = [
+        // test primero: la prueba y el cambio entran juntos, o se declara por qué no
+        ["XP test primero: código sin prueba no entra", { [archivoCodigo]: "// x\n" }, "fix: algo", conXp("testFirst", {}), 1],
+        ["XP test primero: código CON su prueba entra", { [archivoCodigo]: "// x\n", [archivoTest]: "// caso\n" }, "fix: algo", conXp("testFirst", {}), 0],
+        ["XP test primero: la fuga con motivo entra", { [archivoCodigo]: "// x\n" }, `fix: algo\n\n${reglasXp.testFirst?.escapeLine ?? "sin-test:"} typo en un comentario`, conXp("testFirst", {}), 0],
+        ["XP test primero: la fuga SIN motivo no alcanza", { [archivoCodigo]: "// x\n" }, `fix: algo\n\n${reglasXp.testFirst?.escapeLine ?? "sin-test:"}`, conXp("testFirst", {}), 1],
+        // lote chico: el límite sale del config, el cebo lo baja a 1 archivo
+        ["XP lote chico: un lote sobre el límite no entra", { [archivoCodigo]: "// x\n", [`${prefijo}otro.mjs`]: "// y\n" }, "feat: dos cosas", conXp("smallBatch", { maxFiles: 1, maxLines: 0 }), 1],
+        ["XP lote chico: declarado con motivo, entra", { [archivoCodigo]: "// x\n", [`${prefijo}otro.mjs`]: "// y\n" }, `feat: dos cosas\n\n${reglasXp.smallBatch?.escapeLine ?? "lote-grande:"} movimiento mecánico de un renombre`, conXp("smallBatch", { maxFiles: 1, maxLines: 0 }), 0],
+        ["XP lote chico: un lote bajo el límite entra", { [archivoCodigo]: "// x\n" }, "feat: una cosa", conXp("smallBatch", { maxFiles: 5, maxLines: 500 }), 0],
+        // refactor separado: un refactor que toca pruebas no es un refactor
+        ["XP refactor separado: `refactor:` que cambia pruebas no entra", { [archivoCodigo]: "// x\n", [archivoTest]: "// caso\n" }, "refactor: mover el helper", conXp("refactorSeparate", {}), 1],
+        ["XP refactor separado: `refactor:` sin tocar pruebas entra", { [archivoCodigo]: "// x\n" }, "refactor: mover el helper", conXp("refactorSeparate", {}), 0],
+        // de a dos: apagada en este repo — el mecanismo se prueba igual con un cebo
+        ["XP de a dos: sin rastro de con quién, no entra", { [archivoCodigo]: "// x\n" }, "feat: algo", conXp("pairing", {}), 1],
+        ["XP de a dos: con el trailer de co-autoría, entra", { [archivoCodigo]: "// x\n" }, `feat: algo\n\n${reglasXp.pairing?.trailer ?? "Co-authored-by:"} Par <par@ejemplo.com>`, conXp("pairing", {}), 0],
+      ];
+
+      for (const [nombre, archivos, mensaje, cfg, esperado] of casos) {
+        const res = correr(archivos, mensaje, cfg);
+        if (res.status === esperado) ok(`ciclo: ${nombre}`);
+        else bad(`ciclo: ${nombre}`, `esperaba exit ${esperado}, salió ${res.status}. stderr: ${res.stderr.trim().slice(0, 200)}`);
+      }
+
+      // Y el caso que se olvida: con las prácticas APAGADAS, el freno no dice nada.
+      const apagado = correr({ [archivoCodigo]: "// x\n" }, "fix: algo", { ...config, xp: {} });
+      if (apagado.status === 0) ok("ciclo: sin `xp` configurado, el freno no corre");
+      else bad("ciclo: sin `xp` configurado", `exit ${apagado.status}: el freno bloquea sin estar encendido`);
+    }
+  }
+}
+
 // 3g. Los artefactos de trabajo, donde el equipo decidió. Se prueba con un CEBO en un
 //     directorio temporal: `--dir` existe justamente para no escribir en el repo.
 if (config.tracker?.artifactsIn === "tracker" && fs.existsSync(abs("scripts/artifacts-check.mjs"))) {

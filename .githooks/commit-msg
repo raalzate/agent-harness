@@ -92,4 +92,10 @@ if [ "$CODIGO" -ne 0 ]; then
   exit 1
 fi
 
+# Prácticas de XP con mecanismo (test primero, lote chico, refactor separado, de a dos).
+# Cada una se activa por su clave en `xp`; ninguna corre si el equipo no la encendió.
+if [ -f "scripts/ciclo-check.mjs" ]; then
+  node scripts/ciclo-check.mjs --commit "$MSG_FILE" || exit 1
+fi
+
 exit 0

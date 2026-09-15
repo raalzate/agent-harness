@@ -14,6 +14,10 @@
 # Las ramas se declaran en `.claude/harness.config.json` → `branches.protected`.
 # Sin esa clave, el hook no hace nada.
 #
+# El modelo de ramas del equipo (nombre válido de rama, edad máxima antes de integrar)
+# lo verifica `node scripts/ciclo-check.mjs --push`, que lee la clave `workflow`. Está en node
+# porque en Windows un freno que sólo existe en shell no falla: desaparece.
+#
 # Instalación: git config core.hooksPath .githooks
 set -uo pipefail
 
@@ -67,6 +71,12 @@ CODIGO=$?
 if [ "$CODIGO" -ne 0 ]; then
   echo "$SALIDA" >&2
   exit 1
+fi
+
+# Modelo de ramas: mismo stdin, otro freno. Corre después porque empujar a una rama
+# protegida es el error más grave y merece ser el único mensaje que se lee.
+if [ -f "scripts/ciclo-check.mjs" ]; then
+  node scripts/ciclo-check.mjs --push <<< "$ENTRADA" || exit 1
 fi
 
 exit 0
