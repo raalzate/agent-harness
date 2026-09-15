@@ -1,0 +1,12 @@
+# Finales de línea: LF en el árbol de trabajo, en las tres plataformas.
+#
+# No es estética. Si el checkout de Windows convierte a CRLF, el bash que trae Git for Windows
+# rechaza los hooks con un error que NO menciona el problema ("$'\r': command not found"), y el
+# banco deja de reconocer los bloques del quick start. Los dos síntomas aparecen sólo en una
+# plataforma, que es donde menos se prueban.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.svg text eol=lf

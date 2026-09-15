@@ -41,7 +41,7 @@ if (hooksPath !== ".githooks") {
 // Alerta: gate pendiente de una sesión anterior.
 const marker = path.join(REPO_ROOT, config.gate?.marker ?? ".git/gate-dirty");
 if (fs.existsSync(marker)) {
-  lines.push(`- ⚠️ Gate pendiente de una sesión anterior: corré \`${config.gate?.command ?? "bash scripts/gate.sh"}\`.`);
+  lines.push(`- ⚠️ Gate pendiente de una sesión anterior: corré \`${config.gate?.command ?? "node scripts/gate.mjs"}\`.`);
 }
 
 // STATUS.md: estado verificado + deuda conocida.

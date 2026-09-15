@@ -14,7 +14,7 @@ npm run gate        # self-test · link-check de docs · lint de convenciones
 npm run gate:fast   # igual (este repo no tiene señales lentas todavía)
 ```
 
-`scripts/gate.sh` es la única definición del gate, y **no sabe de stacks**: ejecuta la lista de
+`scripts/gate.mjs` es la única definición del gate, y **no sabe de stacks**: ejecuta la lista de
 `.claude/harness.config.json` → `gate.signals`. Lo corren tres actores con el mismo comando: el
 humano, el agente (subagente `gate-runner`) y CI (`.github/workflows/ci.yml`). Al terminar en verde
 borra `.git/gate-dirty`, que es lo que mira el hook `Stop`.

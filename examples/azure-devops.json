@@ -158,7 +158,7 @@
       "$comment": "El equivalente exacto del invariante de CI en GitHub, con los literales de Azure. Sin esto, «CI corre el mismo gate» es prosa.",
       "file": "azure-pipelines.yml",
       "required": [
-        "bash scripts/gate.sh"
+        "node scripts/gate.mjs"
       ],
       "forbidden": [
         "continueOnError: true"

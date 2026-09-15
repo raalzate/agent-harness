@@ -14,7 +14,7 @@
 | **CI** | en cada push y cada PR | `.github/workflows/ci.yml` → **el mismo** `npm run gate` | el PR no se mergea |
 
 El comando es uno solo porque vive en un solo lugar: `.claude/harness.config.json` →
-`gate.command`, y la lista de señales en `gate.signals`. `scripts/gate.sh` las ejecuta en orden y
+`gate.command`, y la lista de señales en `gate.signals`. `scripts/gate.mjs` las ejecuta en orden y
 no sabe de stacks.
 
 ## El pipeline, etapa por etapa
@@ -88,7 +88,7 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 20 }
       - name: gate
-        run: bash scripts/gate.sh
+        run: node scripts/gate.mjs
 ```
 
 Después: **Settings → Branches → Branch protection rule** sobre `main`, con el check `gate` marcado
@@ -106,7 +106,7 @@ gate:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
   script:
-    - bash scripts/gate.sh
+    - node scripts/gate.mjs
 ```
 
 Después: **Settings → Repository → Protected branches** sobre la rama default, y en **Merge
@@ -123,7 +123,7 @@ steps:
   # acá el setup del stack del proyecto
   - task: NodeTool@0
     inputs: { versionSpec: '20.x' }
-  - script: bash scripts/gate.sh
+  - script: node scripts/gate.mjs
     displayName: gate
 ```
 
@@ -145,10 +145,10 @@ image: node:20
 pipelines:
   pull-requests:
     '**':
-      - step: { name: gate, script: [bash scripts/gate.sh] }
+      - step: { name: gate, script: [node scripts/gate.mjs] }
   branches:
     main:
-      - step: { name: gate, script: [bash scripts/gate.sh] }
+      - step: { name: gate, script: [node scripts/gate.mjs] }
 ```
 
 Después: **Repository settings → Branch restrictions** sobre `main` y el *merge check* que exige el
@@ -160,7 +160,7 @@ build en verde.
 pipeline {
   agent any
   stages {
-    stage('gate') { steps { sh 'bash scripts/gate.sh' } }
+    stage('gate') { steps { sh 'node scripts/gate.mjs' } }
   }
 }
 ```
@@ -168,6 +168,29 @@ pipeline {
 La tentación en Jenkins es partir el gate en una etapa por señal "para ver dónde falló". **No se
 hace:** el gate ya imprime qué señal falló, y partirlo crea una segunda definición de entregable
 —la del `Jenkinsfile`— que envejece aparte del config. Nada de `catchError` ni de `|| true`.
+
+### El agente del pipeline: las tres plataformas
+
+El equipo no corre todo en el mismo sistema, y un freno que no existe en Windows no se nota:
+no falla, desaparece. Donde la forja tenga agentes de los tres sistemas, el gate corre en los
+tres con el mismo comando:
+
+```yaml
+strategy:
+  fail-fast: false            # una plataforma rota no esconde a las otras dos
+  matrix:
+    os: [ubuntu-latest, windows-latest, macos-latest]
+runs-on: ${{ matrix.os }}
+```
+
+En GitLab es un `parallel: matrix:` con runners etiquetados; en Azure, `strategy: matrix:` con
+`vmImage`. Si no hay agentes de Windows, se declara como deuda en el estado del repo — la
+suposición se descubre el día que entra alguien con Windows. El detalle de qué se rompía y con
+qué mecanismo se cerró está en [multiplataforma.md](multiplataforma.md).
+
+**Ojo con el nombre del check:** al pasar a matriz, el check deja de llamarse `gate` y pasa a ser
+`gate (ubuntu-latest)` y compañía. La política de rama que exigía `gate` deja de encontrarlo —
+hay que actualizarla, y mientras tanto la rama queda **sin protección efectiva**.
 
 ### Lo que NO cambia entre forjas
 
@@ -177,7 +200,10 @@ hace:** el gate ya imprime qué señal falló, y partirlo crea una segunda defin
   (`continue-on-error`, `allow_failure`, `continueOnError`, `catchError`). Es una entrada de
   `invariants` por archivo de pipeline, y la escribe quien porta el arnés.
 - Los hooks de git: `pre-commit`, `commit-msg`, `pre-push` funcionan igual en las cinco (son de
-  git, no de la forja).
+  git, no de la forja) y en los tres sistemas operativos: en Windows los ejecuta el bash que trae
+  Git for Windows.
+- El intérprete: el gate es `node`, no un script de shell. Una señal que arranque en `bash` deja
+  el entregable fuera de alcance en Windows, y el self-test la rechaza.
 - El índice del código: **no corre en CI**. Es infraestructura de lectura del agente, local y
   derivada; su señal se reporta OMITIDA en el pipeline y eso es lo correcto. Ver
   [codegraph.md](codegraph.md).

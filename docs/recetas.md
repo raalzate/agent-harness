@@ -10,7 +10,7 @@ Situaciones concretas, con el comando al lado. Todo lo de acá asume el arnés y
 1. Contestá: **¿qué clase de error atrapa que ninguna otra atrapa?** Si no hay respuesta, la señal
    no entra — vas a pagar su tiempo en cada corrida sin recibir información nueva.
 2. Agregala a `gate.signals` con su `why` (obligatorio) y `fastSkip` si es lenta.
-3. `bash scripts/gate.sh` — ¿corre? `node scripts/harness-selftest.mjs` — ¿la señal existe y es
+3. `node scripts/gate.mjs` — ¿corre? `node scripts/harness-selftest.mjs` — ¿la señal existe y es
    ejecutable?
 4. Rompé a propósito lo que la señal cuida y confirmá que se pone roja.
 
@@ -38,7 +38,7 @@ Después, siempre las tres:
 ```bash
 node scripts/harness-selftest.mjs   # ¿muerde?
 node scripts/repo-lint.mjs          # ¿no muerde de más?
-bash scripts/gate.sh                # ¿el repo sigue entregable?
+node scripts/gate.mjs                # ¿el repo sigue entregable?
 ```
 
 ---

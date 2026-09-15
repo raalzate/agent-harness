@@ -24,6 +24,10 @@ se mide**, y lo que lo mide es el grafo (ver [arquitectura.md](arquitectura.md))
 
 ## Instalación (una vez por máquina, una vez por repo)
 
+En Windows, el paso 1 es `irm https://raw.githubusercontent.com/colbymchenry/codegraph/main/install.ps1 | iex`
+desde PowerShell; los pasos 2 y 3 son idénticos. El resto de esta página vale igual en los tres
+sistemas.
+
 ```bash
 # 1. la CLI (no necesita Node)
 curl -fsSL https://raw.githubusercontent.com/colbymchenry/codegraph/main/install.sh | sh

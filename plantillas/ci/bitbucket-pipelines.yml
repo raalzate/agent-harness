@@ -11,10 +11,10 @@ pipelines:
           name: gate
           script:
             # El stack del proyecto va acá arriba, antes del gate.
-            - bash scripts/gate.sh
+            - node scripts/gate.mjs
   branches:
     main:
       - step:
           name: gate
           script:
-            - bash scripts/gate.sh
+            - node scripts/gate.mjs

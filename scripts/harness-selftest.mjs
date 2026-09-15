@@ -29,7 +29,7 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 // El mismo helper que usan el hook y el lint: comparar contra la lista DECLARADA dejaba pasar
 // justo el caso del incidente (el gate declara una extensión que el default agnóstico no tiene).
-import { codeExtensions, depsMatcher, importSyntax } from "../.claude/hooks/harness.mjs";
+import { codeExtensions, depsMatcher, importSyntax, segmentosDeRuta, relativaDesdeRaiz, esUnidadPelada } from "../.claude/hooks/harness.mjs";
 
 const REPO_ROOT = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
 const abs = (p) => path.join(REPO_ROOT, p);
@@ -45,6 +45,13 @@ const bad = (name, detail) => {
 };
 const skip = (name, detail) => console.log(`  – ${name} (omitido: ${detail})`);
 const section = (title) => console.log(`\n${title}`);
+
+/**
+ * ¿Hay bash en esta máquina? Los hooks de git SON scripts de shell y está bien que lo sean:
+ * git los ejecuta con el bash que trae Git for Windows. Pero el self-test tiene que poder
+ * correr igual donde ese bash no está — reportando OMITIDO, nunca "pasó".
+ */
+const HAY_BASH = spawnSync("bash", ["-c", "exit 0"], { stdio: "ignore" }).status === 0;
 
 const hookFiles = new Set();
 
@@ -458,7 +465,9 @@ if (config.askFirst?.marker && hookFiles.has("ask-first.mjs") && hookFiles.has("
 
 // 3e-ter. El trabajo entra a las ramas protegidas por PR. Se prueba con la entrada que git
 //     le pasa de verdad al hook: «<ref local> <sha> <ref remoto> <sha>».
-if ((config.branches?.protected ?? []).length && fs.existsSync(abs(".githooks/pre-push"))) {
+if ((config.branches?.protected ?? []).length && fs.existsSync(abs(".githooks/pre-push")) && !HAY_BASH) {
+  skip("pre-push frena el empujón directo", "no hay bash en esta máquina (en Windows lo trae Git for Windows)");
+} else if ((config.branches?.protected ?? []).length && fs.existsSync(abs(".githooks/pre-push"))) {
   const empujar = (rama) =>
     spawnSync("bash", [abs(".githooks/pre-push")], {
       cwd: REPO_ROOT,
@@ -653,6 +662,55 @@ const huerfanasDe = (cfg) => {
   else bad("el lint barre lo que ensucia el gate", `\`${huerfanas.join(", ")}\` ensucian el gate y el barrido del lint no las lee: PATRON/PUREZA/ONLY ciegas ahí`);
 }
 
+// 3e-quater. Las rutas de Windows se parten bien, desde cualquier máquina. En Windows conviven
+//     los dos separadores y el agente los manda mezclados; si la ruta queda como un solo
+//     segmento, ninguna regla por ruta caza nada y el freno no falla: no existe. El caso
+//     ejercita la plataforma como parámetro, así que corre igual en macOS y en Linux.
+{
+  const casos = [
+    ["C:\\repo\\.claude\\harness.config.json", "win32", [".claude", "harness.config.json"]],
+    ["C:/repo/.claude/harness.config.json", "win32", [".claude", "harness.config.json"]],
+    ["C:\\repo/.claude\\harness.config.json", "win32", [".claude", "harness.config.json"]],
+  ];
+  const malos = casos.filter(([ruta, plataforma, esperado]) => {
+    const partes = segmentosDeRuta(ruta, plataforma);
+    return esperado.some((seg) => !partes.includes(seg));
+  });
+  if (!malos.length) ok("las rutas de Windows se parten por los DOS separadores (`\\` y `/`)");
+  else bad("las rutas de Windows se parten bien", malos.map(([r]) => r).join(" · "));
+
+  // Y lo que está FUERA del repo tiene que verse como fuera. En Windows, entre unidades
+  // distintas `path.relative` devuelve la ruta ABSOLUTA —no empieza con `..`— y con eso todo
+  // lo de afuera pasaba por dentro: `action-guard` bloqueaba escribir un borrador en el
+  // temporal. Lo destapó la matriz de CI, no una lectura del código.
+  const afuera = [
+    ["D:\\a\\repo", "C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\borrador.md", "win32"],
+    ["D:\\a\\repo", "D:\\otro\\borrador.md", "win32"],
+    ["/repo", "/tmp/borrador.md", "posix"],
+  ];
+  const adentro = [
+    ["D:\\a\\repo", "D:\\a\\repo\\src\\x.ts", "win32"],
+    ["/repo", "/repo/src/x.ts", "posix"],
+  ];
+  // `C:` pelado no es la raíz de la unidad: es el DIRECTORIO ACTUAL de esa unidad. Al subir
+  // prefijos resolvía al cwd —el propio repo— y con eso cualquier ruta de esa unidad se veía
+  // como interna. La raíz de verdad lleva barra.
+  const unidades = [["C:", true], ["d:", true], ["C:\\", false], ["/", false], ["C:\\repo", false]];
+  const malasUnidades = unidades.filter(([p, esperado]) => esUnidadPelada(p) !== esperado);
+  if (!malasUnidades.length) ok("`C:` pelado no se confunde con la raíz de la unidad");
+  else bad("`C:` pelado no se confunde con la raíz", malasUnidades.map(([p]) => p).join(" · "));
+
+  const malosAfuera = afuera.filter(([root, ruta, so]) => !relativaDesdeRaiz(ruta, root, so).startsWith(".."));
+  const malosAdentro = adentro.filter(([root, ruta, so]) => relativaDesdeRaiz(ruta, root, so).startsWith(".."));
+  if (!malosAfuera.length && !malosAdentro.length)
+    ok("lo de afuera del repo se ve como afuera, también entre unidades de Windows");
+  else
+    bad(
+      "lo de afuera del repo se ve como afuera",
+      [...malosAfuera.map(([, r]) => `${r} se vio DENTRO`), ...malosAdentro.map(([, r]) => `${r} se vio FUERA`)].join(" · "),
+    );
+}
+
 // 3f. El trabajo queda registrado: `.githooks/commit-msg` en un repo git DE VERDAD.
 //     El hook lee `git diff --cached`, así que probarlo con payloads falsos no probaría
 //     nada. Los casos se derivan del config: la ruta de código sale de `commitMsg.codePattern`
@@ -664,6 +722,8 @@ const huerfanasDe = (cfg) => {
 
   if (!fs.existsSync(hook) || !cm?.codePattern || !tr?.issuePattern) {
     skip("commit-msg exige registro", "el repo no configura `commitMsg` + `tracker`");
+  } else if (!HAY_BASH) {
+    skip("commit-msg exige registro", "no hay bash en esta máquina (en Windows lo trae Git for Windows)");
   } else {
     const rutaCodigo = sampleFromPattern(cm.codePattern);
     const refIssue = sampleFromPattern(tr.issuePattern);
@@ -1147,11 +1207,42 @@ for (const s of senales) {
   if (!conConfig.length) ok("ninguna señal del gate mide un config alternativo (`--config`)");
   else bad("ninguna señal del gate usa `--config`", `«${conConfig.map((x) => x.name).join(", ")}»: el gate mediría otro config que el del repo`);
 }
+// El gate corre en cualquier plataforma o no es el entregable de todo el equipo. Tres cosas:
+// que la implementación en Node exista y parsee, que el envoltorio de shell no tenga una
+// segunda implementación adentro, y que el bit de ejecución sólo se exija donde existe
+// (en Windows, NTFS no lo tiene: exigirlo daba un rojo que nadie podía arreglar).
 {
+  const gateMjs = abs("scripts/gate.mjs");
+  if (!fs.existsSync(gateMjs)) bad("scripts/gate.mjs", "no existe: el gate no corre fuera de un shell POSIX");
+  else if (spawnSync("node", ["--check", gateMjs], { encoding: "utf8" }).status !== 0)
+    bad("scripts/gate.mjs", "no parsea: `node --check` falla");
+  else ok("scripts/gate.mjs existe y parsea (el gate no depende de bash)");
+
   const gateSh = abs("scripts/gate.sh");
-  if (!fs.existsSync(gateSh)) bad("scripts/gate.sh", "no existe: no hay gate");
-  else if (!(fs.statSync(gateSh).mode & 0o111)) bad("scripts/gate.sh", "no es ejecutable (`chmod +x scripts/gate.sh`)");
-  else ok("scripts/gate.sh es ejecutable");
+  if (!fs.existsSync(gateSh)) skip("scripts/gate.sh", "no hay envoltorio de shell (opcional)");
+  else {
+    const cuerpo = fs.readFileSync(gateSh, "utf8");
+    if (!/gate\.mjs/.test(cuerpo))
+      bad("scripts/gate.sh delega en gate.mjs", "no nombra `gate.mjs`: dos implementaciones del gate son dos definiciones de entregable");
+    else ok("scripts/gate.sh delega en `gate.mjs` (una sola implementación)");
+
+    if (process.platform === "win32") skip("bit de ejecución de scripts/gate.sh", "Windows no tiene bit de ejecución");
+    else if (!(fs.statSync(gateSh).mode & 0o111)) bad("scripts/gate.sh", "no es ejecutable (`chmod +x scripts/gate.sh`)");
+    else ok("scripts/gate.sh es ejecutable");
+  }
+}
+// Ninguna señal del gate puede necesitar un shell para arrancar. `["bash", "algo.sh"]` como
+// señal deja el entregable fuera de alcance en Windows, que es donde menos se prueba y donde
+// más caro sale descubrirlo.
+{
+  const interpretes = new Set(["bash", "sh", "zsh", "cmd", "cmd.exe", "powershell", "pwsh"]);
+  const conShell = senales.filter((s) => interpretes.has(String((s.command ?? [])[0] ?? "").toLowerCase()));
+  if (!conShell.length) ok("ninguna señal del gate necesita un shell para arrancar (corre en Windows)");
+  else
+    bad(
+      "ninguna señal del gate necesita un shell",
+      `«${conShell.map((x) => x.name).join(", ")}»: invocan un intérprete que en Windows no está garantizado`,
+    );
 }
 for (const dir of [".claude/agents", ".claude/commands"]) {
   if (!fs.existsSync(abs(dir))) {

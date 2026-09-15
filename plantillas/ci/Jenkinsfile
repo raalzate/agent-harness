@@ -10,7 +10,7 @@ pipeline {
     stage('gate') {
       steps {
         // El setup del stack del proyecto va acá, antes del gate.
-        sh 'bash scripts/gate.sh'
+        sh 'node scripts/gate.mjs'
       }
     }
   }

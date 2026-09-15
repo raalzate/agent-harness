@@ -9,14 +9,21 @@ on:
     branches: [main]
 
 jobs:
+  # El gate en las TRES plataformas donde vive un equipo. No es lujo: el arnés se predica
+  # portable, y "portable" sin una corrida en Windows es una suposición. La matriz es el
+  # mecanismo — el único comando que puede demostrar que el gate corre allá es el gate.
   gate:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      # Sin `npm ci`: el arnés no tiene dependencias a propósito (node + bash).
+      # Sin `npm ci`: el arnés no tiene dependencias a propósito (sólo node).
       - name: gate
         run: npm run gate
 

@@ -194,7 +194,9 @@ const COPIAR = [
   ".claude/commands/arquitectura.md",
   ".claude/commands/indice.md",
   ".claude/skills/nuevo-freno/SKILL.md",
+  "scripts/gate.mjs",
   "scripts/gate.sh",
+  "scripts/hooks-install.mjs",
   "scripts/repo-lint.mjs",
   "scripts/harness-selftest.mjs",
   "scripts/docs-linkcheck.mjs",
@@ -213,6 +215,7 @@ const COPIAR = [
   "docs/arquitectura.md",
   "docs/agilidad.md",
   "docs/multi-proyecto.md",
+  "docs/multiplataforma.md",
   ".githooks/pre-commit",
   ".githooks/commit-msg",
   ".githooks/pre-push",
@@ -233,7 +236,9 @@ const PLANTILLAS = [
 ];
 
 const EJECUTABLES = new Set([
+  "scripts/gate.mjs",
   "scripts/gate.sh",
+  "scripts/hooks-install.mjs",
   ".githooks/pre-commit",
   ".githooks/commit-msg",
   ".githooks/pre-push",
@@ -280,7 +285,10 @@ for (const a of acciones) {
   fs.mkdirSync(path.dirname(dst), { recursive: true });
   if (a.contenido) fs.writeFileSync(dst, a.contenido);
   else fs.copyFileSync(src, dst);
-  if (EJECUTABLES.has(a.hacia)) fs.chmodSync(dst, 0o755);
+  // El bit de ejecución sólo existe donde existe. En Windows, `chmodSync` no falla pero
+  // tampoco significa nada, y los hooks de git corren igual porque los lanza el bash de Git
+  // for Windows: la ruta de entrada es `node`, no el bit.
+  if (EJECUTABLES.has(a.hacia) && process.platform !== "win32") fs.chmodSync(dst, 0o755);
 }
 
 console.log("");
@@ -319,8 +327,8 @@ Falta lo que ninguna herramienta puede adivinar — y es donde está el valor:
      exigir la referencia al ítem de trabajo y el registro se apaga sin ponerse rojo.
 
   3. Scripts del manifiesto (package.json, Makefile, justfile…):
-       gate       → bash scripts/gate.sh
-       gate:fast  → bash scripts/gate.sh fast
+       gate       → node scripts/gate.mjs
+       gate:fast  → node scripts/gate.mjs fast
 
   4. git config core.hooksPath .githooks      (pre-commit, commit-msg y pre-push reales)
      Y activá la protección de rama en tu forja: el hook local avisa antes de la red,
@@ -336,5 +344,5 @@ Falta lo que ninguna herramienta puede adivinar — y es donde está el valor:
 
   6. CI: que corra EL MISMO gate. Si CI verifica algo distinto, una de las dos señales miente.
 
-Después: node scripts/harness-selftest.mjs && bash scripts/gate.sh
+Después: node scripts/harness-selftest.mjs && node scripts/gate.mjs
 `);

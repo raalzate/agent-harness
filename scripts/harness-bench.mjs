@@ -375,7 +375,7 @@ function probar(stack, fx) {
     delete cfg.patterns;
     cfg.tracker.kind = "github";
     cfg.commitMsg.codePattern = `^(${fx.fuente.split("/")[0]}/|scripts/)`;
-    cfg.status.reminder = "Recordá: nada se entrega sin `bash scripts/gate.sh` verde.";
+    cfg.status.reminder = "Recordá: nada se entrega sin `node scripts/gate.mjs` verde.";
     fs.writeFileSync(cfgPath, `${JSON.stringify(cfg, null, 2)}\n`);
 
     const lint = (args, opts) => correr("node", [path.join(repo, "scripts/repo-lint.mjs"), ...args], { cwd: repo, ...opts });
@@ -479,8 +479,12 @@ function probar(stack, fx) {
  */
 function archivosDelDocumento(md) {
   const archivos = {};
+  // CRLF primero: en Windows el checkout puede traer el documento con `\r\n` y el bloque no
+  // casaba — el banco reportaba «el documento ya no crea …» sobre un documento intacto. Un
+  // falso rojo que sólo aparece en una plataforma es la peor variante: enseña a ignorar la señal.
+  const texto = md.replace(/\r\n/g, "\n");
   const bloque = /cat > (\S+) <<'EOF'\n([\s\S]*?)\nEOF/g;
-  for (const [, ruta, contenido] of md.matchAll(bloque)) archivos[ruta] = `${contenido}\n`;
+  for (const [, ruta, contenido] of texto.matchAll(bloque)) archivos[ruta] = `${contenido}\n`;
   return archivos;
 }
 
@@ -520,8 +524,8 @@ function probarQuickStart() {
           private: true,
           type: "module",
           scripts: {
-            gate: "bash scripts/gate.sh",
-            "gate:fast": "bash scripts/gate.sh fast",
+            gate: "node scripts/gate.mjs",
+            "gate:fast": "node scripts/gate.mjs fast",
             selftest: "node scripts/harness-selftest.mjs",
             lint: "node scripts/repo-lint.mjs",
             test: "node --test",
