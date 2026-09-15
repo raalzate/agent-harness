@@ -25,6 +25,7 @@ borra `.git/gate-dirty`, que es lo que mira el hook `Stop`.
 | **link-check de docs**<br>`node scripts/docs-linkcheck.mjs` | que ninguna referencia a un doc o a una ruta del repo apunte a la nada | mover un archivo rompe punteros que ninguna otra señal mira |
 | **artefactos en su lugar**<br>`node scripts/artifacts-check.mjs` | que los artefactos de trabajo estén donde el equipo declaró (`tracker.artifactsIn`), sin tocar la red | tener spec y plan a medias en dos lugares no lo mira ninguna otra señal, y se descubre cuando alguien busca el plan |
 | **lint de convenciones**<br>`node scripts/repo-lint.mjs` | las convenciones del repo: pureza de los hooks, contrato de exit codes, literales de evento, TODOs sin issue, que todo gotcha declare su `Mecanismo:` y que ningún perfil de stack lleve reglas ajenas (`PERFIL`) | son reglas de dominio: ninguna config estándar las conoce |
+| **índice del código (codegraph)**<br>`codegraph status` | que el repo tenga un índice de símbolos, llamadas y radio de impacto, y que esté sincronizado con el código | ninguna otra señal mira **cómo lee** el agente: sin índice abre archivos de más y no ve las relaciones que el texto no muestra (despacho dinámico, interfaz → implementación). Es `skipIfMissing: .codegraph`: mientras nadie corra `codegraph init` sale **OMITIDA**, y omitido no es verde — esa línea impresa en cada gate es el recordatorio. Ver [codegraph.md](codegraph.md) |
 | **banco de perfiles (stacks reales)**<br>`node scripts/harness-bench.mjs` | instala el arnés en un repo de juguete de cada stack (.NET, Maven, Gradle, Python, Go, Rust, Node, front) con archivos **reales** del lenguaje, y verifica el encaje: que el `matcher` de DEPS case el XML de un `.csproj`, que PUREZA cace un `using`, que `tests.filePattern` reconozca el layout, que los hooks muerdan y que el arnés instalado no apunte a la nada | el self-test verifica la **forma** de un perfil, no el **encaje**: cazó dos bugs en su primera corrida (el caso de PUREZA daba falso rojo fuera de JS, y el instalador dejaba punteros rotos). Es `fastSkip`: en modo fast se omite, y `--con-gate` (que además corre el gate de cada repo portado) queda para CI |
 
 **Test verde ≠ compila ≠ entregable.** Reportar "listo" sin gate verde es una violación, no un
@@ -41,7 +42,7 @@ Los hooks son **genéricos**: toda la especificidad del repo vive en
 | `SessionStart` | `session-start.mjs` | imprime rama, HEAD, cambios sin commitear y `STATUS.md`; avisa si el pre-commit no está instalado o si hay gate pendiente |
 | `UserPromptSubmit` | `ask-first.mjs` | si el pedido es informativo (pregunta, reporte sin imperativo), marca el turno: **no se actúa sobre una pregunta** |
 | `UserPromptSubmit` | `sdd-router.mjs` | clasifica el pedido (feature → ruta SDD, falla → test rojo primero, ambiguo → preguntar una cosa); se calla en lo trivial |
-| `UserPromptSubmit` | `graph-first.mjs` | si hay índice del repo construido, empuja a consultarlo antes de abrir archivos; callado si no existe |
+| `UserPromptSubmit` | `graph-first.mjs` | con el índice construido (`graph` → codegraph), empuja a consultarlo **antes** de abrir archivos cuando el pedido es «dónde / quién usa / qué rompe / acoplamiento»; callado si no existe |
 | `PreToolUse` Write\|Edit | `action-guard.mjs` | deniega editar dentro del repo mientras el turno esté marcado como informativo; lo limpia el próximo pedido del humano |
 | `PreToolUse` Write\|Edit | `protected-paths.mjs` | deniega editar lo que declara `protectedPaths` |
 | `PreToolUse` Write\|Edit | `reuse-guard.mjs` | bloquea boilerplate que ya tiene abstracción (`reuse`) |
@@ -103,6 +104,8 @@ Lo que no puede reducir a un ejemplo lo reporta como **omitido**, nunca como pas
 | `/lesson <incidente>` | ciclo RHO: minar la causa → codificar en el mecanismo más fuerte → validar con el gate |
 | `/harness-audit` | prueba de vida: ¿qué comando falla si se viola cada regla? |
 | `/harness-port <repo>` | instalar el arnés en otro repo y dejarlo verde allá |
+| `/arquitectura <símbolo>` | medir el radio de impacto con el índice antes de mover código, y dejar el ADR escrito ([arquitectura.md](arquitectura.md)) |
+| `/indice [init]` | verificar (o instalar) el índice del código: sin él, el agente lee caro ([codegraph.md](codegraph.md)) |
 
 ## Skills (`.claude/skills/`)
 

@@ -392,15 +392,18 @@ footer { border-top: 4px solid var(--ink); }
     <a href="#leyes" data-grupo="metodo" data-k="leyes principios constitucion once">Once leyes</a>
     <a href="#piezas" data-grupo="metodo" data-k="piezas hooks gate self-test lint">Las cinco piezas</a>
     <a href="#freno" data-grupo="metodo" data-k="freno regla json bloqueo config">Anatomía de un freno</a>
+    <a href="#indice" data-grupo="metodo" data-k="indice codegraph grafo leer codigo radio impacto">El índice del código</a>
     <a href="#registro" data-grupo="metodo" data-k="registro trazabilidad commit issue pr">Trazabilidad</a>
 
     <p class="grupo" data-grupo="portar">Portar</p>
     <a href="#portar" data-grupo="portar" data-k="portar instalador otro repo pasos">Portarlo a tu repo</a>
     <a href="#perfiles" data-grupo="portar" data-k="perfiles stack dotnet jvm python go rust front">Perfiles de stack</a>
     <a href="#stacks" data-grupo="portar" data-k="stacks senal gate ci comando">La señal de tu stack</a>
+    <a href="#forjas" data-grupo="portar" data-k="ci cd forja github gitlab azure devops bitbucket jenkins pipeline branch protection">El gate en tu forja</a>
+    <a href="#multi" data-grupo="portar" data-k="monorepo varios repos multi proyecto plataforma workspace">Varios proyectos</a>
 
     <p class="grupo" data-grupo="referencia">Referencia</p>
-    <a href="#documentacion" data-grupo="referencia" data-k="documentacion documentos indice 17">Los 17 documentos</a>
+    <a href="#documentacion" data-grupo="referencia" data-k="documentacion documentos indice 23">Los 23 documentos</a>
     <a href="#limites" data-grupo="referencia" data-k="limites no es sandbox linter criterio">Límites declarados</a>
 
     <p class="grupo" data-grupo="externo">En el repo</p>
@@ -409,8 +412,11 @@ footer { border-top: 4px solid var(--ink); }
     <a class="ext" href="https://github.com/raalzate/agent-harness/blob/main/docs/portar.md" data-grupo="externo" data-k="portar md receta">portar.md</a>
     <a class="ext" href="https://github.com/raalzate/agent-harness/blob/main/docs/config-reference.md" data-grupo="externo" data-k="config reference claves">config-reference.md</a>
     <a class="ext" href="https://github.com/raalzate/agent-harness/blob/main/docs/gotchas.md" data-grupo="externo" data-k="gotchas incidentes">gotchas.md</a>
+    <a class="ext" href="https://github.com/raalzate/agent-harness/blob/main/docs/codegraph.md" data-grupo="externo" data-k="codegraph indice grafo">codegraph.md</a>
+    <a class="ext" href="https://github.com/raalzate/agent-harness/blob/main/docs/cicd.md" data-grupo="externo" data-k="cicd pipeline forja">cicd.md</a>
+    <a class="ext" href="https://github.com/raalzate/agent-harness/blob/main/docs/multi-proyecto.md" data-grupo="externo" data-k="multi proyecto monorepo plataforma">multi-proyecto.md</a>
   </nav>
-  <p class="vacio">Sin resultados. La tabla de <a href="#documentacion">documentación</a> tiene los 17 documentos.</p>
+  <p class="vacio">Sin resultados. La tabla de <a href="#documentacion">documentación</a> tiene los 23 documentos.</p>
 </aside>
 
 <main class="content" id="contenido">
@@ -725,6 +731,70 @@ explícita. No lo reintentes igual.</code></pre>
   </div>
 </section>
 
+<section id="indice">
+  <div class="wrap sec-inner">
+    <p class="rail"><b>1</b>consulta en vez de veinte lecturas</p>
+    <div>
+      <div class="col stack">
+        <p class="eyebrow">El índice del código</p>
+        <h2 style="font-size:var(--step-2)">Leer el repo a mano es el error más caro, y no aparece en ningún log</h2>
+        <p>Un agente sin índice contesta «¿dónde está X?» recorriendo el árbol: <code>ls</code>,
+          <code>grep</code>, abrir, descartar, abrir más. No falla: <strong>gasta</strong>. Y de paso
+          se pierde lo que el texto no muestra — quién llama a quién, qué implementa qué interfaz,
+          qué se rompe si toco esto.</p>
+        <p>Por eso el índice dejó de ser una recomendación. La herramienta por default es
+          <a href="https://github.com/colbymchenry/codegraph">codegraph</a>: un grafo local en
+          SQLite, sin API keys, que se sincroniza solo al guardar. La regla es una sola:
+          <strong>primero el índice, después abrir archivos</strong> — y sólo el fragmento que el
+          índice señaló.</p>
+      </div>
+
+      <div class="pair">
+        <figure class="panel">
+          <figcaption>una vez por máquina, una vez por repo</figcaption>
+          <pre><code>curl -fsSL https://raw.githubusercontent.com/colbymchenry/codegraph/main/install.sh | sh
+codegraph install     # conecta los agentes
+codegraph init        # construye el índice
+
+codegraph explore "cómo llega el pago a la cola"</code></pre>
+        </figure>
+        <figure class="panel">
+          <figcaption>npm run gate — sin índice construido</figcaption>
+          <pre><code>──▶ índice del código (codegraph)
+    – OMITIDA: no existe `.codegraph`
+
+Señales omitidas (NO son verde):
+  índice del código (codegraph)</code></pre>
+        </figure>
+      </div>
+
+      <div class="col cta-box" style="border-left-color:var(--ocre)">
+        <p class="eyebrow" style="color:var(--ocre)">Por qué se omite en vez de fallar</p>
+        <p style="margin-top:.5rem">Un gate que se pone rojo porque falta una herramienta
+          <strong>local</strong> castiga a quien clona el repo por primera vez — y ese castigo se
+          paga borrando la señal. «Omitido no es verde», impreso en cada corrida, consigue lo mismo
+          sin darle a nadie un motivo para desactivarla.</p>
+      </div>
+
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>Mecanismo</th><th>Fuerza</th><th>Qué hace</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">señal del gate</td><td>alta</td><td>corre <code>codegraph status</code>; OMITIDA si no hay índice, y la omisión se imprime siempre</td></tr>
+            <tr><td class="mono">hook graph-first</td><td>media</td><td>ante «dónde / quién usa / qué rompe / acoplamiento», pone la regla delante del agente <em>antes</em> de que abra nada</td></tr>
+            <tr><td class="mono">protectedPaths</td><td>alta</td><td>el índice es derivado: se reconstruye, no se edita</td></tr>
+            <tr><td class="mono">subagente explorer</td><td>media</td><td>su paso 1 es el índice; <code>grep</code> queda para lo que el grafo no ve</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p style="margin-top:.9rem"><strong>Lo que ningún comando verifica:</strong> que el agente
+        haya consultado el índice <em>antes</em> de leer. Eso es juicio del <code>reviewer</code>, y
+        está declarado como tal — un cambio que abrió quince archivos para tocar dos es un
+        hallazgo.</p>
+    </div>
+  </div>
+</section>
+
 <section id="registro">
   <div class="wrap sec-inner">
     <p class="rail"><b>#123</b>o <code>sin-issue:</code>, pero algo</p>
@@ -763,7 +833,7 @@ en el historial:
       <div class="col stack" style="margin-top:1.75rem">
         <h3 style="font-size:var(--step-1)">Ningún script conoce tu forja</h3>
         <p>Lo único que cambia entre un equipo y otro es qué cuenta como referencia. El mecanismo es
-          el mismo, y las siete configs de ejemplo usan cinco gestores distintos a propósito.</p>
+          el mismo, y las configs de ejemplo usan seis gestores distintos a propósito — GitHub, GitLab, Azure Boards, Jira, Linear y Gitea.</p>
       </div>
       <div class="table-scroll">
         <table>
@@ -899,7 +969,7 @@ DRY-RUN: 38 archivo(s) a copiar, 0 conservado(s).</code></pre>
 
 <section id="stacks">
   <div class="wrap sec-inner">
-    <p class="rail"><b>8</b>configs completas, no plantillas vacías</p>
+    <p class="rail"><b>24</b>configs completas, no plantillas vacías</p>
     <div>
       <div class="col stack">
         <p class="eyebrow">Configs de ejemplo</p>
@@ -926,9 +996,113 @@ DRY-RUN: 38 archivo(s) a copiar, 0 conservado(s).</code></pre>
   </div>
 </section>
 
+<section id="forjas">
+  <div class="wrap sec-inner">
+    <p class="rail"><b>3</b>cosas, en cualquier forja</p>
+    <div>
+      <div class="col stack">
+        <p class="eyebrow">CI/CD</p>
+        <h2 style="font-size:var(--step-2)">El archivo de pipeline no protege nada por sí solo</h2>
+        <p>En las cinco forjas hacen falta <strong>tres</strong> cosas, y sólo una vive en el repo:
+          el pipeline <strong>corre</strong> el gate, la política de rama lo vuelve
+          <strong>obligatorio</strong>, y <code>tracker.issuePattern</code> hace que el trabajo
+          quede <strong>registrado</strong>. Falta una y el sistema tiene un agujero con esa
+          forma.</p>
+        <p>Lo que no cambia nunca es el comando: CI corre <em>el mismo</em>
+          <code>gate.command</code> que el humano. Y eso deja de ser prosa, porque un
+          <code>invariants</code> sobre el archivo de pipeline lo verifica — tiene que contener el
+          comando del gate, y no puede contener la marca de «tolera fallos» de esa forja.</p>
+      </div>
+
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>Forja</th><th class="mono">archivo</th><th>cómo se vuelve obligatorio</th><th class="mono">marca prohibida</th></tr></thead>
+          <tbody>
+            <tr><td>GitHub Actions</td><td class="mono">.github/workflows/ci.yml</td><td>branch protection → required status check</td><td class="mono">continue-on-error: true</td></tr>
+            <tr><td>GitLab CI</td><td class="mono">.gitlab-ci.yml</td><td>protected branch + «Pipelines must succeed»</td><td class="mono">allow_failure: true</td></tr>
+            <tr><td>Azure DevOps</td><td class="mono">azure-pipelines.yml</td><td>branch policy → build validation (Required)</td><td class="mono">continueOnError: true</td></tr>
+            <tr><td>Bitbucket</td><td class="mono">bitbucket-pipelines.yml</td><td>branch restriction + merge check</td><td class="mono">el paso que traga el rojo</td></tr>
+            <tr><td>Jenkins</td><td class="mono">Jenkinsfile</td><td>el plugin que reporta el estado a la forja</td><td class="mono">catchError</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="pair" style="margin-top:1.25rem">
+        <figure class="panel">
+          <figcaption>azure-pipelines.yml</figcaption>
+          <pre><code>steps:
+  - task: NodeTool@0
+    inputs: { versionSpec: '20.x' }
+  - script: bash scripts/gate.sh
+    displayName: gate</code></pre>
+        </figure>
+        <figure class="panel">
+          <figcaption>.claude/harness.config.json — invariants</figcaption>
+          <pre><code>{ <span class="k">"file"</span>: <span class="s">"azure-pipelines.yml"</span>,
+  <span class="k">"required"</span>: [<span class="s">"bash scripts/gate.sh"</span>],
+  <span class="k">"forbidden"</span>: [<span class="s">"continueOnError: true"</span>] }</code></pre>
+        </figure>
+      </div>
+
+      <div class="col cta-box" style="border-left-color:var(--ocre)">
+        <p class="eyebrow" style="color:var(--ocre)">Lo que el gate NO puede verificar</p>
+        <p style="margin-top:.5rem">La protección del lado del servidor: necesitaría red. El hook
+          <code>pre-push</code> falla antes de la red y con el motivo, pero es el complemento local
+          — la política de rama la prende una persona, una vez, en la forja. Está declarado así en
+          el estado del arnés, no asumido.</p>
+      </div>
+
+      <p style="margin-top:.9rem">Las plantillas de pipeline —GitLab, Azure, Bitbucket y Jenkins—
+        están listas para copiar en
+        <a href="https://github.com/raalzate/agent-harness/tree/main/plantillas/ci">plantillas/ci/</a>,
+        y el criterio completo en
+        <a href="https://github.com/raalzate/agent-harness/blob/main/docs/cicd.md">cicd.md</a>.</p>
+    </div>
+  </div>
+</section>
+
+<section id="multi">
+  <div class="wrap sec-inner">
+    <p class="rail"><b>1</b>gate por entregable, no por repo</p>
+    <div>
+      <div class="col stack">
+        <p class="eyebrow">Varios proyectos</p>
+        <h2 style="font-size:var(--step-2)">¿Un arnés para todo, o uno por proyecto?</h2>
+        <p>La pregunta se contesta con otra: <strong>¿qué significa «entregable» acá, una cosa o
+          varias?</strong> Si un cambio se mergea cuando <em>todo</em> está verde, hay un gate. Si
+          cada pieza se mergea y se despliega por su cuenta, hay un gate por pieza. El gate no es un
+          archivo: es la definición de terminado, y no puede haber dos.</p>
+      </div>
+
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>Forma</th><th>Gate</th><th>Lo que más rinde</th><th>El riesgo propio</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Monorepo</strong></td><td>uno, workspace completo</td><td>una <code>purity</code> por paquete: quién puede importar a quién</td><td>los <em>path filters</em> decidiendo qué se verifica: ahí el filtro pasó a ser la definición de entregable</td></tr>
+            <tr><td><strong>Varios repos</strong></td><td>uno por repo</td><td>el mismo workflow con el <em>mismo nombre de check</em> en todos</td><td>quedar desparejo, y descubrirlo en el peor momento</td></tr>
+            <tr><td><strong>Plataforma</strong></td><td>uno por repo</td><td>los perfiles de stack: hechos del lenguaje, no reglas</td><td>el config «corporativo» de cuarenta reglas</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="col cta-box" style="border-left-color:var(--ocre)">
+        <p class="eyebrow" style="color:var(--ocre)">El error clásico de plataforma</p>
+        <p style="margin-top:.5rem">Un equipo escribe un config corporativo con cuarenta reglas y lo
+          empuja a los ocho repos. A la semana, tres equipos comentaron los hooks. <strong>Lo que se
+          empuja son los principios y el mecanismo</strong>; las reglas las gana cada repo con sus
+          incidentes — una regla sin cicatriz detrás es ruido bien intencionado.</p>
+      </div>
+
+      <p style="margin-top:.9rem">Las tres formas, con cómo se ve cada una en el pipeline, cómo se
+        actualiza el arnés en N repos y qué pasa con el índice cuando hay varios proyectos:
+        <a href="https://github.com/raalzate/agent-harness/blob/main/docs/multi-proyecto.md">multi-proyecto.md</a>.</p>
+    </div>
+  </div>
+</section>
+
 <section id="documentacion">
   <div class="wrap sec-inner">
-    <p class="rail"><b>17</b>documentos, en cuatro capas</p>
+    <p class="rail"><b>23</b>documentos, en cuatro capas</p>
     <div>
       <div class="col stack">
         <p class="eyebrow">Documentación</p>
@@ -947,12 +1121,17 @@ DRY-RUN: 38 archivo(s) a copiar, 0 conservado(s).</code></pre>
             <tr><td><a href="https://github.com/raalzate/agent-harness/blob/main/docs/metodo.md">metodo.md</a></td><td>El ciclo de trabajo y las once leyes, cada una con su cicatriz, cómo se ve cuando falta y el comando que la hace cumplir.</td></tr>
             <tr><td><a href="https://github.com/raalzate/agent-harness/blob/main/docs/caso-de-estudio.md">caso-de-estudio.md</a></td><td>Un arnés real con números verificables, cuatro mecanismos contados desde el incidente que los creó, y los huecos que ese repo declara.</td></tr>
             <tr><td><a href="https://github.com/raalzate/agent-harness/blob/main/docs/buenas-practicas.md">buenas-practicas.md</a></td><td>La guía de fondo, agnóstica de stack: qué es un arnés, las cinco decisiones del bucle, los niveles de madurez L0–L4.</td></tr>
+            <tr><td><a href="https://github.com/raalzate/agent-harness/blob/main/docs/agilidad.md">agilidad.md</a></td><td>Los principios ágiles con mecanismo: diez principios, el comando que falla cuando se violan, y la lista explícita de lo que NO se hace cumplir.</td></tr>
+            <tr><td><a href="https://github.com/raalzate/agent-harness/blob/main/docs/arquitectura.md">arquitectura.md</a></td><td>Qué documentación de arquitectura es obligatoria, cuándo va un ADR, y la traducción de bajo acoplamiento / alta cohesión a reglas que fallan.</td></tr>
 
             <tr><td colspan="2" class="grupo">Cómo — la práctica</td></tr>
             <tr><td><a href="https://github.com/raalzate/agent-harness/blob/main/docs/quickstart.md">quickstart.md</a></td><td><strong>Empezá acá.</strong> De cero a gate verde en 10 minutos con un to-do de cuatro archivos: tres frenos mordiendo con salida real, y el gate rojo a propósito.</td></tr>
             <tr><td><a href="https://github.com/raalzate/agent-harness/blob/main/docs/portar.md">portar.md</a></td><td>La receta: instalarlo en un repo cualquiera en una tarde, con las preguntas a contestar y en qué orden.</td></tr>
             <tr><td><a href="https://github.com/raalzate/agent-harness/blob/main/docs/perfiles.md">perfiles.md</a></td><td>Perfiles de stack del instalador (.NET, JVM, Python, Go, Rust, front): qué hecho del lenguaje viaja, qué regla no viaja nunca y el freno que lo mantiene así.</td></tr>
             <tr><td><a href="https://github.com/raalzate/agent-harness/blob/main/docs/trazabilidad.md">trazabilidad.md</a></td><td>Que el trabajo quede registrado y cómo entra a la rama principal, en cualquier forja.</td></tr>
+            <tr><td><a href="https://github.com/raalzate/agent-harness/blob/main/docs/codegraph.md">codegraph.md</a></td><td><strong>El índice del código es obligatorio.</strong> codegraph: qué cuesta leer el repo a mano, cómo se instala, cómo se consulta y qué señal del gate lo exige.</td></tr>
+            <tr><td><a href="https://github.com/raalzate/agent-harness/blob/main/docs/cicd.md">cicd.md</a></td><td>El pipeline: el mismo gate en tres lugares (humano, agente, CI), las cuatro reglas del pipeline y qué hacer cuando el gate tarda.</td></tr>
+            <tr><td><a href="https://github.com/raalzate/agent-harness/blob/main/docs/multi-proyecto.md">multi-proyecto.md</a></td><td>Monorepo, varios repos o una plataforma entera: dónde va el gate, qué viaja entre repos, cómo se actualiza el arnés en N proyectos.</td></tr>
             <tr><td><a href="https://github.com/raalzate/agent-harness/blob/main/docs/config-reference.md">config-reference.md</a></td><td>Cada clave del config: qué hace, qué la lee, qué se rompe si la tocás.</td></tr>
             <tr><td><a href="https://github.com/raalzate/agent-harness/blob/main/docs/recetas.md">recetas.md</a></td><td>Situaciones concretas con el comando al lado: agregar una señal, medir si el arnés está vivo, el gate que tarda, «no usamos GitHub».</td></tr>
 
@@ -967,6 +1146,7 @@ DRY-RUN: 38 archivo(s) a copiar, 0 conservado(s).</code></pre>
             <tr><td><a href="https://github.com/raalzate/agent-harness/blob/main/docs/decisions/0002-sin-dependencias.md">0002</a></td><td>Sólo node y bash — y qué precisión se resigna a cambio.</td></tr>
             <tr><td><a href="https://github.com/raalzate/agent-harness/blob/main/docs/decisions/0003-selftest-generado.md">0003</a></td><td>El self-test deriva sus casos del config en vez de tener uno escrito por freno.</td></tr>
             <tr><td><a href="https://github.com/raalzate/agent-harness/blob/main/docs/decisions/0004-contrato-de-hooks.md">0004</a></td><td>El contrato de exit codes, y por qué un arnés roto <em>deja pasar</em>.</td></tr>
+            <tr><td><a href="https://github.com/raalzate/agent-harness/blob/main/docs/decisions/0005-indice-obligatorio.md">0005</a></td><td>El índice del código pasa de recomendación a requisito — y por qué su señal se omite en vez de fallar.</td></tr>
           </tbody>
         </table>
       </div>
@@ -1063,6 +1243,10 @@ DRY-RUN: 38 archivo(s) a copiar, 0 conservado(s).</code></pre>
         L("artifacts-check: OK — sin artefactos sueltos", "dim"),
         L("    ✓ artefactos en su lugar", "ok"),
         L(""),
+        L("──▶ índice del código (codegraph)"),
+        L("codegraph: 1.284 símbolos · índice sincronizado", "dim"),
+        L("    ✓ índice del código (codegraph)", "ok"),
+        L(""),
         L("──▶ banco de perfiles (stacks reales)"),
         L("BANCO VERDE — 105 comprobaciones sobre 9 repos de juguete", "dim"),
         L("    ✓ banco de perfiles (stacks reales)", "ok"),
@@ -1102,6 +1286,10 @@ DRY-RUN: 38 archivo(s) a copiar, 0 conservado(s).</code></pre>
         L("artifacts-check: OK — artefactos en el gestor", "dim"),
         L("    ✓ artefactos en su lugar", "ok"),
         L(""),
+        L("──▶ índice del código (codegraph)"),
+        L("codegraph: 1.284 símbolos · índice sincronizado", "dim"),
+        L("    ✓ índice del código (codegraph)", "ok"),
+        L(""),
         L("──▶ banco de perfiles (stacks reales)"),
         L("BANCO VERDE — 105 comprobaciones sobre 9 repos de juguete", "dim"),
         L("    ✓ banco de perfiles (stacks reales)", "ok"),
@@ -1133,11 +1321,14 @@ DRY-RUN: 38 archivo(s) a copiar, 0 conservado(s).</code></pre>
         L("artifacts-check: OK — artefactos en el gestor", "dim"),
         L("    ✓ artefactos en su lugar", "ok"),
         L(""),
+        L("──▶ índice del código (codegraph)"),
+        L("    – OMITIDA: no existe `.codegraph` (omitido ≠ pasó)", "sk"),
+        L(""),
         L("──▶ banco de perfiles (stacks reales)"),
         L("    – omitida en modo fast", "sk"),
         L(""),
         L("Señales omitidas (NO son verde):", "sk"),
-        L("  banco de perfiles (stacks reales)", "sk"),
+        L("  índice del código (codegraph) · banco de perfiles", "sk"),
         L(""),
         L("GATE FAST VERDE — señal de desarrollo.", "sk"),
         L("NO es entregable: faltan las señales lentas.", "sk"),

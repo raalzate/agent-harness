@@ -17,6 +17,9 @@ El orden que funciona: **el método** (qué se hace y por qué) → **el caso** 
 | [decisions/0002-sin-dependencias.md](decisions/0002-sin-dependencias.md) | Por qué sólo `node` y `bash`, y qué precisión se resigna a cambio (el lint es regex, no AST). |
 | [decisions/0003-selftest-generado.md](decisions/0003-selftest-generado.md) | Por qué el self-test deriva sus casos del config en vez de tener uno escrito por freno. |
 | [decisions/0004-contrato-de-hooks.md](decisions/0004-contrato-de-hooks.md) | El contrato de exit codes, y por qué un arnés roto **deja pasar** en vez de bloquear. |
+| [decisions/0005-indice-obligatorio.md](decisions/0005-indice-obligatorio.md) | Por qué el índice del código pasó de recomendación a requisito, y por qué su señal se omite en vez de fallar. |
+| [agilidad.md](agilidad.md) | **Qué principio ágil tiene mecanismo y cuál es prosa.** Diez principios con el comando que falla cuando se violan, y la lista explícita de lo que este arnés NO hace cumplir. |
+| [arquitectura.md](arquitectura.md) | **Diseño con comando.** Qué documentación de arquitectura es obligatoria (y cuándo va un ADR), y la traducción de bajo acoplamiento / alta cohesión a reglas del config que fallan. |
 
 ## 2. Cómo (la práctica)
 
@@ -27,6 +30,9 @@ El orden que funciona: **el método** (qué se hace y por qué) → **el caso** 
 | [config-reference.md](config-reference.md) | Cada clave de `.claude/harness.config.json`: qué hace, qué la lee, qué pasa si falta. |
 | [perfiles.md](perfiles.md) | **Portar a un repo que no es de Node.** Los perfiles de stack del instalador (.NET, JVM, Python, Go, Rust, front): qué hecho del lenguaje viaja en un perfil, qué regla no viaja nunca, y el freno que lo mantiene así. |
 | [trazabilidad.md](trazabilidad.md) | Que el trabajo quede registrado, en cualquier forja —GitHub, GitLab, Azure Boards, Jira, Gitea—: el hook que lo hace inevitable, cómo se configura el patrón de referencia, y dónde viven los artefactos de una feature. |
+| [codegraph.md](codegraph.md) | **El índice del código es obligatorio.** Qué cuesta leer el repo a mano, cómo se instala codegraph, cómo se consulta y qué mecanismo lo exige. |
+| [cicd.md](cicd.md) | **El pipeline.** El mismo gate en tres lugares (humano, agente, CI), las cuatro reglas del pipeline y qué hacer cuando el gate tarda. |
+| [multi-proyecto.md](multi-proyecto.md) | **Varios proyectos.** Monorepo, varios repos o una plataforma entera: dónde va el gate, qué viaja entre repos y qué no, cómo se actualiza el arnés en N proyectos sin quedar desparejo. |
 | [recetas.md](recetas.md) | Recetas por situación: cómo se ve el gate en cada stack, cómo se agrega una señal, cómo se mide si el arnés está vivo. |
 
 ## 3. Este repo (el ejemplo trabajando)
@@ -41,8 +47,9 @@ El orden que funciona: **el método** (qué se hace y por qué) → **el caso** 
 
 | Directorio | Contenido |
 |---|---|
-| [`../examples/`](../examples/README.md) | Veinte configs completas por stack y por situación: TypeScript, React, Android/Kotlin, iOS/Swift, .NET, Spring, Python, Go, Rust, Rails, Laravel, Elixir/Phoenix, C++/CMake, firmware en C, Unity, datos (Airflow+dbt), monorepo, Terraform, un repo heredado sin tests y el quick start. |
+| [`../examples/`](../examples/README.md) | Veinticuatro configs completas por stack, por forja y por situación: TypeScript, React, Android/Kotlin, iOS/Swift, .NET, Spring, Python, Go, Rust, Rails, Laravel, Elixir/Phoenix, C++/CMake, firmware en C, Unity, datos (Airflow+dbt), monorepo, Terraform, un repo heredado, el quick start — y cuatro por **integración**: Azure DevOps, GitLab+monorepo, GitHub en una plataforma de varios repos, y Bitbucket+Jenkins. |
 | [`../plantillas/`](../plantillas) | `CONSTITUTION.md`, `CLAUDE.md`, `STATUS.md`, `gotchas.md`, `ADR.md` y una config de arranque. |
+| [`../plantillas/ci/`](../plantillas/ci) | El pipeline que corre el mismo gate, listo para copiar: [GitLab](../plantillas/ci/gitlab-ci.yml), [Azure Pipelines](../plantillas/ci/azure-pipelines.yml), [Bitbucket](../plantillas/ci/bitbucket-pipelines.yml) y [Jenkins](../plantillas/ci/Jenkinsfile). El de GitHub Actions es [`../plantillas/ci.yml`](../plantillas/ci.yml) y lo instala el instalador. |
 
 ---
 

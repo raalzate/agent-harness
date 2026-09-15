@@ -268,3 +268,23 @@ Copiá esto a un issue del repo destino:
    destruye la confianza en el documento completo.
 3. **Instalar y no verificar.** Es el anti-patrón central: *instalado y muerto*. Archivos presentes
    cuyo eslabón activador nunca corre. El antídoto es una línea: `node scripts/harness-selftest.mjs`.
+
+---
+
+## El pipeline de tu forja
+
+El instalador deja el workflow de GitHub Actions (`plantillas/ci.yml` → `.github/workflows/ci.yml`).
+Si tu forja es otra, copiá la plantilla que corresponda y borrá la de GitHub:
+
+| Forja | Plantilla | Dónde va |
+|---|---|---|
+| GitLab | [`../plantillas/ci/gitlab-ci.yml`](../plantillas/ci/gitlab-ci.yml) | `.gitlab-ci.yml` |
+| Azure DevOps | [`../plantillas/ci/azure-pipelines.yml`](../plantillas/ci/azure-pipelines.yml) | `azure-pipelines.yml` |
+| Bitbucket | [`../plantillas/ci/bitbucket-pipelines.yml`](../plantillas/ci/bitbucket-pipelines.yml) | `bitbucket-pipelines.yml` |
+| Jenkins | [`../plantillas/ci/Jenkinsfile`](../plantillas/ci/Jenkinsfile) | `Jenkinsfile` |
+
+Las tres cosas que hay que hacer en **todas** las forjas —correr el gate, volverlo obligatorio con
+la política de rama, y declarar qué cuenta como referencia al ítem— están en
+[cicd.md](cicd.md). Si el repo es parte de un monorepo o de una plataforma de varios repos, antes
+de escribir `gate.signals` conviene leer [multi-proyecto.md](multi-proyecto.md): la pregunta
+"¿un gate o varios?" cambia todo lo demás.
