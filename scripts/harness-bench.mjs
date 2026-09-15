@@ -375,7 +375,7 @@ function probar(stack, fx) {
     delete cfg.patterns;
     cfg.tracker.kind = "github";
     cfg.commitMsg.codePattern = `^(${fx.fuente.split("/")[0]}/|scripts/)`;
-    cfg.status.reminder = "Recordá: nada se entrega sin `bash scripts/gate.sh` verde.";
+    cfg.status.reminder = "Recordá: nada se entrega sin `node scripts/gate.mjs` verde.";
     fs.writeFileSync(cfgPath, `${JSON.stringify(cfg, null, 2)}\n`);
 
     const lint = (args, opts) => correr("node", [path.join(repo, "scripts/repo-lint.mjs"), ...args], { cwd: repo, ...opts });
@@ -520,8 +520,8 @@ function probarQuickStart() {
           private: true,
           type: "module",
           scripts: {
-            gate: "bash scripts/gate.sh",
-            "gate:fast": "bash scripts/gate.sh fast",
+            gate: "node scripts/gate.mjs",
+            "gate:fast": "node scripts/gate.mjs fast",
             selftest: "node scripts/harness-selftest.mjs",
             lint: "node scripts/repo-lint.mjs",
             test: "node --test",

@@ -192,7 +192,7 @@
     {
       "file": ".gitlab-ci.yml",
       "required": [
-        "bash scripts/gate.sh"
+        "node scripts/gate.mjs"
       ],
       "forbidden": [
         "allow_failure: true"

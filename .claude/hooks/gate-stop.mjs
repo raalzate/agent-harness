@@ -3,7 +3,7 @@
  * Stop — no se cierra la tarea con código editado y el gate sin correr.
  *
  * "Test verde ≠ compila ≠ entregable": el marcador `.git/gate-dirty` lo pone
- * `post-edit-check.mjs` en cada edición de código y lo borra `scripts/gate.sh`
+ * `post-edit-check.mjs` en cada edición de código y lo borra `scripts/gate.mjs`
  * cuando TODAS las señales salen verdes.
  */
 import fs from "node:fs";
@@ -22,6 +22,6 @@ if (!fs.existsSync(marker)) allow();
 
 deny(
   `GATE PENDIENTE: hay código editado en esta sesión y el gate no quedó verde.\n` +
-    `Corré \`${config.gate?.command ?? "bash scripts/gate.sh"}\` (o el subagente \`gate-runner\`) y arreglá lo que salga rojo.\n` +
+    `Corré \`${config.gate?.command ?? "node scripts/gate.mjs"}\` (o el subagente \`gate-runner\`) y arreglá lo que salga rojo.\n` +
     `Si el trabajo no es entregable todavía, decilo explícitamente en el mensaje final: reportar "listo" sin gate verde es una violación, no un descuido.`,
 );

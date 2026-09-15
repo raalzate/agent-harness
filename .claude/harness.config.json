@@ -1,7 +1,7 @@
 {
   "$comment": "ÚNICO archivo específico del repo. Los hooks y los scripts de este arnés son genéricos: leen de aquí. Portar el arnés a otro proyecto = reescribir este archivo (ver docs/portar.md y examples/). Referencia de cada clave: docs/config-reference.md.",
   "gate": {
-    "$comment": "El gate es la única definición de «entregable». `signals` lo hace declarativo: scripts/gate.sh no sabe de stacks, ejecuta esta lista en orden. `fastSkip: true` = la señal se omite en modo fast (típicamente el build). `skipIfMissing` = ruta que, si no existe, reporta OMITIDO en vez de fallar (herramienta local no instalada, CI sin índice).",
+    "$comment": "El gate es la única definición de «entregable». `signals` lo hace declarativo: scripts/gate.mjs no sabe de stacks, ejecuta esta lista en orden. Está en Node y no en bash para que el entregable exista también en Windows (docs/multiplataforma.md). `fastSkip: true` = la señal se omite en modo fast (típicamente el build). `skipIfMissing` = ruta que, si no existe, reporta OMITIDO en vez de fallar (herramienta local no instalada, CI sin índice).",
     "command": "npm run gate",
     "fastCommand": "npm run gate:fast",
     "marker": ".git/gate-dirty",

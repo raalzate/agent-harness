@@ -6,13 +6,13 @@
   "type": "module",
   "license": "Apache-2.0",
   "scripts": {
-    "gate": "bash scripts/gate.sh",
-    "gate:fast": "bash scripts/gate.sh fast",
+    "gate": "node scripts/gate.mjs",
+    "gate:fast": "node scripts/gate.mjs fast",
     "lint": "node scripts/repo-lint.mjs",
     "lint:rules": "node scripts/repo-lint.mjs --rules",
     "selftest": "node scripts/harness-selftest.mjs",
     "linkcheck": "node scripts/docs-linkcheck.mjs",
-    "hooks:install": "git config core.hooksPath .githooks && echo 'hooks de git instalados (core.hooksPath=.githooks)'",
+    "hooks:install": "node scripts/hooks-install.mjs",
     "harness:install": "node scripts/harness-init.mjs"
   }
 }

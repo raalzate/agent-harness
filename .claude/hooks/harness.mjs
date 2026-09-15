@@ -128,8 +128,20 @@ export function allow(message) {
  *    resuelve el archivo entero, la ruta real apunta afuera y el freno se apaga hacia
  *    abajo — se puede escribir en dependencias sin que nada se ponga rojo.
  */
+/**
+ * Los segmentos de una ruta absoluta.
+ *
+ * En Windows conviven los dos separadores: el agente puede mandar `C:\repo\src\x.ts` o
+ * `C:/repo/src/x.ts`, y a veces mezclados. Partir sólo por `path.sep` dejaba la ruta entera
+ * como UN segmento, y con eso ninguna regla por ruta cazaba nada: el freno no fallaba,
+ * simplemente no existía en esa plataforma. Toma la plataforma como parámetro para que el
+ * caso de Windows se pueda probar desde cualquier máquina.
+ */
+export const segmentosDeRuta = (abs, plataforma = process.platform) =>
+  plataforma === "win32" ? abs.split(/[\\/]/) : abs.split(path.sep);
+
 function relativaAlRepo(abs) {
-  const partes = abs.split(path.sep);
+  const partes = segmentosDeRuta(abs);
   for (let i = partes.length; i > 0; i -= 1) {
     const prefijo = partes.slice(0, i).join(path.sep) || path.sep;
     let real;

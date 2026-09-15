@@ -40,4 +40,4 @@ jobs:
           node-version: 20
 
       - name: gate
-        run: bash scripts/gate.sh
+        run: node scripts/gate.mjs

@@ -17,7 +17,7 @@ gate:
     # - mvn -B -q dependency:go-offline
     #
     # ── El arnés: sin dependencias, no hace falta instalar nada ────────────
-    - bash scripts/gate.sh
+    - node scripts/gate.mjs
 
 # Señales lentas: MISMO contrato, otro momento. No se marcan `allow_failure`
 # (un job que falla y deja pasar es peor que no tenerlo: además tranquiliza).
@@ -27,4 +27,4 @@ gate-lento:
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
   script:
-    - bash scripts/gate.sh
+    - node scripts/gate.mjs

@@ -34,7 +34,7 @@ steps:
       versionSpec: '20.x'
     displayName: node
 
-  - script: bash scripts/gate.sh
+  - script: node scripts/gate.mjs
     displayName: gate
     # Sin `continueOnError: true`. Un paso que falla y deja pasar convierte al gate
     # en decoración verde.

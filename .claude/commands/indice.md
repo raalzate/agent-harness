@@ -13,7 +13,7 @@ en `docs/codegraph.md`; la clave del config que lo declara es `graph`.
 
 1. `codegraph status` — ¿existe el índice y está sincronizado? Un `### Pending sync:` nombra los
    archivos y su antigüedad: eso es el índice mintiendo, y es peor que no tenerlo.
-2. `node scripts/gate.sh` reporta la señal **índice del código (codegraph)**. Si sale **OMITIDA**,
+2. `npm run gate` reporta la señal **índice del código (codegraph)**. Si sale **OMITIDA**,
    el índice no está construido: omitido **no** es verde, y esa línea es el recordatorio.
 
 ## Instalar (`init`)

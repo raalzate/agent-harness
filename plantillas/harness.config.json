@@ -3,9 +3,9 @@
   "$arranque": "El self-test va a estar ROJO recién instalado: las claves con placeholders (`<ruta del registro>`, `<archivo>`, `src/lib`) apuntan a la nada a propósito. Ese rojo es el MAPA de lo que falta llenar — cada línea nombra su clave. Lo que no aplique a este repo se BORRA, no se deja con el placeholder: una regla que apunta a la nada es peor que ninguna.",
   "gate": {
     "$comment": "OBLIGATORIO Y VACÍO A PROPÓSITO. Nadie de afuera sabe cuáles son las señales reales de este repo: leé su manifiesto y su CI, y escribilas acá. Cada señal declara `why` (por qué NO la cubre otra señal): una señal sin motivo es una señal que nadie va a defender cuando moleste. `fastSkip: true` = se omite en modo fast (típicamente el build). `skipIfMissing` = ruta que, si no existe, hace que la señal se reporte OMITIDA en vez de fallar.",
-    "$command": "Lo que el agente y los mensajes de error le dicen al humano que corra. El default funciona en cualquier repo porque `scripts/gate.sh` viene copiado; si le pusiste un alias en el manifiesto (npm, make, just), escribilo acá.",
-    "command": "bash scripts/gate.sh",
-    "fastCommand": "bash scripts/gate.sh fast",
+    "$command": "Lo que el agente y los mensajes de error le dicen al humano que corra. El default funciona en cualquier repo Y EN CUALQUIER PLATAFORMA porque `scripts/gate.mjs` viene copiado y corre con el mismo node que ya necesitan los hooks; si le pusiste un alias en el manifiesto (npm, make, just), escribilo acá.",
+    "command": "node scripts/gate.mjs",
+    "fastCommand": "node scripts/gate.mjs fast",
     "marker": ".git/gate-dirty",
     "codeGlobs": [
       "src/"
@@ -13,7 +13,7 @@
     "$codeExtensions": "Qué extensión cuenta como CÓDIGO: con eso `post-edit-check` decide si marca el gate y corre el lint del archivo tocado. Si el instalador aplicó un perfil de stack, esta lista ya viene bien; si la dejás vacía, el hook usa un superconjunto agnóstico (todos los lenguajes que conoce).",
     "codeExtensions": [],
     "$installHooksCommand": "El comando que instala los hooks de git en ESTE repo. Un aviso que nombra un comando inexistente se ignora, y con él se ignora el resto del aviso.",
-    "installHooksCommand": "git config core.hooksPath .githooks",
+    "installHooksCommand": "node scripts/hooks-install.mjs",
     "signals": [
       {
         "name": "self-test del arnés",

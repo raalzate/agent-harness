@@ -2,7 +2,7 @@
   "$comment": "Repo heredado, sin tests y sin dueño claro. Es el ejemplo más importante de esta carpeta y el que más se parece a la realidad: acá el arnés arranca con CUATRO frenos, no con veinte. Cada regla que se agrega antes de tener una cicatriz enseña al equipo a ignorar los bloqueos, y en un repo así los bloqueos son lo único que impide que el agente reescriba medio sistema. El gate arranca en lo que HOY sale verde (que el proyecto compile) y crece con `/lesson`, un freno por incidente. La lista de `patterns` vacía es una decisión, no un olvido.",
   "gate": {
     "$comment": "Sin tests todavía: el gate arranca en «compila y el arnés está sano». Es un gate honesto y VERDE, que es la única clase de gate que un equipo respeta. La señal de tests entra el día que exista la primera suite.",
-    "command": "./gate.sh",
+    "command": "node scripts/gate.mjs",
     "marker": ".git/gate-dirty",
     "codeGlobs": [
       "src/"
