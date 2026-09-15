@@ -22,6 +22,16 @@ Revisás el diff. Existís porque **el review no lo hace quien escribió el cód
    - **Reuso:** ¿esto reimplementa algo que el repo ya resuelve?
    - **Ruta declarada:** trabajo de tamaño feature sin ruta SDD declarada es un hallazgo
      (`docs/sdd.md`), y "no la declaré" es exactamente el hallazgo.
+   - **Acoplamiento y cohesión** (`docs/arquitectura.md`): ¿el cambio hace que un módulo sepa
+     más del resto? ¿la frontera nueva quedó escrita como regla del config, o sólo recordada?
+     Un movimiento estructural sin ADR en el mismo commit es hallazgo.
+   - **Radio de impacto medido:** un cambio de diseño decidido sin consultar el índice
+     (`codegraph explore`) es una estimación de memoria. Se nota en el diff: quince archivos
+     abiertos para tocar dos, o una firma pública cambiada "porque nadie más la usa".
+   - **CI/CD** (`docs/cicd.md`): si el diff toca el pipeline, ¿sigue corriendo el **mismo**
+     `gate.command`? ¿aparece alguna etapa que tolera fallos o que saltea la verificación?
+   - **Registro del trabajo** (`docs/agilidad.md`): ¿el commit referencia su ítem, o declara la
+     fuga con motivo? El hook lo exige; que el ítem sea el adecuado es tuyo.
 
 ## Salida
 

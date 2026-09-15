@@ -31,13 +31,25 @@ const pega = (config.graph.questionPatterns ?? []).some((p) => {
 });
 if (!pega) allow();
 
+// El panorama es OPCIONAL y hay de dos formas: un archivo de reporte (`reportFile`) o un
+// comando que lo abre (`panoramaCommand`). Citar una clave ausente imprimía `undefined`, y
+// un aviso que nombra algo inexistente se ignora entero — con él, el resto del aviso.
+const panorama = config.graph.reportFile
+  ? `Panorama: \`${config.graph.reportFile}\`.`
+  : config.graph.panoramaCommand
+    ? `Panorama: \`${config.graph.panoramaCommand}\`.`
+    : "";
+
 allow(
   [
     "## Índice del repo (hook graph-first)",
     `- Hay grafo construido en \`${config.graph.graphFile}\`: **consultalo antes de abrir archivos**.`,
-    `- \`${config.graph.queryCommand}\` devuelve un subgrafo (símbolo, archivo, relación) en vez del árbol completo.`,
-    `- El índice de símbolos de Serena y el subagente \`explorer\` siguen valiendo; el grafo suma las relaciones entre docs y código.`,
-    "",
-    `Panorama y comunidades: \`${config.graph.reportFile}\`.`,
-  ].join("\n"),
+    `- \`${config.graph.queryCommand}\` devuelve un subgrafo (símbolo, archivo, relación, radio de impacto) en vez del árbol completo.`,
+    `- Abrir archivos es el ÚLTIMO recurso, y sólo el fragmento que el índice señaló: leer de más es la forma cara de contestar con la mitad del mapa.`,
+    `- El subagente \`explorer\` sigue valiendo para lo que el índice no cubre (strings, comentarios, config).`,
+    panorama ? "" : null,
+    panorama || null,
+  ]
+    .filter((l) => l !== null)
+    .join("\n"),
 );

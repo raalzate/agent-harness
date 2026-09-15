@@ -17,6 +17,15 @@ es **"instalado y muerto"**: archivos presentes cuyo eslabón activador nunca co
 6. `.claude/settings.json` vs `.claude/hooks/` — ¿hay hooks en disco que nadie declara?
 7. `CONSTITUTION.md` — ¿cada principio BLOCKING nombra un comando que falla? Los que no,
    están mal clasificados: son REVIEW.
+8. `codegraph status` — ¿hay índice del código y está sincronizado? Sin índice, la señal del gate
+   sale **OMITIDA** (y omitido no es verde): el agente está leyendo el repo a mano. Ver
+   `docs/codegraph.md`.
+9. **CI/CD** (`docs/cicd.md`) — ¿el job corre el **mismo** `gate.command`? ¿alguna etapa tolera
+   fallos? ¿el despliegue depende del gate verde o corre al lado?
+10. **Diseño** (`docs/arquitectura.md`) — ¿qué regla del config sostiene cada frontera de capas?
+    Una frontera sin regla (`purity`, `forbiddenDeps`, `singleSource`) es una frontera muerta.
+11. **Agilidad** (`docs/agilidad.md`) — de los principios de esa tabla, ¿cuáles tienen hoy
+    mecanismo vivo en ESTE repo y cuáles quedaron en prosa?
 
 ## Salida
 

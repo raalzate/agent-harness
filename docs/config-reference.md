@@ -394,12 +394,39 @@ ocurrió y no se toca: lo derivado es una ayuda de lectura, no parte del entrega
 
 ---
 
-## `graph` — índice consultable (opcional)
+## `graph` — el índice del código (OBLIGATORIO)
 
-Si tu repo tiene un índice de conocimiento (un grafo, un índice de símbolos), esta clave hace que
-el hook `graph-first` empuje a **consultar antes de leer** cuando el pedido es "¿dónde está X?".
-Claves: `graphFile`, `reportFile`, `queryCommand`, `questionPatterns`. Sin la clave, el hook se
-calla — que es lo correcto: un hook que habla sin tener nada que ofrecer sólo gasta contexto.
+```json
+"graph": {
+  "tool": "codegraph",
+  "graphFile": ".codegraph/codegraph.db",
+  "queryCommand": "codegraph explore \"<pregunta>\"",
+  "panoramaCommand": "codegraph ui",
+  "statusCommand": "codegraph status",
+  "questionPatterns": ["\\bd[oó]nde\\b", "\\bqui[eé]n (llama|usa|importa|depende)", "\\bacopl"]
+}
+```
+
+La regla que sostiene: **primero el índice, después abrir archivos** — y sólo el fragmento que el
+índice señaló. La herramienta por default es
+[codegraph](https://github.com/colbymchenry/codegraph) (grafo local en SQLite, sin API keys,
+auto-sincronizado al guardar). Instalación y flujo completo: [codegraph.md](codegraph.md).
+
+| Clave | Qué hace |
+|---|---|
+| `graphFile` | el artefacto que prueba que el índice existe. El hook `graph-first` se **calla** si no está: un hook que manda a correr un comando inexistente deja de leerse |
+| `queryCommand` | lo que el agente tiene que correr en vez de abrir archivos |
+| `panoramaCommand` / `reportFile` | opcional, y **uno de los dos**: el comando que abre la vista, o el archivo de reporte. Sin ninguno, el hook no lo menciona |
+| `statusCommand` | lo que dice si el índice quedó desincronizado (un índice que miente es peor que no tenerlo) |
+| `questionPatterns` | cuándo hablar: "dónde", "quién usa", "qué rompe", "acoplamiento". Fuera de eso, silencio |
+
+El hook **no conoce ninguna herramienta**: con otro índice (un LSP, `ctags`, un grafo propio) se
+cambian estas claves y nada más. Lo que no es negociable es la regla.
+
+Además: la señal del gate `índice del código (codegraph)` corre `statusCommand` con
+`skipIfMissing: ".codegraph"` — sin índice se reporta **OMITIDA**, y omitido no es verde. El porqué
+de omitir en vez de fallar está en
+[decisions/0005-indice-obligatorio.md](decisions/0005-indice-obligatorio.md).
 
 ---
 
@@ -470,7 +497,7 @@ cumplir. El detalle de qué viaja y qué no está en [perfiles.md](perfiles.md).
 | `askFirst` | `ask-first.mjs`, `action-guard.mjs`, self-test |
 | `branches` | `.githooks/pre-push`, self-test |
 | `postCommit` | `.githooks/post-commit` |
-| `graph` | `graph-first.mjs` |
+| `graph` | `graph-first.mjs`, la señal `índice del código` del gate, self-test (sus regex compilan) |
 
 Todo lo que aparece en esta tabla lo verifica `node scripts/harness-selftest.mjs`: una ruta que no
 existe o un regex que no compila es **gate rojo**, no un misterio de la semana que viene.

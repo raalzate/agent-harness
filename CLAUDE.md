@@ -53,6 +53,20 @@ plantillas/ examples/ docs/   lo que se copia y lo que se lee
 - **Los mensajes de bloqueo explican el porqué.** El texto de `reason`/`message` es la única cosa
   que el agente lee cuando lo frenás: es la diferencia entre que entienda y que reintente.
 
+## Leer el repo: el índice primero
+
+El índice del código **no es opcional** (`docs/codegraph.md`). Antes de abrir archivos:
+
+```bash
+codegraph status                     # ¿hay índice y está sincronizado?
+codegraph explore "<pregunta>"       # símbolos + rutas de llamada + radio de impacto
+```
+
+Abrir archivos es el último recurso, y sólo el fragmento que el índice señaló. Un cambio de
+diseño decidido sin medir el radio de impacto es una estimación de memoria, y así se rompe
+lo lejano. La señal del gate sale **OMITIDA** hasta que alguien corra `codegraph init` — omitido
+no es verde.
+
 ## Antes de dar algo por terminado
 
 ```bash
@@ -76,6 +90,11 @@ npm run lint:rules     # ¿qué reglas están activas y de dónde salen?
 | Contenido | Archivo |
 |---|---|
 | la teoría, agnóstica de stack | `docs/buenas-practicas.md` (**ruta protegida**: se enmienda en su propio commit) |
+| el índice del código (obligatorio) | `docs/codegraph.md` |
+| el pipeline y sus reglas (GitHub, GitLab, Azure, Bitbucket, Jenkins) | `docs/cicd.md` |
+| monorepo, varios repos, plataforma | `docs/multi-proyecto.md` |
+| qué principio ágil tiene mecanismo | `docs/agilidad.md` |
+| diseño: acoplamiento, cohesión, ADR | `docs/arquitectura.md` |
 | cómo se instala en otro repo | `docs/portar.md` |
 | portarlo a .NET, JVM, Python, Go, Rust, front | `docs/perfiles.md` |
 | qué hace cada clave del config | `docs/config-reference.md` |

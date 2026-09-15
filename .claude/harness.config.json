@@ -50,6 +50,15 @@
         "why": "un plan suelto en el repo cuando el equipo decidió que el trabajo vive en el gestor deja el registro partido en dos, y ninguna otra señal lo mira"
       },
       {
+        "name": "índice del código (codegraph)",
+        "command": [
+          "codegraph",
+          "status"
+        ],
+        "skipIfMissing": ".codegraph",
+        "why": "leer el código a mano es la fuente de error más cara del agente: abre archivos de más, se pierde relaciones (quién llama a quién) y contesta con la mitad del mapa. El índice es infraestructura de lectura, y un índice desincronizado miente peor que no tenerlo. OMITIDA mientras nadie corra `codegraph init`: omitido no es verde, y esa omisión es exactamente el recordatorio"
+      },
+      {
         "name": "banco de perfiles (stacks reales)",
         "command": [
           "node",
@@ -76,6 +85,10 @@
     {
       "pattern": "^node_modules/",
       "reason": "dependencias: se cambian por manifiesto + install."
+    },
+    {
+      "pattern": "^\\.codegraph/",
+      "reason": "el índice de codegraph es DERIVADO: se reconstruye con `codegraph init`/`sync`, no se edita. Un índice editado a mano miente, y miente sobre el mapa con el que el agente decide qué leer."
     },
     {
       "pattern": "^docs/buenas-practicas\\.md$",
@@ -205,6 +218,17 @@
         "process.exit(1)"
       ],
       "reason": "el contrato de hooks de Claude Code: exit 0 = seguir, exit 2 = bloquear (stderr es lo que lee el agente). Un exit(1) es un error del hook, no una decisión, y no bloquea nada."
+    },
+    {
+      "$comment": "P1 tenía un agujero: «CI corre el mismo gate» era prosa en `ci.yml` y en `docs/arnes.md`, y nada fallaba si alguien cambiaba el job por un `npm test` más rápido. Este invariante lo vuelve verificable con la clase de regla que ya existía.",
+      "file": ".github/workflows/ci.yml",
+      "required": [
+        "npm run gate"
+      ],
+      "forbidden": [
+        "continue-on-error: true"
+      ],
+      "reason": "CI verifica EL MISMO entregable que el humano: si el pipeline corre algo más flojo, una de las dos señales miente y la que gana siempre es la que deja mergear. Un `continue-on-error: true` convierte el gate en decoración verde."
     },
     {
       "file": ".githooks/pre-commit",
@@ -437,6 +461,36 @@
         "message": "Este pedido cambia código: **preguntá al humano si se registra el ítem de trabajo ANTES de tocar producción**. No lo decidas solo y no lo dejes para el final: el hook `commit-msg` exige la referencia en el mensaje o una línea `sin-issue: <motivo>`, así que un cambio sin registrar no llega al historial."
       },
       {
+        "$comment": "Diseño: acoplamiento, cohesión, capas, dependencias entre módulos. La decisión se escribe ANTES de moverla, porque un refactor sin ADR se revierte solo en tres meses cuando nadie recuerda el porqué. Y el radio de impacto no se estima de memoria: lo contesta el índice.",
+        "route": "arquitectura",
+        "patterns": [
+          "\\barquitectura\\b",
+          "\\bacopl",
+          "\\bcohesi",
+          "\\bcapa(s)? (de|del)\\b",
+          "\\bdependencia circular\\b",
+          "\\bextraer (un |el )?(m[oó]dulo|servicio|paquete)\\b",
+          "\\brefactor"
+        ],
+        "message": "Cambio de DISEÑO → `docs/arquitectura.md`: (1) medí el radio de impacto con el índice (`codegraph explore`), no de memoria; (2) el movimiento tiene que BAJAR acoplamiento o SUBIR cohesión — decí cuál y contra qué se mide (`purity`, `forbiddenDeps`, `singleSource`); (3) si cambia una decisión estructural, va un ADR en `docs/decisions/` en el mismo commit."
+      },
+      {
+        "$comment": "CI/CD: el pipeline no es un lugar aparte donde valen otras reglas. Corre EL MISMO gate que el humano, y lo que se salta la verificación no se mergea.",
+        "route": "cicd",
+        "patterns": [
+          "\\bpipeline\\b",
+          "\\bci/?cd\\b",
+          "\\bworkflow\\b",
+          "\\bdespliegue\\b",
+          "\\bdeploy",
+          "\\brelease\\b",
+          "\\bgithub actions\\b",
+          "\\bjenkins\\b",
+          "\\bgitlab-ci\\b"
+        ],
+        "message": "Toca el pipeline → `docs/cicd.md`: CI corre **el mismo** `gate.command` que el humano (si verifica otra cosa, una de las dos señales miente); ninguna etapa lleva `--no-verify` ni `continue-on-error` sobre el gate; y el despliegue va detrás del gate verde, nunca al lado."
+      },
+      {
         "route": "arnes",
         "patterns": [
           "\\bhook\\b",
@@ -498,6 +552,29 @@
     ],
     "reason": "el trabajo entra por pull request, con su revisión y su gate en verde. Un push directo entra sin que nadie lo mire."
   },
+  "graph": {
+    "$comment": "EL ÍNDICE DEL CÓDIGO ES OBLIGATORIO, no una comodidad. La herramienta es codegraph (https://github.com/colbymchenry/codegraph): mantiene un grafo local en SQLite (`.codegraph/codegraph.db`) con símbolos, llamadas y radio de impacto, y se sincroniza solo al guardar. Activa el hook `graph-first`; sin esta clave el hook queda instalado y muerto. Instalación y flujo completo: docs/codegraph.md. La regla de lectura: PRIMERO el índice (`codegraph explore` o la herramienta MCP `codegraph_explore`), DESPUÉS abrir archivos — y sólo el fragmento que el índice señaló.",
+    "tool": "codegraph",
+    "graphFile": ".codegraph/codegraph.db",
+    "queryCommand": "codegraph explore \"<pregunta>\"",
+    "panoramaCommand": "codegraph ui",
+    "statusCommand": "codegraph status",
+    "installHint": "curl -fsSL https://raw.githubusercontent.com/colbymchenry/codegraph/main/install.sh | sh  →  codegraph install  →  codegraph init",
+    "questionPatterns": [
+      "\\bd[oó]nde\\b",
+      "\\bqui[eé]n (llama|usa|importa|depende)",
+      "\\bqu[eé] (usa|rompe|depende de)\\b",
+      "\\bc[oó]mo funciona\\b",
+      "\\bflujo\\b",
+      "\\bimpacto\\b",
+      "\\bradio de impacto\\b",
+      "\\bacopl",
+      "\\bcohesi",
+      "\\barquitectura\\b",
+      "\\brefactor",
+      "\\bdependenc"
+    ]
+  },
   "install": {
     "$comment": "Qué clave del config ACTIVA cada freno que el instalador copia. Un freno copiado sin su clave queda «instalado y muerto» en el repo destino — el anti-patrón que este arnés existe para evitar, cometido por el propio instalador: viajaron `ask-first`, `action-guard` y `pre-push` con la plantilla sin `askFirst` ni `branches`. El self-test verifica la plantilla contra esta tabla.",
     "activators": {
@@ -508,6 +585,7 @@
       ".claude/hooks/gate-stop.mjs": "gate.marker",
       ".claude/hooks/session-start.mjs": "status.file",
       ".claude/hooks/sdd-router.mjs": "sdd.routes",
+      ".claude/hooks/graph-first.mjs": "graph.graphFile",
       ".claude/hooks/ask-first.mjs": "askFirst.marker",
       ".claude/hooks/action-guard.mjs": "askFirst.marker",
       ".githooks/commit-msg": "commitMsg.codePattern",

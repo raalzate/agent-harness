@@ -46,6 +46,15 @@
           "scripts/artifacts-check.mjs"
         ],
         "why": "un plan suelto en el repo cuando el trabajo vive en el gestor parte el registro en dos"
+      },
+      {
+        "name": "índice del código (codegraph)",
+        "command": [
+          "codegraph",
+          "status"
+        ],
+        "skipIfMissing": ".codegraph",
+        "why": "el agente lee el repo con el índice, no a mano: sin él abre archivos de más y se pierde las relaciones (quién llama a quién, qué se rompe si toco esto). Un índice desincronizado miente peor que no tenerlo, y eso es lo que mira `codegraph status`. Mientras nadie corra `codegraph init` la señal sale OMITIDA — y omitido no es verde"
       }
     ]
   },
@@ -298,6 +307,31 @@
         "message": "Pedido ambiguo → preguntá UNA sola cosa antes de tocar archivos."
       },
       {
+        "route": "arquitectura",
+        "patterns": [
+          "\\barquitectura\\b",
+          "\\bacopl",
+          "\\bcohesi",
+          "\\bcapa(s)? (de|del)\\b",
+          "\\bdependencia circular\\b",
+          "\\bextraer (un |el )?(m[oó]dulo|servicio|paquete)\\b",
+          "\\brefactor"
+        ],
+        "message": "Cambio de DISEÑO: (1) medí el radio de impacto con el índice del código, no de memoria; (2) el movimiento tiene que BAJAR acoplamiento o SUBIR cohesión — decí cuál, y contra qué regla se mide (`purity`, `forbiddenDeps`, `singleSource`); (3) si cambia una decisión estructural, va un ADR en el mismo commit."
+      },
+      {
+        "route": "cicd",
+        "patterns": [
+          "\\bpipeline\\b",
+          "\\bci/?cd\\b",
+          "\\bworkflow\\b",
+          "\\bdespliegue\\b",
+          "\\bdeploy",
+          "\\brelease\\b"
+        ],
+        "message": "Toca el pipeline: CI corre **el mismo** `gate.command` que el humano — si verifica algo distinto, una de las dos señales miente y gana la que deja mergear. Ninguna etapa saltea la verificación ni marca el gate como tolerante a fallos; el despliegue va DETRÁS del gate verde, no al lado."
+      },
+      {
         "route": "none",
         "patterns": [
           "\\btypo\\b",
@@ -323,6 +357,28 @@
     "specsDir": "specs",
     "allowedInRepo": [
       "specs/README.md"
+    ]
+  },
+  "graph": {
+    "$comment": "EL ÍNDICE DEL CÓDIGO. Activa `graph-first.mjs`, que sin esta clave viaja instalado y muerto. La herramienta por default es codegraph (https://github.com/colbymchenry/codegraph): grafo local en SQLite, sin API keys, funciona en cualquier lenguaje. Instalación: `curl -fsSL https://raw.githubusercontent.com/colbymchenry/codegraph/main/install.sh | sh` → `codegraph install` → `codegraph init` en este repo. Si tu equipo usa otro índice (ctags, un LSP, un grafo propio), cambiá `graphFile` y `queryCommand`: el hook no conoce ninguna herramienta. La regla que se hace cumplir es la misma — PRIMERO el índice, DESPUÉS abrir archivos.",
+    "tool": "codegraph",
+    "graphFile": ".codegraph/codegraph.db",
+    "queryCommand": "codegraph explore \"<pregunta>\"",
+    "panoramaCommand": "codegraph ui",
+    "statusCommand": "codegraph status",
+    "installHint": "curl -fsSL https://raw.githubusercontent.com/colbymchenry/codegraph/main/install.sh | sh  →  codegraph install  →  codegraph init",
+    "questionPatterns": [
+      "\\bd[oó]nde\\b",
+      "\\bqui[eé]n (llama|usa|importa|depende)",
+      "\\bqu[eé] (usa|rompe|depende de)\\b",
+      "\\bc[oó]mo funciona\\b",
+      "\\bflujo\\b",
+      "\\bimpacto\\b",
+      "\\bacopl",
+      "\\bcohesi",
+      "\\barquitectura\\b",
+      "\\brefactor",
+      "\\bdependenc"
     ]
   },
   "commitMsg": {
