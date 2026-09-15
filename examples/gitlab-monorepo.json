@@ -1,0 +1,293 @@
+{
+  "$comment": "Monorepo en GitLab: un solo gate para todo el workspace, y el pipeline verificado por invariante. Las dos trampas propias de esta combinación: (1) `allow_failure: true` es el `continue-on-error` de GitLab — un job que falla y deja pasar es peor que no tenerlo; (2) `rules: changes:` sirve para no correr de más, NUNCA para decidir qué se verifica: si el filtro elige, el filtro pasó a ser la definición de entregable. El freno de mayor retorno del monorepo no es una señal, es `purity`: quién puede importar a quién. Ver docs/multi-proyecto.md.",
+  "gate": {
+    "command": "pnpm gate",
+    "fastCommand": "pnpm gate:fast",
+    "marker": ".git/gate-dirty",
+    "codeGlobs": [
+      "packages/",
+      "apps/",
+      "scripts/"
+    ],
+    "codeExtensions": [
+      ".ts",
+      ".tsx",
+      ".vue",
+      ".mjs"
+    ],
+    "installHooksCommand": "git config core.hooksPath .githooks",
+    "signals": [
+      {
+        "name": "self-test del arnés",
+        "command": [
+          "node",
+          "scripts/harness-selftest.mjs"
+        ],
+        "why": "un hook roto falla en silencio: ninguna otra señal lo ve"
+      },
+      {
+        "name": "lint de convenciones",
+        "command": [
+          "node",
+          "scripts/repo-lint.mjs"
+        ],
+        "why": "las fronteras entre paquetes y el invariante del `.gitlab-ci.yml`: ningún linter estándar los conoce"
+      },
+      {
+        "name": "typecheck del workspace",
+        "command": [
+          "npx",
+          "tsc",
+          "--build"
+        ],
+        "why": "la rotura cara del monorepo es ENTRE paquetes, y sólo el build de proyectos la ve"
+      },
+      {
+        "name": "tests del workspace",
+        "command": [
+          "pnpm",
+          "-r",
+          "test"
+        ],
+        "why": "correr sólo el paquete tocado deja pasar a sus consumidores, que es exactamente la rotura del monorepo"
+      },
+      {
+        "name": "versiones alineadas entre paquetes",
+        "command": [
+          "npx",
+          "syncpack",
+          "list-mismatches"
+        ],
+        "why": "dos paquetes con versiones distintas de la misma dependencia rompen en runtime, no en build"
+      },
+      {
+        "name": "build de todo",
+        "command": [
+          "pnpm",
+          "-r",
+          "build"
+        ],
+        "fastSkip": true,
+        "why": "un paquete publicable compila en dev y falla al empaquetar"
+      },
+      {
+        "name": "e2e de la app web",
+        "command": [
+          "pnpm",
+          "--filter",
+          "web",
+          "test:e2e"
+        ],
+        "skipIfMissing": "apps/web",
+        "fastSkip": true,
+        "why": "el flujo completo que ningún unitario cubre; OMITIDA en un clon parcial, y omitido no es verde"
+      },
+      {
+        "name": "índice del código (codegraph)",
+        "command": [
+          "codegraph",
+          "status"
+        ],
+        "skipIfMissing": ".codegraph",
+        "why": "ninguna otra señal mira CÓMO lee el agente: sin índice abre archivos de más y no ve las relaciones que el texto no muestra. OMITIDA mientras nadie corra `codegraph init`, y omitido no es verde"
+      }
+    ]
+  },
+  "protectedPaths": [
+    {
+      "pattern": "^\\.env",
+      "reason": ".env* es la llave del reino: lo edita el humano."
+    },
+    {
+      "pattern": "^\\.git/",
+      "reason": "historia de git: fuera del alcance del agente."
+    },
+    {
+      "pattern": "^\\.codegraph/",
+      "reason": "el índice es derivado: se reconstruye con `codegraph init`, no se edita."
+    },
+    {
+      "pattern": "^pnpm-lock\\.yaml$",
+      "reason": "el lockfile del workspace lo regenera pnpm; a mano rompe la resolución de todos los paquetes."
+    },
+    {
+      "pattern": "^pnpm-workspace\\.yaml$",
+      "reason": "mover o agregar un paquete cambia la topología del repo: decisión del equipo, con su MR."
+    },
+    {
+      "pattern": "^\\.gitlab-ci\\.yml$",
+      "agentOnly": true,
+      "reason": "el pipeline es la definición de entregable del lado del servidor: se cambia en su propio MR, no de paso."
+    }
+  ],
+  "bash": {
+    "deny": [
+      {
+        "pattern": "--no-ver[i]fy",
+        "reason": "saltarse la verificación está prohibido: si el gate estorba, se arregla el gate."
+      },
+      {
+        "pattern": "git\\s+reset\\s+--hard",
+        "reason": "destruye trabajo sin commitear."
+      },
+      {
+        "pattern": "git\\s+push\\s+.*--force(?!-with-lease)",
+        "reason": "reescribe historia remota. Usá --force-with-lease y pedí confirmación."
+      },
+      {
+        "pattern": "pnpm\\s+(-r|--recursive)\\s+.*\\b(publish|exec\\s+rm)\\b",
+        "reason": "una acción recursiva sobre todos los paquetes es irreversible: listá los afectados y pedí confirmación."
+      },
+      {
+        "pattern": "\\bglab\\s+mr\\s+merge\\b",
+        "reason": "mergear desde la consola saltea la revisión humana: el MR lo aprueba una persona."
+      }
+    ]
+  },
+  "reuse": [
+    {
+      "pattern": "from\\s+['\"]\\.\\./\\.\\./(packages|apps)/",
+      "appliesTo": "^(packages|apps)/",
+      "reason": "un paquete no alcanza a otro por ruta relativa: se importa por su nombre de workspace, o el build de proyectos y el empaquetado se rompen.",
+      "see": "pnpm-workspace.yaml"
+    }
+  ],
+  "lint": {
+    "command": [
+      "node",
+      "scripts/repo-lint.mjs"
+    ],
+    "fileFlag": "--file"
+  },
+  "purity": [
+    {
+      "dir": "packages/dominio",
+      "forbiddenImports": [
+        "react",
+        "vue",
+        "express",
+        "@repo/ui",
+        "@repo/infra"
+      ],
+      "reason": "el dominio no conoce ni la UI ni la infraestructura. Es la regla que impide que el monorepo se vuelva un monolito con carpetas."
+    },
+    {
+      "dir": "packages/ui",
+      "forbiddenImports": [
+        "@repo/infra",
+        "pg",
+        "redis"
+      ],
+      "reason": "la UI habla con el dominio, no con la base: si importa infraestructura, no hay forma de testearla sin levantar media plataforma."
+    }
+  ],
+  "forbiddenDeps": {
+    "manifest": "package.json",
+    "packages": [
+      "lodash"
+    ],
+    "reason": "se decidió una vez: lo que se usaba de lodash está en `packages/dominio/utils`, y tener las dos cosas garantiza que se dupliquen."
+  },
+  "invariants": [
+    {
+      "file": ".gitlab-ci.yml",
+      "required": [
+        "bash scripts/gate.sh"
+      ],
+      "forbidden": [
+        "allow_failure: true"
+      ],
+      "reason": "CI corre EL MISMO gate. `allow_failure: true` es el `continue-on-error` de GitLab: el job sale rojo y el MR se mergea igual."
+    }
+  ],
+  "patterns": [
+    {
+      "id": "VERSIONFIJA",
+      "pattern": "\"@repo/[a-z-]+\"\\s*:\\s*\"\\d",
+      "appliesTo": "^(packages|apps)/[^/]+/package\\.json$",
+      "message": "las dependencias internas se declaran `workspace:*`. Una versión fija resuelve contra el registro publicado en vez del código de este repo, y el bug aparece sólo en CI."
+    }
+  ],
+  "tests": {
+    "filePattern": "(^|/)(__tests__|tests?)/|\\.(test|spec)\\.[cm]?[jt]sx?$",
+    "onlyPattern": "\\b(describe|it|test)\\.only\\("
+  },
+  "incidents": {
+    "file": "docs/gotchas.md",
+    "heading": "### GOTCHA",
+    "requiredLines": [
+      "Síntoma:",
+      "Causa:",
+      "Regla:",
+      "Mecanismo:"
+    ]
+  },
+  "docs": {
+    "ignore": [
+      "node_modules",
+      ".git",
+      "dist",
+      "build",
+      "coverage",
+      ".turbo"
+    ],
+    "ignoreFiles": [],
+    "externalPaths": []
+  },
+  "status": {
+    "file": "STATUS.md"
+  },
+  "branches": {
+    "protected": [
+      "main"
+    ],
+    "reason": "el trabajo entra por merge request. En GitLab hay que marcar además *Pipelines must succeed* y proteger la rama: el hook local es el complemento."
+  },
+  "tracker": {
+    "kind": "gitlab",
+    "issuePattern": "(^|[^A-Za-z0-9_])#[0-9]+",
+    "issueExample": "#123 · Closes #123",
+    "newIssueHint": [
+      "glab issue create --title \"…\"",
+      "En un monorepo conviene la etiqueta del paquete afectado: el ítem dice QUÉ y el commit dice DÓNDE."
+    ],
+    "artifactsIn": "tracker",
+    "specsDir": "specs",
+    "allowedInRepo": [
+      "specs/README.md"
+    ]
+  },
+  "commitMsg": {
+    "codePattern": "^(packages/|apps/|scripts/)",
+    "ignoreExtensions": [
+      ".md",
+      ".png",
+      ".svg"
+    ],
+    "skipSubjects": [
+      "Merge ",
+      "Revert ",
+      "fixup! ",
+      "squash! "
+    ],
+    "escapeLine": "sin-issue:"
+  },
+  "graph": {
+    "$comment": "EL ÍNDICE DEL CÓDIGO. Activa el hook `graph-first` y la señal del gate. Herramienta por default: codegraph (https://github.com/colbymchenry/codegraph). Regla: primero el índice, después abrir archivos. Ver docs/codegraph.md.",
+    "tool": "codegraph",
+    "graphFile": ".codegraph/codegraph.db",
+    "queryCommand": "codegraph explore \"<pregunta>\"",
+    "panoramaCommand": "codegraph ui",
+    "statusCommand": "codegraph status",
+    "questionPatterns": [
+      "\\bd[oó]nde\\b",
+      "\\bqui[eé]n (llama|usa|importa|depende)",
+      "\\bc[oó]mo funciona\\b",
+      "\\bflujo\\b",
+      "\\bimpacto\\b",
+      "\\bacopl",
+      "\\barquitectura\\b",
+      "\\brefactor"
+    ]
+  }
+}

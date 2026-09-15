@@ -1,0 +1,24 @@
+// Jenkins — corre EL MISMO gate que el humano y que el agente.
+//
+// En Jenkins la tentación es partir el gate en etapas «para ver dónde falló». No se hace:
+// el gate ya corre todas sus señales e imprime cuál falló. Partirlo crea una segunda
+// definición de entregable —la del Jenkinsfile— que envejece aparte del config.
+pipeline {
+  agent any
+
+  stages {
+    stage('gate') {
+      steps {
+        // El setup del stack del proyecto va acá, antes del gate.
+        sh 'bash scripts/gate.sh'
+      }
+    }
+  }
+
+  post {
+    // Sin `catchError` ni `|| true`: el rojo tiene que llegar al merge.
+    failure {
+      echo 'GATE ROJO — leé el error real (archivo, línea, mensaje) antes de reintentar.'
+    }
+  }
+}

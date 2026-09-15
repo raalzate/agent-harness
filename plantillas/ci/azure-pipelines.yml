@@ -1,0 +1,40 @@
+# Azure Pipelines — corre EL MISMO gate que el humano y que el agente.
+#
+# Plantilla del arnés. Dos cosas propias de Azure DevOps:
+#  1. la protección de rama NO vive acá: es una *branch policy* sobre la rama
+#     (Repos → Branches → Branch policies), y ahí se marca este pipeline como
+#     «build validation» obligatorio. Sin eso, el pipeline corre y no frena nada.
+#  2. el ítem de trabajo se referencia `AB#1234` en el mensaje del commit:
+#     poné ese patrón en `tracker.issuePattern` del config del arnés.
+trigger:
+  branches:
+    include: [main]
+
+pr:
+  branches:
+    include: [main]
+
+pool:
+  vmImage: ubuntu-latest
+
+steps:
+  # ── El stack del proyecto (descomentá el tuyo) ───────────────────────────
+  # - task: UseDotNet@2
+  #   inputs: { packageType: sdk, version: '8.0.x' }
+  #
+  # - task: JavaToolInstaller@0
+  #   inputs: { versionSpec: '21', jdkArchitectureOption: x64, jdkSourceOption: PreInstalled }
+  #
+  # - task: UsePythonVersion@0
+  #   inputs: { versionSpec: '3.12' }
+
+  # ── El arnés (sólo node + bash) ──────────────────────────────────────────
+  - task: NodeTool@0
+    inputs:
+      versionSpec: '20.x'
+    displayName: node
+
+  - script: bash scripts/gate.sh
+    displayName: gate
+    # Sin `continueOnError: true`. Un paso que falla y deja pasar convierte al gate
+    # en decoración verde.

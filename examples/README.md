@@ -24,13 +24,22 @@ hacer las preguntas de [`../docs/portar.md`](../docs/portar.md) en ese stack.
 | [`embedded-c.json`](embedded-c.json) | firmware C para microcontrolador (Zephyr) | Azure Boards `AB#1187` | el más estricto, y con razón: sin ctrl-Z en equipos de campo. `malloc`/`printf`/espera activa prohibidos, watchdog en `invariants`, una señal que falla si el binario no entra en la flash, y flashear en `bash.deny` porque toca hardware físico |
 | [`legacy-brownfield.json`](legacy-brownfield.json) | repo heredado, sin tests y sin dueño | GitHub `#123` | **el más parecido a la realidad**: arranca con cuatro frenos, `patterns` con **una** regla (la que tiene cicatriz) y `forbiddenDeps` vacío a propósito. El gate arranca en lo que hoy sale verde —que compile— y crece con `/lesson`, un freno por incidente |
 | [`monorepo.json`](monorepo.json) | workspace con varios paquetes | Azure Boards `AB#123` | el gate corre el workspace completo; `skipIfMissing` para clones parciales |
+| [`azure-devops.json`](azure-devops.json) | servicio Node/TS en Azure Repos + Pipelines + Boards | Azure Boards `AB#1234` | **la integración completa con Azure**: un `invariants` sobre `azure-pipelines.yml` (corre el mismo gate, sin `continueOnError`), `AB#1234` como referencia, y la *branch policy* declarada como lo que es: un freno del servidor que el gate no puede verificar |
+| [`gitlab-monorepo.json`](gitlab-monorepo.json) | monorepo de paquetes en GitLab | GitLab `#123` | **un gate para todo el workspace**: `allow_failure: true` prohibido por invariante (es el `continue-on-error` de GitLab), dos `purity` que definen quién importa a quién, y `skipIfMissing` para el clon parcial |
+| [`github-plataforma.json`](github-plataforma.json) | un servicio Go que es **uno de ocho repos** | GitHub `#123` / `owner/repo#123` | **qué pasa con varios proyectos**: el config es de ESTE repo, lo compartido es el workflow con el mismo nombre de check, el test de contrato entra con `skipIfMissing` porque el consumidor vive en otro repo |
+| [`bitbucket-jenkins.json`](bitbucket-jenkins.json) | monolito Java heredado con Jenkins | Jira `CORE-1423` | **la combinación de empresa**: una sola etapa `gate` en el `Jenkinsfile`, `catchError` y `|| true` prohibidos por invariante, `-x test` / `-DskipTests` en `bash.deny`, y un gate que arranca en «que compile» y crece con `/lesson` |
 | [`infra-terraform.json`](infra-terraform.json) | repo de infraestructura | Gitea `#123` | el arnés se invierte: `bash.deny` es la mitad del valor (planear sí, aplicar no) |
 
 La columna **Forja** está a propósito: seis gestores distintos con el mismo mecanismo. Ningún
 script del arnés conoce ninguno — lo único que cambia es `tracker.issuePattern`. Ver
 [trazabilidad.md](../docs/trazabilidad.md).
 
-Los veinte archivos los verifica el gate (sección 8 del self-test): parsean, sus regex compilan,
+Los **cuatro últimos** no se ordenan por stack sino por **integración**: cómo queda el arnés con
+GitHub, GitLab, Azure DevOps, Bitbucket o Jenkins, y qué cambia cuando hay varios proyectos. El
+pipeline de cada forja, listo para copiar, está en [`../plantillas/ci/`](../plantillas/ci); el
+criterio completo, en [cicd.md](../docs/cicd.md) y [multi-proyecto.md](../docs/multi-proyecto.md).
+
+Los veinticuatro archivos los verifica el gate (sección 8 del self-test): parsean, sus regex compilan,
 cada señal declara su `why`, y un manifiesto que no es clave-valor trae su `matcher`. Un ejemplo
 roto viaja igual que un script roto.
 

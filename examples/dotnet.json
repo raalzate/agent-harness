@@ -85,6 +85,15 @@
           "scripts/artifacts-check.mjs"
         ],
         "why": "un plan suelto en el repo cuando el trabajo vive en el gestor parte el registro en dos"
+      },
+      {
+        "name": "índice del código (codegraph)",
+        "command": [
+          "codegraph",
+          "status"
+        ],
+        "skipIfMissing": ".codegraph",
+        "why": "ninguna otra señal mira CÓMO lee el agente: sin índice abre archivos de más y no ve las relaciones que el texto no muestra (quién llama a quién, interfaz → implementación). OMITIDA mientras nadie corra `codegraph init`, y omitido no es verde"
       }
     ]
   },
@@ -304,5 +313,26 @@
       "squash! "
     ],
     "escapeLine": "sin-issue:"
+  },
+  "graph": {
+    "$comment": "EL ÍNDICE DEL CÓDIGO. Activa el hook `graph-first`, que sin esta clave viaja instalado y muerto, y la señal del gate que corre `statusCommand`. La herramienta por default es codegraph (https://github.com/colbymchenry/codegraph): grafo local en SQLite, agnóstico de lenguaje, auto-sincronizado al guardar. La regla: primero el índice, después abrir archivos. Ver docs/codegraph.md.",
+    "tool": "codegraph",
+    "graphFile": ".codegraph/codegraph.db",
+    "queryCommand": "codegraph explore \"<pregunta>\"",
+    "panoramaCommand": "codegraph ui",
+    "statusCommand": "codegraph status",
+    "questionPatterns": [
+      "\\bd[oó]nde\\b",
+      "\\bqui[eé]n (llama|usa|importa|depende)",
+      "\\bqu[eé] (usa|rompe|depende de)\\b",
+      "\\bc[oó]mo funciona\\b",
+      "\\bflujo\\b",
+      "\\bimpacto\\b",
+      "\\bacopl",
+      "\\bcohesi",
+      "\\barquitectura\\b",
+      "\\brefactor",
+      "\\bdependenc"
+    ]
   }
 }

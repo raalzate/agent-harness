@@ -1,0 +1,257 @@
+{
+  "$comment": "Azure DevOps de punta a punta: Azure Repos + Azure Pipelines + Azure Boards, sobre un servicio Node/TS. Tres cosas propias de Azure y ninguna vive en el código del arnés: (1) el pipeline corre el MISMO gate y eso lo verifica un `invariants` sobre `azure-pipelines.yml`; (2) la protección de rama NO está en el YAML — es una *branch policy* con build validation, y el gate no puede verificarla porque necesitaría red: queda declarada como deuda en STATUS.md; (3) la referencia al work item es `AB#1234`, no `#1234`. Ver docs/cicd.md.",
+  "gate": {
+    "command": "npm run gate",
+    "fastCommand": "npm run gate:fast",
+    "marker": ".git/gate-dirty",
+    "codeGlobs": [
+      "src/",
+      "scripts/"
+    ],
+    "codeExtensions": [
+      ".ts",
+      ".tsx",
+      ".mjs"
+    ],
+    "installHooksCommand": "npm run hooks:install",
+    "signals": [
+      {
+        "name": "self-test del arnés",
+        "command": [
+          "node",
+          "scripts/harness-selftest.mjs"
+        ],
+        "why": "un hook roto o un config que apunta a la nada fallan en silencio: ninguna otra señal los ve"
+      },
+      {
+        "name": "lint de convenciones",
+        "command": [
+          "node",
+          "scripts/repo-lint.mjs"
+        ],
+        "why": "incluye el invariante del pipeline: que `azure-pipelines.yml` siga corriendo el gate y no tolere fallos"
+      },
+      {
+        "name": "typecheck",
+        "command": [
+          "npx",
+          "tsc",
+          "--noEmit"
+        ],
+        "why": "el runner de tests no type-checkea: un import inválido pasa la suite"
+      },
+      {
+        "name": "tests",
+        "command": [
+          "npm",
+          "test",
+          "--",
+          "--run"
+        ],
+        "why": "comportamiento; es la única señal que mira lo que el programa hace"
+      },
+      {
+        "name": "build",
+        "command": [
+          "npm",
+          "run",
+          "build"
+        ],
+        "fastSkip": true,
+        "why": "dev y prod difieren: resolución de módulos y empaquetado"
+      },
+      {
+        "name": "artefactos en su lugar",
+        "command": [
+          "node",
+          "scripts/artifacts-check.mjs"
+        ],
+        "why": "el trabajo vive en Boards: un plan suelto en el repo parte el registro en dos"
+      },
+      {
+        "name": "índice del código (codegraph)",
+        "command": [
+          "codegraph",
+          "status"
+        ],
+        "skipIfMissing": ".codegraph",
+        "why": "ninguna otra señal mira CÓMO lee el agente: sin índice abre archivos de más y no ve las relaciones que el texto no muestra. OMITIDA mientras nadie corra `codegraph init`, y omitido no es verde"
+      }
+    ]
+  },
+  "protectedPaths": [
+    {
+      "pattern": "^\\.env",
+      "reason": ".env* es la llave del reino: lo edita el humano."
+    },
+    {
+      "pattern": "^\\.git/",
+      "reason": "historia de git: fuera del alcance del agente."
+    },
+    {
+      "pattern": "^\\.codegraph/",
+      "reason": "el índice es derivado: se reconstruye con `codegraph init`, no se edita."
+    },
+    {
+      "pattern": "^package-lock\\.json$",
+      "reason": "el lockfile se regenera con `npm install`."
+    },
+    {
+      "pattern": "^azure-pipelines\\.yml$",
+      "agentOnly": true,
+      "reason": "el pipeline ES la definición de entregable del lado del servidor: se cambia a conciencia, en su propio PR, no como efecto colateral."
+    }
+  ],
+  "bash": {
+    "deny": [
+      {
+        "pattern": "--no-ver[i]fy",
+        "reason": "saltarse la verificación está prohibido: si el gate estorba, se arregla el gate."
+      },
+      {
+        "pattern": "git\\s+reset\\s+--hard",
+        "reason": "destruye trabajo sin commitear."
+      },
+      {
+        "pattern": "git\\s+push\\s+.*--force(?!-with-lease)",
+        "reason": "reescribe historia remota. Usá --force-with-lease y pedí confirmación."
+      },
+      {
+        "pattern": "\\baz\\s+pipelines\\s+run\\b",
+        "reason": "disparar el pipeline a mano se salta el PR: el trabajo entra por pull request con su build validation."
+      },
+      {
+        "pattern": "\\baz\\s+repos\\s+pr\\s+.*--auto-complete\\b",
+        "reason": "auto-completar el PR lo mergea apenas la política pase: pedí confirmación explícita al humano."
+      }
+    ]
+  },
+  "lint": {
+    "command": [
+      "node",
+      "scripts/repo-lint.mjs"
+    ],
+    "fileFlag": "--file"
+  },
+  "purity": [
+    {
+      "dir": "src/dominio",
+      "forbiddenImports": [
+        "express",
+        "@azure/",
+        "axios",
+        "pg"
+      ],
+      "reason": "el dominio no conoce el transporte ni el SDK de la nube: es lo que sobrevive a la próxima migración de plataforma."
+    }
+  ],
+  "forbiddenDeps": {
+    "manifest": "package.json",
+    "packages": [
+      "request",
+      "moment"
+    ],
+    "reason": "`request` está sin mantenimiento y `moment` pesa y está congelado: se decidió una vez y no se rediscute en cada PR."
+  },
+  "invariants": [
+    {
+      "$comment": "El equivalente exacto del invariante de CI en GitHub, con los literales de Azure. Sin esto, «CI corre el mismo gate» es prosa.",
+      "file": "azure-pipelines.yml",
+      "required": [
+        "bash scripts/gate.sh"
+      ],
+      "forbidden": [
+        "continueOnError: true"
+      ],
+      "reason": "CI verifica EL MISMO entregable que el humano. Un `continueOnError: true` convierte el gate en decoración verde."
+    }
+  ],
+  "patterns": [
+    {
+      "id": "SECRETO",
+      "pattern": "(AccountKey|SharedAccessSignature|DefaultEndpointsProtocol)=",
+      "appliesTo": "^(src|scripts)/",
+      "message": "una cadena de conexión de Azure en el código termina en el historial de git y no se borra. Va en Key Vault, y al código llega por variable de entorno."
+    }
+  ],
+  "tests": {
+    "filePattern": "(^|/)(__tests__|tests?)/|\\.(test|spec)\\.[cm]?[jt]sx?$",
+    "onlyPattern": "\\b(describe|it|test)\\.only\\("
+  },
+  "incidents": {
+    "file": "docs/gotchas.md",
+    "heading": "### GOTCHA",
+    "requiredLines": [
+      "Síntoma:",
+      "Causa:",
+      "Regla:",
+      "Mecanismo:"
+    ]
+  },
+  "docs": {
+    "ignore": [
+      "node_modules",
+      ".git",
+      "dist",
+      "coverage"
+    ],
+    "ignoreFiles": [],
+    "externalPaths": []
+  },
+  "status": {
+    "file": "STATUS.md"
+  },
+  "branches": {
+    "protected": [
+      "main"
+    ],
+    "reason": "el trabajo entra por PR con su build validation. El hook falla antes de la red; la *branch policy* de Azure Repos es el freno fuerte y se activa a mano."
+  },
+  "tracker": {
+    "kind": "azure-devops",
+    "issuePattern": "(^|[^A-Za-z0-9_])AB#[0-9]+",
+    "issueExample": "AB#1234 · Fixes AB#1234",
+    "newIssueHint": [
+      "az boards work-item create --type Bug --title \"…\" --project <proyecto>",
+      "`AB#1234` en el mensaje enlaza el commit con el work item."
+    ],
+    "artifactsIn": "tracker",
+    "specsDir": "specs",
+    "allowedInRepo": [
+      "specs/README.md"
+    ]
+  },
+  "commitMsg": {
+    "codePattern": "^(src/|scripts/)",
+    "ignoreExtensions": [
+      ".md",
+      ".png",
+      ".svg"
+    ],
+    "skipSubjects": [
+      "Merge ",
+      "Revert ",
+      "fixup! ",
+      "squash! "
+    ],
+    "escapeLine": "sin-issue:"
+  },
+  "graph": {
+    "$comment": "EL ÍNDICE DEL CÓDIGO. Activa el hook `graph-first` y la señal del gate. Herramienta por default: codegraph (https://github.com/colbymchenry/codegraph). Regla: primero el índice, después abrir archivos. Ver docs/codegraph.md.",
+    "tool": "codegraph",
+    "graphFile": ".codegraph/codegraph.db",
+    "queryCommand": "codegraph explore \"<pregunta>\"",
+    "panoramaCommand": "codegraph ui",
+    "statusCommand": "codegraph status",
+    "questionPatterns": [
+      "\\bd[oó]nde\\b",
+      "\\bqui[eé]n (llama|usa|importa|depende)",
+      "\\bc[oó]mo funciona\\b",
+      "\\bflujo\\b",
+      "\\bimpacto\\b",
+      "\\bacopl",
+      "\\barquitectura\\b",
+      "\\brefactor"
+    ]
+  }
+}

@@ -1,0 +1,30 @@
+# GitLab CI — corre EL MISMO gate que el humano y que el agente.
+#
+# Plantilla del arnés. Lo único que el arnés necesita es `node` y `bash`; el setup del stack
+# del proyecto va ANTES del paso del gate, en el mismo job (un gate partido en dos jobs deja
+# de ser una definición única de entregable).
+stages: [gate]
+
+gate:
+  stage: gate
+  image: node:20
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  script:
+    # ── El stack del proyecto (descomentá el tuyo) ─────────────────────────
+    # - apt-get update && apt-get install -y python3-pip && pip install -r requirements.txt
+    # - mvn -B -q dependency:go-offline
+    #
+    # ── El arnés: sin dependencias, no hace falta instalar nada ────────────
+    - bash scripts/gate.sh
+
+# Señales lentas: MISMO contrato, otro momento. No se marcan `allow_failure`
+# (un job que falla y deja pasar es peor que no tenerlo: además tranquiliza).
+gate-lento:
+  stage: gate
+  image: node:20
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  script:
+    - bash scripts/gate.sh

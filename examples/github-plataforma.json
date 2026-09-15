@@ -1,0 +1,268 @@
+{
+  "$comment": "Un servicio Go que es UNO de los ocho repos de una plataforma, en GitHub. Lo que muestra no es el stack: es qué pasa cuando hay varios proyectos. (1) El config es de ESTE repo y de ninguno más: las reglas son sus cicatrices, y empujarlas a los otros siete es cómo se logra que tres equipos comenten los hooks en una semana. (2) Lo compartido viaja aparte: el mismo workflow con el MISMO nombre de check en los ocho, para que la branch protection se configure igual en todos. (3) El gate es por repo porque el despliegue es por repo. Ver docs/multi-proyecto.md.",
+  "gate": {
+    "command": "make gate",
+    "fastCommand": "make gate-fast",
+    "marker": ".git/gate-dirty",
+    "codeGlobs": [
+      "cmd/",
+      "internal/",
+      "pkg/"
+    ],
+    "codeExtensions": [
+      ".go"
+    ],
+    "installHooksCommand": "git config core.hooksPath .githooks",
+    "signals": [
+      {
+        "name": "self-test del arnés",
+        "command": [
+          "node",
+          "scripts/harness-selftest.mjs"
+        ],
+        "why": "un hook roto falla en silencio; y con ocho repos, el que se rompe es siempre el que nadie mira"
+      },
+      {
+        "name": "lint de convenciones",
+        "command": [
+          "node",
+          "scripts/repo-lint.mjs"
+        ],
+        "why": "las reglas de ESTE servicio más el invariante del workflow: que siga corriendo el mismo gate que los otros siete"
+      },
+      {
+        "name": "vet",
+        "command": [
+          "go",
+          "vet",
+          "./..."
+        ],
+        "why": "caza el error de tipos que el compilador acepta (printf mal formado, lock copiado)"
+      },
+      {
+        "name": "tests con detector de carrera",
+        "command": [
+          "go",
+          "test",
+          "-race",
+          "./..."
+        ],
+        "why": "la carrera no la caza correr los tests otra vez: la caza el detector, y en un servicio con concurrencia es LA rotura cara"
+      },
+      {
+        "name": "contrato de la API con la plataforma",
+        "command": [
+          "make",
+          "contract-test"
+        ],
+        "skipIfMissing": "contracts",
+        "why": "el consumidor vive en OTRO repo: sin test de contrato, el break se descubre en el ambiente compartido y con el equipo equivocado depurando"
+      },
+      {
+        "name": "build",
+        "command": [
+          "go",
+          "build",
+          "./..."
+        ],
+        "fastSkip": true,
+        "why": "compilar no es lo mismo que pasar los tests de un paquete"
+      },
+      {
+        "name": "índice del código (codegraph)",
+        "command": [
+          "codegraph",
+          "status"
+        ],
+        "skipIfMissing": ".codegraph",
+        "why": "ninguna otra señal mira CÓMO lee el agente: sin índice abre archivos de más y no ve las relaciones que el texto no muestra. OMITIDA mientras nadie corra `codegraph init`, y omitido no es verde"
+      }
+    ]
+  },
+  "protectedPaths": [
+    {
+      "pattern": "^\\.env",
+      "reason": ".env* es la llave del reino: lo edita el humano."
+    },
+    {
+      "pattern": "^\\.git/",
+      "reason": "historia de git: fuera del alcance del agente."
+    },
+    {
+      "pattern": "^\\.codegraph/",
+      "reason": "el índice es derivado: se reconstruye con `codegraph init`, no se edita."
+    },
+    {
+      "pattern": "^go\\.sum$",
+      "reason": "lo regenera `go mod tidy`, no se edita a mano."
+    },
+    {
+      "pattern": "^\\.github/workflows/",
+      "agentOnly": true,
+      "reason": "el workflow es el contrato COMPARTIDO de la plataforma: el nombre del check es el que usan las ocho branch protections. Cambiarlo acá desincroniza la política del resto."
+    },
+    {
+      "pattern": "^deploy/",
+      "agentOnly": true,
+      "reason": "manifiestos de despliegue: los cambia el humano con el PR a la vista."
+    }
+  ],
+  "bash": {
+    "deny": [
+      {
+        "pattern": "--no-ver[i]fy",
+        "reason": "saltarse la verificación está prohibido: si el gate estorba, se arregla el gate."
+      },
+      {
+        "pattern": "git\\s+reset\\s+--hard",
+        "reason": "destruye trabajo sin commitear."
+      },
+      {
+        "pattern": "git\\s+push\\s+.*--force(?!-with-lease)",
+        "reason": "reescribe historia remota. Usá --force-with-lease y pedí confirmación."
+      },
+      {
+        "pattern": "\\bgh\\s+pr\\s+merge\\b",
+        "reason": "mergear desde la consola saltea la revisión: el PR lo aprueba una persona."
+      },
+      {
+        "pattern": "\\bkubectl\\s+(delete|apply|rollout)\\b",
+        "reason": "tocar el clúster a mano deja el repo mintiendo sobre lo desplegado. El despliegue va detrás del gate verde, por el pipeline."
+      },
+      {
+        "pattern": "\\bgh\\s+workflow\\s+run\\b.*--ref\\s+main",
+        "reason": "disparar el pipeline sobre main a mano evita el PR: el trabajo entra revisado."
+      }
+    ]
+  },
+  "lint": {
+    "command": [
+      "node",
+      "scripts/repo-lint.mjs"
+    ],
+    "fileFlag": "--file"
+  },
+  "purity": [
+    {
+      "dir": "internal/dominio",
+      "forbiddenImports": [
+        "net/http",
+        "database/sql",
+        "github.com/gin-gonic/gin"
+      ],
+      "reason": "el dominio no conoce el transporte ni la base. En una plataforma es lo único que no se reescribe cuando cambia el framework del mes."
+    }
+  ],
+  "forbiddenDeps": {
+    "manifest": "go.mod",
+    "packages": [
+      "github.com/pkg/errors"
+    ],
+    "reason": "la plataforma unificó en `errors` de la biblioteca estándar con `%w`: tener las dos formas hace que el wrapping no se pueda desenvolver de punta a punta."
+  },
+  "invariants": [
+    {
+      "file": ".github/workflows/ci.yml",
+      "required": [
+        "make gate"
+      ],
+      "forbidden": [
+        "continue-on-error: true"
+      ],
+      "reason": "los ocho repos corren el MISMO gate con el MISMO nombre de check. Si uno afloja, la política de rama de ese repo protege menos que la de los otros siete y nadie lo nota."
+    }
+  ],
+  "patterns": [
+    {
+      "id": "PANIC",
+      "pattern": "\\bpanic\\(",
+      "appliesTo": "^(cmd|internal)/(?!.*_test\\.go)",
+      "message": "un `panic` en un servicio tira el proceso entero y con él las otras peticiones en vuelo. Devolvé el error y dejá que el borde decida."
+    },
+    {
+      "id": "URLINTERNA",
+      "pattern": "https?://[a-z0-9-]+\\.internal\\b",
+      "appliesTo": "^(cmd|internal|pkg)/",
+      "message": "la URL de otro servicio de la plataforma no se cablea: viene por configuración. Con ocho repos, un host cableado es un despliegue que rompe a otro equipo."
+    }
+  ],
+  "tests": {
+    "filePattern": "_test\\.go$",
+    "onlyPattern": "\\bt\\.Skip\\(\\)"
+  },
+  "incidents": {
+    "file": "docs/gotchas.md",
+    "heading": "### GOTCHA",
+    "requiredLines": [
+      "Síntoma:",
+      "Causa:",
+      "Regla:",
+      "Mecanismo:"
+    ]
+  },
+  "docs": {
+    "ignore": [
+      ".git",
+      "bin",
+      "vendor"
+    ],
+    "ignoreFiles": [],
+    "externalPaths": []
+  },
+  "status": {
+    "file": "STATUS.md"
+  },
+  "branches": {
+    "protected": [
+      "main"
+    ],
+    "reason": "el trabajo entra por PR con el check `gate` requerido. En los ocho repos, el mismo nombre de check."
+  },
+  "tracker": {
+    "kind": "github",
+    "issuePattern": "(^|[^A-Za-z0-9_])(plataforma/[a-z-]+)?#[0-9]+",
+    "issueExample": "#123 · Refs plataforma/servicio-pagos#123",
+    "newIssueHint": [
+      "gh issue create --title \"…\"",
+      "Con varios repos, la referencia cruzada `owner/repo#123` es la que deja rastro del trabajo que empezó en otro lado."
+    ],
+    "artifactsIn": "tracker",
+    "specsDir": "specs",
+    "allowedInRepo": [
+      "specs/README.md"
+    ]
+  },
+  "commitMsg": {
+    "codePattern": "^(cmd/|internal/|pkg/)",
+    "ignoreExtensions": [
+      ".md",
+      ".png",
+      ".svg"
+    ],
+    "skipSubjects": [
+      "Merge ",
+      "Revert ",
+      "fixup! ",
+      "squash! "
+    ],
+    "escapeLine": "sin-issue:"
+  },
+  "graph": {
+    "$comment": "EL ÍNDICE DEL CÓDIGO. Activa el hook `graph-first` y la señal del gate. Herramienta por default: codegraph (https://github.com/colbymchenry/codegraph). Regla: primero el índice, después abrir archivos. Ver docs/codegraph.md.",
+    "tool": "codegraph",
+    "graphFile": ".codegraph/codegraph.db",
+    "queryCommand": "codegraph explore \"<pregunta>\"",
+    "panoramaCommand": "codegraph ui",
+    "statusCommand": "codegraph status",
+    "questionPatterns": [
+      "\\bd[oó]nde\\b",
+      "\\bqui[eé]n (llama|usa|importa|depende)",
+      "\\bc[oó]mo funciona\\b",
+      "\\bflujo\\b",
+      "\\bimpacto\\b",
+      "\\bacopl",
+      "\\barquitectura\\b",
+      "\\brefactor"
+    ]
+  }
+}
