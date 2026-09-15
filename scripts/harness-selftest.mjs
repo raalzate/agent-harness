@@ -29,7 +29,7 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 // El mismo helper que usan el hook y el lint: comparar contra la lista DECLARADA dejaba pasar
 // justo el caso del incidente (el gate declara una extensión que el default agnóstico no tiene).
-import { codeExtensions, depsMatcher, importSyntax, segmentosDeRuta } from "../.claude/hooks/harness.mjs";
+import { codeExtensions, depsMatcher, importSyntax, segmentosDeRuta, relativaDesdeRaiz } from "../.claude/hooks/harness.mjs";
 
 const REPO_ROOT = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
 const abs = (p) => path.join(REPO_ROOT, p);
@@ -678,6 +678,29 @@ const huerfanasDe = (cfg) => {
   });
   if (!malos.length) ok("las rutas de Windows se parten por los DOS separadores (`\\` y `/`)");
   else bad("las rutas de Windows se parten bien", malos.map(([r]) => r).join(" · "));
+
+  // Y lo que está FUERA del repo tiene que verse como fuera. En Windows, entre unidades
+  // distintas `path.relative` devuelve la ruta ABSOLUTA —no empieza con `..`— y con eso todo
+  // lo de afuera pasaba por dentro: `action-guard` bloqueaba escribir un borrador en el
+  // temporal. Lo destapó la matriz de CI, no una lectura del código.
+  const afuera = [
+    ["D:\\a\\repo", "C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\borrador.md", "win32"],
+    ["D:\\a\\repo", "D:\\otro\\borrador.md", "win32"],
+    ["/repo", "/tmp/borrador.md", "posix"],
+  ];
+  const adentro = [
+    ["D:\\a\\repo", "D:\\a\\repo\\src\\x.ts", "win32"],
+    ["/repo", "/repo/src/x.ts", "posix"],
+  ];
+  const malosAfuera = afuera.filter(([root, ruta, so]) => !relativaDesdeRaiz(ruta, root, so).startsWith(".."));
+  const malosAdentro = adentro.filter(([root, ruta, so]) => relativaDesdeRaiz(ruta, root, so).startsWith(".."));
+  if (!malosAfuera.length && !malosAdentro.length)
+    ok("lo de afuera del repo se ve como afuera, también entre unidades de Windows");
+  else
+    bad(
+      "lo de afuera del repo se ve como afuera",
+      [...malosAfuera.map(([, r]) => `${r} se vio DENTRO`), ...malosAdentro.map(([, r]) => `${r} se vio FUERA`)].join(" · "),
+    );
 }
 
 // 3f. El trabajo queda registrado: `.githooks/commit-msg` en un repo git DE VERDAD.

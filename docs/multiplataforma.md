@@ -31,6 +31,8 @@ El único punto que pide algo instalado es el de los hooks de git, y ese algo vi
 | `npm` / `npx` / `gradlew` como comando de una señal | Node los rechaza: en Windows son `.cmd`/`.bat` | el gate resuelve el ejecutable real por `PATHEXT` antes de lanzarlo, sin pasar por un shell |
 | Exigir el bit de ejecución | NTFS no lo tiene: **rojo que nadie puede arreglar**, y un rojo así enseña a ignorar la señal | el self-test omite ese caso en Windows, con motivo |
 | `hooks:install` con `&&` y comillas simples | `cmd.exe` no interpreta comillas simples: el comando que instala los frenos era el que no corría | es `scripts/hooks-install.mjs` |
+| Lo de **fuera** del repo se veía como dentro | entre unidades distintas (`D:\a\repo` y el temporal en `C:\`) `path.relative` devuelve la ruta ABSOLUTA, que no empieza con `..`: `action-guard` bloqueaba escribir un borrador en el temporal | `relativaDesdeRaiz` marca lo de afuera con `../`, con casos del self-test para las dos unidades y para POSIX |
+| Finales de línea en CRLF | el bash de git rechaza los hooks con `$'\r': command not found` —un error que no nombra el problema— y el banco deja de reconocer los bloques del quick start | `.gitattributes` con `eol=lf`, sostenido por un `invariants` del config; además el banco normaliza CRLF al leer el documento |
 
 Cada fila es la misma historia: **el freno no fallaba, desaparecía**. Por eso ninguna se cierra con
 un párrafo — todas tienen un caso del self-test o una corrida de CI detrás.
@@ -41,7 +43,9 @@ un párrafo — todas tienen un caso del self-test o una corrida de CI detrás.
 `npm run gate` en una matriz de `ubuntu-latest`, `windows-latest` y `macos-latest`, con
 `fail-fast: false` para que una plataforma rota no esconda a las otras dos.
 
-Es la única prueba honesta: el comando que demuestra que el gate corre allá es el gate.
+Es la única prueba honesta: el comando que demuestra que el gate corre allá es el gate. Y sirvió
+en su primera corrida — encontró **dos** fallas que ninguna lectura del código había encontrado:
+lo de afuera del repo viéndose como dentro entre unidades, y el quick start ilegible en CRLF.
 
 > Si tu forja no tiene agentes de Windows, decilo en el estado del repo como deuda declarada.
 > Deuda declarada se administra; la suposición se descubre el día que entra alguien con Windows.
@@ -62,9 +66,6 @@ Es la única prueba honesta: el comando que demuestra que el gate corre allá es
 
 - **Rutas largas y nombres reservados de Windows** (`CON`, `PRN`, `> 260` caracteres): nadie los
   prueba. Aparecen en repos con jerarquías profundas.
-- **Finales de línea.** Si alguien configura `core.autocrlf=true`, los scripts de shell llegan con
-  CRLF y el bash de git los rechaza con un mensaje que no menciona el problema. La defensa hoy es
-  `.gitattributes`, no un comando.
 - **PowerShell como shell del agente**: los hooks del agente no dependen del shell, pero
   `bash.deny` describe comandos con sintaxis POSIX. En una sesión que use PowerShell, las mismas
   acciones destructivas se escriben distinto y los patrones no las cazan.

@@ -479,8 +479,12 @@ function probar(stack, fx) {
  */
 function archivosDelDocumento(md) {
   const archivos = {};
+  // CRLF primero: en Windows el checkout puede traer el documento con `\r\n` y el bloque no
+  // casaba — el banco reportaba «el documento ya no crea …» sobre un documento intacto. Un
+  // falso rojo que sólo aparece en una plataforma es la peor variante: enseña a ignorar la señal.
+  const texto = md.replace(/\r\n/g, "\n");
   const bloque = /cat > (\S+) <<'EOF'\n([\s\S]*?)\nEOF/g;
-  for (const [, ruta, contenido] of md.matchAll(bloque)) archivos[ruta] = `${contenido}\n`;
+  for (const [, ruta, contenido] of texto.matchAll(bloque)) archivos[ruta] = `${contenido}\n`;
   return archivos;
 }
 

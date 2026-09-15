@@ -239,6 +239,15 @@
         "--config"
       ],
       "reason": "el pre-commit verifica el config DEL REPO. `repo-lint.mjs --config <ruta>` existe para los cebos del self-test; acá haría que la verificación mida un config permisivo y pase igual."
+    },
+    {
+      "$comment": "Lo destapó la matriz de CI en Windows: con el checkout en CRLF, el bash de Git for Windows rechaza los hooks con `$'\\r': command not found` —un error que no menciona el problema— y el banco deja de reconocer los bloques del quick start. Era deuda declarada en prosa; ahora es un archivo con un comando que falla si desaparece.",
+      "file": ".gitattributes",
+      "required": [
+        "eol=lf"
+      ],
+      "forbidden": [],
+      "reason": "los finales de línea se fijan en LF para las tres plataformas. Sin esto, en Windows los frenos no fallan: dejan de correr."
     }
   ],
   "patterns": [

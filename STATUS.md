@@ -23,7 +23,7 @@ lo que se supone va en "deuda conocida".
 | El trabajo queda registrado | incluido en el self-test | verde — 6 casos de `.githooks/commit-msg` en un repo git temporal, derivados del config: código sin referencia, con referencia, con la fuga y su motivo, la fuga pelada, extensión ignorada, y un merge |
 | Artefactos donde se declaró | `node scripts/artifacts-check.mjs` | verde — sin `specs/` porque el trabajo vive en el gestor; el cebo del self-test lo pone en rojo |
 | Banco de perfiles (stacks reales) | `node scripts/harness-bench.mjs` | verde — **105 comprobaciones sobre 9 repos de juguete**: los 8 stacks (.NET, Maven, Gradle, Python, Go, Rust, Node, front) con archivos reales del lenguaje —detección, DEPS contra el manifiesto real, PUREZA contra el import real, `tests.filePattern` contra el layout real, los hooks, `commit-msg`, y que el arnés instalado no apunte a la nada— más el **quick start**, cuya app se **extrae de `docs/quickstart.md`** para que el documento no pueda envejecer sin que el gate lo note. Cazó **tres** bugs. ~16s (`fastSkip`); `--con-gate` (~75s) vive en CI |
-| El gate corre en Windows, macOS y Linux | matriz del job `gate` en CI + self-test | verde — el gate es `scripts/gate.mjs` (Node) y el `.sh` quedó como envoltorio de una línea; el self-test verifica que delegue, rechaza toda señal que arranque en un intérprete (`bash`, `cmd`, `powershell`), ejercita el partido de rutas con los DOS separadores de Windows, y omite el bit de ejecución donde no existe. La prueba real es la matriz de CI: el **mismo** `npm run gate` en `ubuntu-latest`, `windows-latest` y `macos-latest`, con `fail-fast: false` |
+| El gate corre en Windows, macOS y Linux | matriz del job `gate` en CI + self-test | verde — el gate es `scripts/gate.mjs` (Node) y el `.sh` quedó como envoltorio de una línea; el self-test verifica que delegue, rechaza toda señal que arranque en un intérprete (`bash`, `cmd`, `powershell`), ejercita el partido de rutas con los DOS separadores de Windows, y omite el bit de ejecución donde no existe. La prueba real es la matriz de CI: el **mismo** `npm run gate` en `ubuntu-latest`, `windows-latest` y `macos-latest`, con `fail-fast: false`. **Cazó dos bugs en su primera corrida**: lo de afuera del repo se veía como dentro entre unidades (`action-guard` bloqueaba el temporal) y el quick start era ilegible con CRLF |
 | Gate completo | `npm run gate` | verde — 6 señales declaradas; **el índice del código sale OMITIDA** mientras nadie corra `codegraph init` (omitido ≠ verde). ~44s (antes ~10s: el banco cuesta 15s y el resto es el self-test instalando los 8 perfiles). En modo `fast` el banco se omite |
 | Instalador (dry-run) | `node scripts/harness-init.mjs <repo>` | verde — 38 archivos a copiar (detecta el stack y aplica su perfil), no sobreescribe, imprime los pasos que ninguna herramienta puede hacer sola |
 | Ningún freno viaja muerto | incluido en el self-test | verde — la tabla `install.activators` cruza los frenos que el instalador copia contra la clave del config que los activa. Cazó tres frenos que viajaban inertes (`ask-first`, `action-guard`, `pre-push`: la plantilla no traía `askFirst` ni `branches`) |
@@ -84,12 +84,11 @@ Pre-commit instalado: sí (`core.hooksPath=.githooks`). CI corre **el mismo** `n
   ninguna máquina y se revisa a ojo cuando cambia. **Mirá la página publicada después de tocarla.**
   Lo que sí quedó cubierto: que nombre las señales del gate (`mentionSignals`) y que enlace todos
   los documentos (`mustLinkAll`).
-- **Windows: tres cosas sin cubrir.** Rutas largas y nombres reservados (`CON`, `PRN`, >260
-  caracteres) no los prueba nadie; `core.autocrlf=true` deja los hooks de shell con CRLF y el bash
-  de git los rechaza con un mensaje que no menciona el problema (hoy la defensa es `.gitattributes`,
-  no un comando); y `bash.deny` describe comandos con sintaxis POSIX, así que en una sesión con
-  PowerShell las mismas acciones destructivas se escriben distinto y los patrones no las cazan.
-  Ver `docs/multiplataforma.md`.
+- **Windows: dos cosas sin cubrir.** Rutas largas y nombres reservados (`CON`, `PRN`, >260
+  caracteres) no los prueba nadie; y `bash.deny` describe comandos con sintaxis POSIX, así que en
+  una sesión con PowerShell las mismas acciones destructivas se escriben distinto y los patrones no
+  las cazan. Los finales de línea SÍ quedaron cubiertos: `.gitattributes` con `eol=lf` más un
+  `invariants` que falla si desaparece. Ver `docs/multiplataforma.md`.
 - **El nombre del check de CI cambió.** Al pasar el job `gate` a matriz, los checks pasan a
   llamarse `gate (ubuntu-latest)`, `gate (windows-latest)` y `gate (macos-latest)`: la protección
   de rama que exigía `gate` **hay que actualizarla a mano**, y hasta que eso pase la rama queda sin

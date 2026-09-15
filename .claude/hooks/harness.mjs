@@ -179,13 +179,33 @@ function rutaAbsoluta(input) {
   return path.isAbsolute(raw) ? raw : path.join(input?.cwd ?? REPO_ROOT, raw);
 }
 
+/**
+ * La ruta relativa a la raíz, con `/`, y con `../` adelante si cae FUERA.
+ *
+ * El `../` no es cosmético: es la única señal que los hooks miran para decidir «esto no es
+ * asunto de este repo». Y en Windows había un agujero — entre unidades distintas
+ * (`D:\a\repo` y el temporal en `C:\`), `path.relative` no puede escribir un camino relativo
+ * y devuelve la ruta ABSOLUTA, que no empieza con `..`. Resultado: todo lo de afuera pasaba
+ * por dentro, y `action-guard` bloqueaba escribir un borrador en el temporal. Lo encontró la
+ * matriz de CI en Windows, no una lectura del código.
+ *
+ * Toma raíz y plataforma como parámetros para que ese caso se pueda probar desde cualquier
+ * máquina.
+ */
+export function relativaDesdeRaiz(abs, root = REPO_ROOT, plataforma = process.platform) {
+  const p = plataforma === "win32" ? path.win32 : path.posix;
+  const rel = p.relative(root, abs);
+  if (!p.isAbsolute(rel)) return rel.split(/[\\/]/).join("/");
+  return `../${rel.split(/[\\/]/).filter(Boolean).join("/")}`;
+}
+
 /** Ruta del archivo que la herramienta va a tocar, relativa al repo y con `/`. */
 export function targetPath(input) {
   const abs = rutaAbsoluta(input);
   if (!abs) return "";
   // Dentro del repo → la ruta relativa. Fuera → una relativa con `..`, que es lo que los
   // hooks ya interpretan como «no es asunto de este repo».
-  return relativaAlRepo(abs) ?? path.relative(REPO_ROOT, abs).split(path.sep).join("/");
+  return relativaAlRepo(abs) ?? relativaDesdeRaiz(abs);
 }
 
 /**
