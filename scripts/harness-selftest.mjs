@@ -254,6 +254,14 @@ const patronesDelConfig = [
   ]),
   ...(config.singleSource ?? []).map((r) => [`singleSource.${r.id}.appliesTo`, r.appliesTo]),
   ...(config.sdd?.routes ?? []).flatMap((r) => (r.patterns ?? []).map((p) => [`sdd.${r.route}`, p])),
+  // Un patrón roto acá no rompe nada visible: el hook los compila en un try/catch para no
+  // arruinar el turno del usuario, así que el único lugar donde puede fallar es este.
+  ...(config.graph?.questionPatterns ?? []).map((p) => ["graph.questionPatterns", p]),
+  ...(config.askFirst?.questionPatterns ?? []).map((p) => ["askFirst.questionPatterns", p]),
+  ...(config.askFirst?.actionPatterns ?? []).map((p) => ["askFirst.actionPatterns", p]),
+  ...(config.askFirst?.pastPatterns ?? []).map((p) => ["askFirst.pastPatterns", p]),
+  ...(config.askFirst?.strongQuestionPatterns ?? []).map((p) => ["askFirst.strongQuestionPatterns", p]),
+  ...(config.askFirst?.directRequestPatterns ?? []).map((p) => ["askFirst.directRequestPatterns", p]),
   ["tests.filePattern", config.tests?.filePattern],
   ["tests.onlyPattern", config.tests?.onlyPattern],
   // Plantillas con marcador: se compilan con el marcador ya sustituido, que es como las
@@ -1089,6 +1097,31 @@ if (hookFiles.has("sdd-router.mjs")) {
   const trivial = runHook("sdd-router.mjs", { hook_event_name: "UserPromptSubmit", prompt: "gracias" });
   if (!trivial.stdout.trim()) ok("el router se calla en lo trivial (un hook que habla siempre deja de leerse)");
   else bad("el router se calla en lo trivial", `habló: ${trivial.stdout.trim()}`);
+}
+
+// 5b. El índice del código: el hook `graph-first` habla SÓLO si hay algo que consultar.
+//     Un hook que habla sin índice manda al agente a correr un comando que no existe, y con
+//     eso se gana que dejen de leerlo. El caso se escribe a mano porque depende de un
+//     artefacto DERIVADO (`graph.graphFile`), que puede estar o no estar en esta máquina.
+if (hookFiles.has("graph-first.mjs") && config.graph) {
+  const hayIndice = fs.existsSync(abs(config.graph.graphFile ?? ""));
+  const muestra = sampleFromPattern((config.graph.questionPatterns ?? [])[0] ?? "");
+  const r = runHook("graph-first.mjs", {
+    hook_event_name: "UserPromptSubmit",
+    prompt: muestra ? `${muestra} está el parser` : "dónde está el parser",
+  });
+  if (!hayIndice) {
+    if (!r.stdout.trim()) ok("graph-first se calla sin índice construido (`codegraph init` no corrió acá)");
+    else bad("graph-first se calla sin índice", `habló sin nada que consultar: ${r.stdout.trim().slice(0, 120)}`);
+  } else if (r.stdout.includes(config.graph.queryCommand?.split(" ")[0] ?? "")) {
+    ok("graph-first empuja al índice antes de abrir archivos");
+  } else {
+    bad("graph-first empuja al índice", `con índice construido no nombró el comando de consulta: ${r.stdout.trim().slice(0, 120) || "(vacío)"}`);
+  }
+  // Lo trivial no se rutea: vale para TODOS los hooks de UserPromptSubmit, no sólo el router.
+  const trivialGrafo = runHook("graph-first.mjs", { hook_event_name: "UserPromptSubmit", prompt: "gracias" });
+  if (!trivialGrafo.stdout.trim()) ok("graph-first se calla en lo trivial");
+  else bad("graph-first se calla en lo trivial", `habló: ${trivialGrafo.stdout.trim().slice(0, 120)}`);
 }
 
 // ── 6. Señales del gate, subagentes y comandos ──────────────────────────────

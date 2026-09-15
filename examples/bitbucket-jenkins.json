@@ -1,0 +1,253 @@
+{
+  "$comment": "Bitbucket + Jenkins sobre un monolito Java heredado: la combinación más común en empresa, y la que peor tolera el arnés mal puesto. Tres decisiones: (1) el `Jenkinsfile` corre UNA etapa `gate` — partirlo en una etapa por señal crea una segunda definición de entregable que envejece aparte del config; (2) `catchError` y `|| true` están prohibidos por invariante: son la forma local de que el rojo no llegue al merge; (3) el gate arranca con lo que hoy sale verde (que compile) y crece con `/lesson`, un freno por incidente. Ver docs/cicd.md.",
+  "gate": {
+    "command": "./gradlew gate",
+    "fastCommand": "./gradlew gate -Pfast",
+    "marker": ".git/gate-dirty",
+    "codeGlobs": [
+      "src/"
+    ],
+    "codeExtensions": [
+      ".java",
+      ".kt",
+      ".groovy"
+    ],
+    "installHooksCommand": "git config core.hooksPath .githooks",
+    "signals": [
+      {
+        "name": "self-test del arnés",
+        "command": [
+          "node",
+          "scripts/harness-selftest.mjs"
+        ],
+        "why": "un hook roto falla en silencio: ninguna otra señal lo ve"
+      },
+      {
+        "name": "lint de convenciones",
+        "command": [
+          "node",
+          "scripts/repo-lint.mjs"
+        ],
+        "why": "incluye el invariante del `Jenkinsfile`: que siga corriendo el gate y que nadie le ponga `catchError`"
+      },
+      {
+        "name": "compila",
+        "command": [
+          "./gradlew",
+          "compileJava"
+        ],
+        "why": "en un heredado sin tests, que compile es la ÚNICA señal honesta del día uno. Empezar acá es mejor que empezar con una suite que nadie corre"
+      },
+      {
+        "name": "tests que hoy pasan",
+        "command": [
+          "./gradlew",
+          "test"
+        ],
+        "why": "la suite que existe, corriendo de verdad. Los tests rotos heredados se arreglan o se borran: uno ignorado enseña que el rojo es normal"
+      },
+      {
+        "name": "artefactos en su lugar",
+        "command": [
+          "node",
+          "scripts/artifacts-check.mjs"
+        ],
+        "why": "el trabajo vive en Jira: un plan suelto en el repo parte el registro en dos"
+      },
+      {
+        "name": "índice del código (codegraph)",
+        "command": [
+          "codegraph",
+          "status"
+        ],
+        "skipIfMissing": ".codegraph",
+        "why": "ninguna otra señal mira CÓMO lee el agente: sin índice abre archivos de más y no ve las relaciones que el texto no muestra. OMITIDA mientras nadie corra `codegraph init`, y omitido no es verde"
+      }
+    ]
+  },
+  "protectedPaths": [
+    {
+      "pattern": "^\\.env",
+      "reason": ".env* es la llave del reino: lo edita el humano."
+    },
+    {
+      "pattern": "^\\.git/",
+      "reason": "historia de git: fuera del alcance del agente."
+    },
+    {
+      "pattern": "^\\.codegraph/",
+      "reason": "el índice es derivado: se reconstruye con `codegraph init`, no se edita."
+    },
+    {
+      "pattern": "^Jenkinsfile$",
+      "agentOnly": true,
+      "reason": "el Jenkinsfile es la definición de entregable del lado del servidor: se cambia a conciencia, en su propio PR."
+    },
+    {
+      "pattern": "^src/main/resources/application-(prod|prd)\\.(yml|properties)$",
+      "reason": "configuración de producción: la toca el humano, con el cambio a la vista."
+    },
+    {
+      "pattern": "^src/main/resources/db/migration/",
+      "reason": "una migración aplicada es inmutable: editarla deja la base de cada ambiente en un estado distinto. Se corrige con una migración nueva."
+    }
+  ],
+  "bash": {
+    "deny": [
+      {
+        "pattern": "--no-ver[i]fy",
+        "reason": "saltarse la verificación está prohibido: si el gate estorba, se arregla el gate."
+      },
+      {
+        "pattern": "git\\s+reset\\s+--hard",
+        "reason": "destruye trabajo sin commitear."
+      },
+      {
+        "pattern": "git\\s+push\\s+.*--force(?!-with-lease)",
+        "reason": "reescribe historia remota. Usá --force-with-lease y pedí confirmación."
+      },
+      {
+        "pattern": "\\./gradlew\\s+.*-x\\s+test\\b",
+        "reason": "saltear los tests en el build es la forma elegante de no tener tests: si molestan, se arreglan."
+      },
+      {
+        "pattern": "\\bmvn\\s+.*-DskipTests\\b",
+        "reason": "lo mismo con Maven: el build que no prueba nada sale verde siempre."
+      },
+      {
+        "pattern": "\\bflyway\\s+(clean|repair)\\b",
+        "reason": "`clean` vacía el esquema y `repair` reescribe el historial de migraciones: en un ambiente compartido no hay ctrl-Z."
+      }
+    ]
+  },
+  "lint": {
+    "command": [
+      "node",
+      "scripts/repo-lint.mjs"
+    ],
+    "fileFlag": "--file"
+  },
+  "purity": [
+    {
+      "dir": "src/main/java/com/empresa/dominio",
+      "forbiddenImports": [
+        "org.springframework",
+        "javax.servlet",
+        "jakarta.persistence"
+      ],
+      "importSyntax": [
+        "import\\s+{mod}"
+      ],
+      "reason": "la capa que concentra las reglas de negocio no conoce el framework: en un heredado es lo primero que se puede testear rápido, y por eso lo primero que se defiende."
+    }
+  ],
+  "forbiddenDeps": {
+    "manifest": "build.gradle",
+    "matcher": "['\"]{pkg}[:'\"]",
+    "packages": [
+      "commons-collections"
+    ],
+    "reason": "versión con CVE conocida y reemplazo directo en la biblioteca estándar. Sin `matcher`, la notación corta de Gradle sale VERDE con la dependencia prohibida puesta."
+  },
+  "invariants": [
+    {
+      "file": "Jenkinsfile",
+      "required": [
+        "./gradlew gate"
+      ],
+      "forbidden": [
+        "catchError",
+        "|| true"
+      ],
+      "reason": "CI corre EL MISMO gate. `catchError` y `|| true` son la forma local de que el rojo no llegue al merge — y son invisibles en el tablero de Jenkins, que sigue mostrando la bolita azul."
+    }
+  ],
+  "patterns": [
+    {
+      "id": "PRINTLN",
+      "pattern": "System\\.out\\.print",
+      "appliesTo": "^src/main/",
+      "message": "en un servicio, `System.out` no queda en ningún agregador de logs: el día del incidente no hay nada que leer. Usá el logger."
+    }
+  ],
+  "tests": {
+    "filePattern": "(^|/)src/test/|Test\\.java$",
+    "onlyPattern": "@Ignore|@Disabled"
+  },
+  "incidents": {
+    "file": "docs/gotchas.md",
+    "heading": "### GOTCHA",
+    "requiredLines": [
+      "Síntoma:",
+      "Causa:",
+      "Regla:",
+      "Mecanismo:"
+    ]
+  },
+  "docs": {
+    "ignore": [
+      ".git",
+      "build",
+      "target",
+      "out"
+    ],
+    "ignoreFiles": [],
+    "externalPaths": []
+  },
+  "status": {
+    "file": "STATUS.md"
+  },
+  "branches": {
+    "protected": [
+      "main",
+      "master"
+    ],
+    "reason": "en Bitbucket, además, hay que poner el *branch restriction* y el merge check que exige el build en verde: el hook local falla antes de la red, pero no reemplaza al servidor."
+  },
+  "tracker": {
+    "kind": "jira",
+    "issuePattern": "\\bCORE-[0-9]+\\b",
+    "issueExample": "CORE-1423 · Refs CORE-1423",
+    "newIssueHint": [
+      "Abrí el ítem en Jira y poné la clave (CORE-1423) en el mensaje del commit."
+    ],
+    "artifactsIn": "tracker",
+    "specsDir": "specs",
+    "allowedInRepo": [
+      "specs/README.md"
+    ]
+  },
+  "commitMsg": {
+    "codePattern": "^src/",
+    "ignoreExtensions": [
+      ".md",
+      ".png",
+      ".svg"
+    ],
+    "skipSubjects": [
+      "Merge ",
+      "Revert ",
+      "fixup! ",
+      "squash! "
+    ],
+    "escapeLine": "sin-issue:"
+  },
+  "graph": {
+    "$comment": "EL ÍNDICE DEL CÓDIGO. Activa el hook `graph-first` y la señal del gate. Herramienta por default: codegraph (https://github.com/colbymchenry/codegraph). Regla: primero el índice, después abrir archivos. Ver docs/codegraph.md.",
+    "tool": "codegraph",
+    "graphFile": ".codegraph/codegraph.db",
+    "queryCommand": "codegraph explore \"<pregunta>\"",
+    "panoramaCommand": "codegraph ui",
+    "statusCommand": "codegraph status",
+    "questionPatterns": [
+      "\\bd[oó]nde\\b",
+      "\\bqui[eé]n (llama|usa|importa|depende)",
+      "\\bc[oó]mo funciona\\b",
+      "\\bflujo\\b",
+      "\\bimpacto\\b",
+      "\\bacopl",
+      "\\barquitectura\\b",
+      "\\brefactor"
+    ]
+  }
+}

@@ -191,6 +191,8 @@ const COPIAR = [
   ".claude/commands/gate.md",
   ".claude/commands/lesson.md",
   ".claude/commands/harness-audit.md",
+  ".claude/commands/arquitectura.md",
+  ".claude/commands/indice.md",
   ".claude/skills/nuevo-freno/SKILL.md",
   "scripts/gate.sh",
   "scripts/repo-lint.mjs",
@@ -203,6 +205,14 @@ const COPIAR = [
   "docs/sdd.md",
   "docs/buenas-practicas.md",
   "docs/trazabilidad.md",
+  // Los tres métodos que VIAJAN (P14: viajan los principios, no las reglas ajenas): cómo se
+  // lee el código (el índice), cómo corre el pipeline y qué se exige del diseño. Los citan
+  // los comandos y los subagentes que se copian arriba.
+  "docs/codegraph.md",
+  "docs/cicd.md",
+  "docs/arquitectura.md",
+  "docs/agilidad.md",
+  "docs/multi-proyecto.md",
   ".githooks/pre-commit",
   ".githooks/commit-msg",
   ".githooks/pre-push",

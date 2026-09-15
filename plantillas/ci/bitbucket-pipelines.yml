@@ -1,0 +1,20 @@
+# Bitbucket Pipelines — corre EL MISMO gate que el humano y que el agente.
+#
+# La protección de la rama es un *branch restriction* del repositorio, y el
+# «merge check» que exige el build en verde se configura ahí, no en este archivo.
+image: node:20
+
+pipelines:
+  pull-requests:
+    '**':
+      - step:
+          name: gate
+          script:
+            # El stack del proyecto va acá arriba, antes del gate.
+            - bash scripts/gate.sh
+  branches:
+    main:
+      - step:
+          name: gate
+          script:
+            - bash scripts/gate.sh

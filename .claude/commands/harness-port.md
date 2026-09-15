@@ -21,9 +21,18 @@ Seguí `docs/portar.md`. Resumen ejecutable:
    - qué registro es fuente única de verdad → `singleSource`
    - qué archivo tiene invariantes que no se tocan → `invariants`
    - qué dependencias están vetadas → `forbiddenDeps`
-5. `cd $ARGUMENTS && npm run selftest && npm run gate` (o el equivalente del stack). Verde o no
+5. **Índice del código** (`docs/codegraph.md`) — mostrale al humano los comandos y pedile
+   confirmación: `codegraph install` y `codegraph init` en el repo destino. `.codegraph/` al
+   `.gitignore`. La clave `graph` ya viaja en la plantilla; sin el índice construido, la señal del
+   gate sale OMITIDA — que es el recordatorio, no un error.
+6. **CI/CD** (`docs/cicd.md`) — el workflow del repo destino corre **el mismo** `gate.command`.
+   Si hoy corre otra cosa, ese es el primer arreglo: dos definiciones de entregable significan
+   ninguna. Dejá el invariante sobre el archivo del workflow para que un comando lo verifique.
+7. `cd $ARGUMENTS && npm run selftest && npm run gate` (o el equivalente del stack). Verde o no
    está portado.
-6. Escribí allá su `CONSTITUTION.md` y su `STATUS.md` desde `plantillas/`, con los principios que
-   **ese** proyecto puede hacer cumplir hoy. Un principio BLOCKING sin comando es REVIEW.
+8. Escribí allá su `CONSTITUTION.md` y su `STATUS.md` desde `plantillas/`, con los principios que
+   **ese** proyecto puede hacer cumplir hoy. Un principio BLOCKING sin comando es REVIEW. Los
+   principios ágiles con mecanismo están en `docs/agilidad.md`: copiá los que ese equipo pueda
+   sostener, y declará como REVIEW los demás.
 
 Al cerrar, informá qué quedó vivo, qué quedó como deuda declarada y el nivel de madurez alcanzado.

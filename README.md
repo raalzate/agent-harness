@@ -72,9 +72,11 @@ Maven, Gradle, Python, Go, Rust): qué extensión es código, cómo se escribe u
 las dependencias, qué directorios son derivados. Reglas y señales del gate **no** viajan: ver
 [docs/perfiles.md](docs/perfiles.md).
 
-Además, en el repo del arnés: `examples/` con **20 configs completas** (Node, React, Android/Kotlin,
+Además, en el repo del arnés: `examples/` con **24 configs completas** (Node, React, Android/Kotlin,
 iOS/Swift, .NET, Spring, Python, Go, Rust, Rails, Laravel, Elixir/Phoenix, C++/CMake, firmware en C,
-Unity, datos con Airflow y dbt, monorepo, Terraform, un repo heredado sin tests, y el quick start)
+Unity, datos con Airflow y dbt, monorepo, Terraform, un repo heredado sin tests, el quick start, y
+cuatro por integración: Azure DevOps, GitLab+monorepo, GitHub en una plataforma de varios repos y
+Bitbucket+Jenkins), `plantillas/ci/` con el pipeline de cada forja,
 y `scripts/harness-bench.mjs`, que instala el arnés en un repo de
 juguete de cada stack y verifica que los frenos muerdan ahí.
 
