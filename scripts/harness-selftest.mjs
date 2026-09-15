@@ -874,8 +874,26 @@ const huerfanasDe = (cfg) => {
 
     const rutaCodigo = sampleFromPattern(config.commitMsg?.codePattern ?? "");
     const prefijo = rutaCodigo ? (rutaCodigo.endsWith("/") ? rutaCodigo : `${rutaCodigo}/`) : null;
+    // Un patrón de tests es casi siempre una ALTERNATIVA de layouts (`tests/` o `*.spec.ts` o …),
+    // y la muestra sale con los `|` adentro: en macOS y Linux eso es un nombre de archivo legal y
+    // el caso pasaba; en Windows `mkdir` explota con ENOENT y el error no menciona el `|`. Se toma
+    // la PRIMERA alternativa y se revalida contra el patrón — y si no queda una ruta escribible en
+    // las tres plataformas, el caso se reporta omitido antes que mentir.
     const patronTest = reglasXp.testFirst?.testPattern ?? config.tests?.filePattern;
-    const muestraTest = patronTest ? sampleFromPattern(patronTest) : null;
+    const muestraTest = (() => {
+      const cruda = patronTest ? sampleFromPattern(patronTest) : null;
+      if (!cruda) return null;
+      for (const candidata of [cruda, ...cruda.split("|")]) {
+        const limpia = candidata.trim();
+        if (!limpia || /[|<>:"?*\\]/.test(limpia)) continue;
+        try {
+          if (new RegExp(patronTest).test(limpia)) return limpia;
+        } catch {
+          return null;
+        }
+      }
+      return null;
+    })();
     const archivoTest = muestraTest ? (muestraTest.endsWith("/") ? `${muestraTest}caso.mjs` : muestraTest) : null;
 
     if (!prefijo || !archivoTest) {
