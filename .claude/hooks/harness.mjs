@@ -140,10 +140,21 @@ export function allow(message) {
 export const segmentosDeRuta = (abs, plataforma = process.platform) =>
   plataforma === "win32" ? abs.split(/[\\/]/) : abs.split(path.sep);
 
+/**
+ * ¿Es la unidad pelada de Windows (`C:`, `d:`)?
+ *
+ * Importa porque `C:` NO significa «la raíz de C:»: significa «el directorio actual de la
+ * unidad C:». Al subir prefijos, ese trozo resolvía al `cwd` del proceso —el propio repo— y
+ * entonces CUALQUIER ruta de esa unidad se veía como interna: escribir en el temporal quedaba
+ * bloqueado. La raíz de verdad es `C:\\`, con barra.
+ */
+export const esUnidadPelada = (p) => /^[A-Za-z]:$/.test(p);
+
 function relativaAlRepo(abs) {
   const partes = segmentosDeRuta(abs);
   for (let i = partes.length; i > 0; i -= 1) {
     const prefijo = partes.slice(0, i).join(path.sep) || path.sep;
+    if (esUnidadPelada(prefijo)) continue;
     let real;
     try {
       real = fs.realpathSync(prefijo);

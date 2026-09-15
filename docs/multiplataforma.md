@@ -32,6 +32,7 @@ El único punto que pide algo instalado es el de los hooks de git, y ese algo vi
 | Exigir el bit de ejecución | NTFS no lo tiene: **rojo que nadie puede arreglar**, y un rojo así enseña a ignorar la señal | el self-test omite ese caso en Windows, con motivo |
 | `hooks:install` con `&&` y comillas simples | `cmd.exe` no interpreta comillas simples: el comando que instala los frenos era el que no corría | es `scripts/hooks-install.mjs` |
 | Lo de **fuera** del repo se veía como dentro | entre unidades distintas (`D:\a\repo` y el temporal en `C:\`) `path.relative` devuelve la ruta ABSOLUTA, que no empieza con `..`: `action-guard` bloqueaba escribir un borrador en el temporal | `relativaDesdeRaiz` marca lo de afuera con `../`, con casos del self-test para las dos unidades y para POSIX |
+| `C:` pelado tratado como raíz de la unidad | `C:` significa «el directorio actual de esa unidad»: al subir prefijos resolvía al `cwd` —el propio repo— y **cualquier** ruta de esa unidad se veía como interna | `esUnidadPelada` lo saltea al normalizar la raíz, con su caso |
 | Finales de línea en CRLF | el bash de git rechaza los hooks con `$'\r': command not found` —un error que no nombra el problema— y el banco deja de reconocer los bloques del quick start | `.gitattributes` con `eol=lf`, sostenido por un `invariants` del config; además el banco normaliza CRLF al leer el documento |
 
 Cada fila es la misma historia: **el freno no fallaba, desaparecía**. Por eso ninguna se cierra con
@@ -44,8 +45,9 @@ un párrafo — todas tienen un caso del self-test o una corrida de CI detrás.
 `fail-fast: false` para que una plataforma rota no esconda a las otras dos.
 
 Es la única prueba honesta: el comando que demuestra que el gate corre allá es el gate. Y sirvió
-en su primera corrida — encontró **dos** fallas que ninguna lectura del código había encontrado:
-lo de afuera del repo viéndose como dentro entre unidades, y el quick start ilegible en CRLF.
+en su primera corrida — encontró **tres** fallas que ninguna lectura del código había encontrado: lo de afuera del repo
+viéndose como dentro entre unidades, `C:` pelado resolviendo al directorio actual (y con eso toda
+la unidad pareciendo interna), y el quick start ilegible en CRLF.
 
 > Si tu forja no tiene agentes de Windows, decilo en el estado del repo como deuda declarada.
 > Deuda declarada se administra; la suposición se descubre el día que entra alguien con Windows.

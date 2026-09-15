@@ -29,7 +29,7 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 // El mismo helper que usan el hook y el lint: comparar contra la lista DECLARADA dejaba pasar
 // justo el caso del incidente (el gate declara una extensión que el default agnóstico no tiene).
-import { codeExtensions, depsMatcher, importSyntax, segmentosDeRuta, relativaDesdeRaiz } from "../.claude/hooks/harness.mjs";
+import { codeExtensions, depsMatcher, importSyntax, segmentosDeRuta, relativaDesdeRaiz, esUnidadPelada } from "../.claude/hooks/harness.mjs";
 
 const REPO_ROOT = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
 const abs = (p) => path.join(REPO_ROOT, p);
@@ -692,6 +692,14 @@ const huerfanasDe = (cfg) => {
     ["D:\\a\\repo", "D:\\a\\repo\\src\\x.ts", "win32"],
     ["/repo", "/repo/src/x.ts", "posix"],
   ];
+  // `C:` pelado no es la raíz de la unidad: es el DIRECTORIO ACTUAL de esa unidad. Al subir
+  // prefijos resolvía al cwd —el propio repo— y con eso cualquier ruta de esa unidad se veía
+  // como interna. La raíz de verdad lleva barra.
+  const unidades = [["C:", true], ["d:", true], ["C:\\", false], ["/", false], ["C:\\repo", false]];
+  const malasUnidades = unidades.filter(([p, esperado]) => esUnidadPelada(p) !== esperado);
+  if (!malasUnidades.length) ok("`C:` pelado no se confunde con la raíz de la unidad");
+  else bad("`C:` pelado no se confunde con la raíz", malasUnidades.map(([p]) => p).join(" · "));
+
   const malosAfuera = afuera.filter(([root, ruta, so]) => !relativaDesdeRaiz(ruta, root, so).startsWith(".."));
   const malosAdentro = adentro.filter(([root, ruta, so]) => relativaDesdeRaiz(ruta, root, so).startsWith(".."));
   if (!malosAfuera.length && !malosAdentro.length)
