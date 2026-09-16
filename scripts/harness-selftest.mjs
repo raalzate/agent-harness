@@ -1842,7 +1842,14 @@ section("9. costo del arnés (hooks-timing)");
       return ruta;
     };
     const correr = (ruta) => spawnSync("node", [script, "--config", ruta], { cwd: REPO_ROOT, encoding: "utf8" });
-    const probe = config.observability?.probe;
+    // El probe de los cebos NO puede salir sólo del config: un repo que todavía no lo declaró
+    // (la plantilla viaja con él vacío a propósito) hacía que la medición saliera OMITIDA y los
+    // tres casos de abajo midieran nada creyendo que medían. Lo cazó el banco en el repo del
+    // quick start. Para el cebo alcanza CUALQUIER archivo que exista: lo que se prueba es el
+    // veredicto contra el presupuesto, no el camino caro.
+    const probe = config.observability?.probe?.filePath
+      ? config.observability.probe
+      : { filePath: [...hookFiles].map((f) => `.claude/hooks/${f}`).find((f) => fs.existsSync(abs(f))) ?? ".claude/hooks/harness.mjs" };
 
     // ¿MUERDE? Presupuesto imposible: ningún proceso de node arranca en 0 ms.
     const imposible = correr(escribirCebo("imposible.json", { budgetMs: 0, runs: 1, probe }));
@@ -1881,7 +1888,67 @@ section("9. costo del arnés (hooks-timing)");
       ok("medir no deja marcadores de sesión fabricados (el estado se restaura)");
     else bad("medir no cambia el estado de la sesión", `marcadores antes=${antes} después=${despues}`);
 
+    // Un equipo que sólo quiere acotar el hook caro declara `budgets` y ningún `budgetMs`. Con el
+    // 0 de default, TODOS los demás hooks salían rojos contra un presupuesto imposible: el freno
+    // mordía trabajo legítimo (P3), que es como se desactivan los frenos que sí servían.
+    const soloBudgets = correr(
+      escribirCebo("solo-budgets.json", { runs: 1, budgets: { ".claude/hooks/post-edit-check.mjs": 60000 }, probe }),
+    );
+    if (soloBudgets.status === 0 && /OMITIDO: sin presupuesto declarado/.test(soloBudgets.stdout ?? ""))
+      ok("con `budgets` y sin `budgetMs`, los hooks sin presupuesto propio salen OMITIDOS (no rojos)");
+    else
+      bad(
+        "presupuesto ausente no es presupuesto 0",
+        `esperaba exit 0 y hooks OMITIDOS, dio exit ${soloBudgets.status}`,
+      );
+
+    // Sin archivo de prueba declarado no hay medición honesta: el hook que corre el lint del
+    // archivo tocado toma el atajo con cualquier archivo que no sea código y se mide el camino
+    // barato. La plantilla viaja con esto VACÍO, así que este caso es el que la sostiene.
+    const sinProbe = correr(escribirCebo("sin-probe.json", { budgetMs: 60000, runs: 1 }));
+    if (sinProbe.status === 0 && /OMITIDA/.test(sinProbe.stdout ?? ""))
+      ok("sin `probe.filePath`, la medición sale OMITIDA en vez de medir el camino barato");
+    else bad("sin `probe.filePath` la medición se omite", `esperaba exit 0 y «OMITIDA», dio exit ${sinProbe.status}`);
+
+    // Un hook que revienta al arrancar mide rapidísimo: sin esta comprobación, «barato» y «roto»
+    // se ven igual y los dos en verde.
+    {
+      const hookRoto = path.join(tmp, "hook-roto.mjs");
+      fs.writeFileSync(hookRoto, 'process.stderr.write("reventé\\n");\nprocess.exit(1);\n');
+      const settingsCebo = path.join(tmp, "settings-roto.json");
+      fs.writeFileSync(
+        settingsCebo,
+        JSON.stringify({ hooks: { PreToolUse: [{ matcher: "Write", hooks: [{ type: "command", command: `node ${hookRoto}` }] }] } }),
+      );
+      const cfg = escribirCebo("hook-roto.json", { budgetMs: 60000, runs: 1, probe });
+      const r = spawnSync("node", [script, "--config", cfg, "--settings", settingsCebo], { cwd: REPO_ROOT, encoding: "utf8" });
+      if (r.status === 1 && /MEDICIÓN EN ROJO/.test(r.stderr ?? "")) ok("un hook que no respeta el contrato de exit codes pone la medición en ROJO (barato ≠ roto)");
+      else bad("un hook roto no puede medir verde", `esperaba exit 1 y «MEDICIÓN EN ROJO», dio exit ${r.status}`);
+    }
+
     fs.rmSync(tmp, { recursive: true, force: true });
+  }
+
+  // El incidente: el `probe` con un archivo cualquiera medía el camino BARATO de post-edit-check
+  // (72 ms en vez de 144) y la señal salía verde midiendo lo que no cuesta. Quedó registrado en
+  // prosa en tres lugares y en ninguno como mecanismo: el día que alguien cambie `probe.filePath`,
+  // la señal se vuelve decorativa SIN ponerse roja, que es el peor modo de falla de este repo (P13).
+  {
+    const fp = config.observability?.probe?.filePath;
+    const exts = codeExtensions(config.gate?.codeExtensions);
+    const globs = config.gate?.codeGlobs ?? [];
+    const bajoGlob = (p) => !globs.length || globs.some((g) => p === g || p.startsWith(g.endsWith("/") ? g : `${g}/`));
+    if (!fp) {
+      skip("el archivo de prueba de la medición es código", "este repo no declara `observability.probe.filePath`");
+    } else if (!fs.existsSync(abs(fp))) {
+      bad("el archivo de prueba de la medición existe", `\`${fp}\` no existe: se mide un archivo que no está`);
+    } else if (!exts.some((e) => fp.toLowerCase().endsWith(e.toLowerCase()))) {
+      bad("el archivo de prueba de la medición es código", `\`${fp}\`: su extensión no está en \`gate.codeExtensions\`, así que el hook que lintea toma el atajo y se mide el camino barato`);
+    } else if (!bajoGlob(fp)) {
+      bad("el archivo de prueba de la medición es código", `\`${fp}\` está fuera de \`gate.codeGlobs\`: el hook que lintea toma el atajo y se mide el camino barato`);
+    } else {
+      ok(`el archivo de prueba de la medición (\`${fp}\`) es código para este config: se mide el peor caso`);
+    }
   }
 
   // La señal sólo vale si el gate la corre: un script de medición que nadie invoca es una
@@ -1891,7 +1958,10 @@ section("9. costo del arnés (hooks-timing)");
   );
   // Sólo se exige en un repo que DECLARÓ presupuesto: sin `observability`, el script es un
   // no-op y pedirle una señal del gate sería inventarle una regla al repo portado (P14).
-  const declaraPresupuesto = config.observability?.budgetMs !== undefined || Object.keys(config.observability?.budgets ?? {}).length > 1;
+  // Las claves `$…` de `budgets` son comentarios del config, no presupuestos: contarlas hacía
+  // que un repo con sólo un `$comment` pareciera tener reglas declaradas.
+  const presupuestosPropios = Object.keys(config.observability?.budgets ?? {}).filter((k) => !k.startsWith("$"));
+  const declaraPresupuesto = config.observability?.budgetMs !== undefined || presupuestosPropios.length > 0;
   if (!declaraPresupuesto) skip("la medición de latencia es una señal del gate", "este repo no declara `observability`: el script no mide nada");
   else if (enGate) ok("la medición de latencia es una señal del gate (alguien la corre)");
   else bad("la medición de latencia está en el gate", "hay presupuesto declarado y ninguna señal lo corre: métrica que nadie mira");

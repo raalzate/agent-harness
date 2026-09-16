@@ -681,7 +681,12 @@
       "command": "git status",
       "prompt": "¿cómo está el arnés?"
     },
-    "reason": "un hook que tarda se paga en CADA turno; el presupuesto es lo que convierte «esto va a ser lento» en un comando que falla."
+    "reason": "un hook que tarda se paga en CADA turno; el presupuesto es lo que convierte «esto va a ser lento» en un comando que falla.",
+    "$stateFiles": "Los archivos de ESTADO que un hook puede escribir al correr. Medir corre los hooks de verdad, así que se toman antes y se restauran después: un marcador fabricado por la medición bloquea el turno siguiente y nadie entiende por qué. Se declara en vez de deducirse de `gate.marker` + `askFirst.marker` porque deducirlo dejaba la prueba CIEGA al día en que entre un tercer hook con marcador propio.",
+    "stateFiles": [
+      ".git/gate-dirty",
+      ".git/agent-answer-first"
+    ]
   },
   "install": {
     "$comment": "Qué clave del config ACTIVA cada freno que el instalador copia. Un freno copiado sin su clave queda «instalado y muerto» en el repo destino — el anti-patrón que este arnés existe para evitar, cometido por el propio instalador: viajaron `ask-first`, `action-guard` y `pre-push` con la plantilla sin `askFirst` ni `branches`. El self-test verifica la plantilla contra esta tabla.",

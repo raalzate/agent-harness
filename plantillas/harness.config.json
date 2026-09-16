@@ -395,11 +395,13 @@
     "runs": 3,
     "budgets": {},
     "probe": {
-      "filePath": "src/index.js",
+      "$comment": "VACÍO A PROPÓSITO. `filePath` tiene que ser un archivo que ESTE repo considere código (`gate.codeExtensions` + `gate.codeGlobs`): con cualquier otro, el hook que corre el lint del archivo tocado toma el atajo y la medición reporta el camino barato —el que no cuesta nada— en VERDE. Ningún perfil de stack lo puede traer: es layout del equipo, no del lenguaje. Mientras esté vacío, la medición se reporta OMITIDA, y omitido no es verde.",
+      "filePath": "",
       "command": "git status",
       "prompt": "¿cómo está el arnés?"
     },
-    "reason": "un hook que tarda se paga en CADA turno; el presupuesto convierte «esto va a ser lento» en un comando que falla."
+    "reason": "un hook que tarda se paga en CADA turno; el presupuesto convierte «esto va a ser lento» en un comando que falla.",
+    "$stateFiles": "Opcional: los archivos de estado que un hook escribe al correr y que la medición restaura. Sin declararlos se usan `gate.marker` y `askFirst.marker`."
   },
   "commitMsg": {
     "$comment": "Qué commits piden registro. La documentación no: ES el registro, no el cambio. `escapeLine` exige motivo — un `sin-issue:` pelado sería la misma omisión con otro nombre.",

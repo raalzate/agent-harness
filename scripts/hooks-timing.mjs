@@ -67,7 +67,11 @@ const obs = config.observability ?? {};
 // self-test), y el atajo del || lo confundía con «no declarado» — la medición salía verde
 // justo en el caso donde tenía que morder. El freno se apagaba solo en su propia prueba.
 const PRESUPUESTO_BASE = obs.budgetMs === undefined ? null : Number(obs.budgetMs);
-const PRESUPUESTOS = obs.budgets ?? {};
+// Las claves `$…` son comentarios del propio config, no hooks. Contarlas como presupuestos
+// hacía que un repo con SÓLO un `$comment` pareciera tener reglas declaradas.
+const PRESUPUESTOS = Object.fromEntries(
+  Object.entries(obs.budgets ?? {}).filter(([k]) => !k.startsWith("$")),
+);
 if (PRESUPUESTO_BASE === null && !Object.keys(PRESUPUESTOS).length) {
   console.log("hooks-timing: este repo no declara `observability.budgetMs` — sin presupuesto, no hay veredicto.");
   process.exit(0);
@@ -76,9 +80,36 @@ if (PRESUPUESTO_BASE === null && !Object.keys(PRESUPUESTOS).length) {
 const CORRIDAS = Math.max(1, Number(obs.runs) || 3);
 const probe = obs.probe ?? {};
 
+// Sin un archivo de prueba declarado no se puede medir el peor caso: el hook que corre el lint
+// del archivo tocado toma el atajo con cualquier archivo que no sea código, y la medición
+// reporta el camino barato — el que no cuesta nada. Eso es peor que no medir, porque sale
+// VERDE. La plantilla viaja con esto vacío a propósito: sólo el equipo del repo destino sabe
+// cuál es un archivo de código suyo.
+if (!probe.filePath) {
+  console.log(
+    "hooks-timing: OMITIDA — falta `observability.probe.filePath` (omitido no es verde).\n" +
+      "Declaralo con un archivo que ESTE repo considere código (`gate.codeExtensions` +\n" +
+      "`gate.codeGlobs`): con cualquier otro, el hook que lintea toma el atajo y se mide el\n" +
+      "camino barato.",
+  );
+  process.exit(0);
+}
+
 /** El presupuesto de un hook: el suyo si lo declara, el base si no. */
-const presupuestoDe = (archivo) =>
-  PRESUPUESTOS[archivo] === undefined ? (PRESUPUESTO_BASE ?? 0) : Number(PRESUPUESTOS[archivo]);
+/**
+ * El presupuesto de un hook: el suyo si lo declara, el base si hay base, y `null` si no hay
+ * ninguno de los dos.
+ *
+ * `null` y no 0: un repo que sólo quiere acotar el hook caro declara `budgets` y ningún
+ * `budgetMs`, y con el 0 de default TODOS los demás hooks salían rojos contra un presupuesto
+ * imposible — 9 de 10 en este repo. Un freno que muerde trabajo legítimo se desactiva a mano
+ * en una semana y se lleva puestos a los que servían (P3). Sin presupuesto no hay veredicto:
+ * el hook se mide y se reporta OMITIDO.
+ */
+const presupuestoDe = (archivo) => {
+  if (PRESUPUESTOS[archivo] !== undefined) return Number(PRESUPUESTOS[archivo]);
+  return PRESUPUESTO_BASE;
+};
 
 // ── Qué se mide ──────────────────────────────────────────────────────────────
 
@@ -130,8 +161,13 @@ function payload({ evento, matcher }) {
  *
  * Salen del config, no de una lista cableada: son las mismas claves que los hooks usan.
  */
-const archivosDeEstado = () =>
-  [config.gate?.marker, config.askFirst?.marker].filter(Boolean).map((p) => abs(p));
+const archivosDeEstado = () => {
+  const declarados = obs.stateFiles;
+  const lista = Array.isArray(declarados) && declarados.length
+    ? declarados
+    : [config.gate?.marker, config.askFirst?.marker];
+  return lista.filter(Boolean).map((p) => abs(p));
+};
 
 function tomarEstado() {
   return archivosDeEstado().map((f) => ({
@@ -152,6 +188,9 @@ function restaurarEstado(snapshot) {
   }
 }
 
+/** La ruta del hook: relativa al repo, o absoluta tal cual (los cebos viven en el temporal). */
+const rutaDeHook = (file) => (path.isAbsolute(file) ? file : abs(file));
+
 /** La mediana de N corridas: la media la arruina el arranque frío, el máximo cualquier hipo del SO. */
 const mediana = (xs) => {
   const s = [...xs].sort((a, b) => a - b);
@@ -162,12 +201,19 @@ const mediana = (xs) => {
 function medir(hook) {
   const entrada = JSON.stringify(payload(hook));
   const muestras = [];
+  let roto = null;
   for (let i = 0; i < CORRIDAS; i += 1) {
     const t0 = process.hrtime.bigint();
-    spawnSync("node", [abs(hook.file)], { input: entrada, encoding: "utf8" });
+    const r = spawnSync("node", [rutaDeHook(hook.file)], { input: entrada, encoding: "utf8" });
     muestras.push(Number(process.hrtime.bigint() - t0) / 1e6);
+    // Contrato de los hooks: 0 = seguir, 2 = bloquear. Cualquier otra cosa es un hook que
+    // reventó al arrancar — y un hook roto mide rapidísimo, así que sin esta comprobación
+    // "barato" y "roto" se ven exactamente igual, los dos en verde.
+    if (r.status !== 0 && r.status !== 2) {
+      roto = `exit ${r.status}: ${(r.stderr ?? "").trim().split("\n")[0] || "sin mensaje"}`;
+    }
   }
-  return { muestras, ms: Math.round(mediana(muestras)) };
+  return { muestras, roto, ms: Math.round(mediana(muestras)) };
 }
 
 // ── --rules: qué está activo y de dónde sale ─────────────────────────────────
@@ -177,8 +223,9 @@ if (tiene("--rules")) {
   console.log(`  base:     ${PRESUPUESTO_BASE === null ? "(sin base)" : PRESUPUESTO_BASE} ms por hook`);
   console.log(`  corridas: ${CORRIDAS} (se reporta la mediana)`);
   for (const h of hooksDeclarados()) {
-    const propio = PRESUPUESTOS[h.file] ? " (propio)" : "";
-    console.log(`  ${h.evento.padEnd(16)} ${h.file.padEnd(38)} ${String(presupuestoDe(h.file)).padStart(5)} ms${propio}`);
+    const propio = PRESUPUESTOS[h.file] !== undefined ? " (propio)" : "";
+    const p = presupuestoDe(h.file);
+    console.log(`  ${h.evento.padEnd(16)} ${h.file.padEnd(38)} ${String(p === null ? "—" : p).padStart(5)} ms${propio}`);
   }
   if (obs.reason) console.log(`\nMotivo: ${obs.reason}`);
   process.exit(0);
@@ -195,12 +242,15 @@ if (!hooks.length) {
 const snapshot = tomarEstado();
 const filas = [];
 for (const h of hooks) {
-  if (h.tipo !== "script" || !fs.existsSync(abs(h.file))) {
+  if (h.tipo !== "script" || !fs.existsSync(rutaDeHook(h.file))) {
     filas.push({ ...h, omitido: "no es un script de este repo (no se puede medir su costo acá)" });
     continue;
   }
-  const { ms, muestras } = medir(h);
-  filas.push({ ...h, ms, muestras, presupuesto: presupuestoDe(h.file) });
+  const presupuesto = presupuestoDe(h.file);
+  const { ms, muestras, roto } = medir(h);
+  if (roto) filas.push({ ...h, ms, muestras, presupuesto, roto });
+  else if (presupuesto === null) filas.push({ ...h, ms, muestras, omitido: `sin presupuesto declarado — midió ${ms} ms` });
+  else filas.push({ ...h, ms, muestras, presupuesto });
 }
 restaurarEstado(snapshot);
 
@@ -208,13 +258,18 @@ if (tiene("--json")) {
   console.log(JSON.stringify({ runs: CORRIDAS, rows: filas }, null, 2));
 }
 
-const excedidos = filas.filter((f) => !f.omitido && f.ms > f.presupuesto);
+const excedidos = filas.filter((f) => !f.omitido && !f.roto && f.ms > f.presupuesto);
+const rotos = filas.filter((f) => f.roto);
 
 if (!tiene("--json")) {
   console.log(`Latencia de los hooks (mediana de ${CORRIDAS} corridas)\n`);
   for (const f of filas) {
     if (f.omitido) {
       console.log(`  – ${f.etiqueta} — OMITIDO: ${f.omitido}`);
+      continue;
+    }
+    if (f.roto) {
+      console.log(`  ✗ ${f.evento.padEnd(16)} ${f.file.padEnd(38)} ROTO — ${f.roto}`);
       continue;
     }
     const marca = f.ms > f.presupuesto ? "✗" : "✓";
@@ -225,9 +280,18 @@ if (!tiene("--json")) {
   // agente en un turno completo, que es la suma de los hooks del mismo evento.
   console.log("\nCosto por evento (lo que el arnés agrega a un turno):");
   for (const evento of [...new Set(filas.map((f) => f.evento))]) {
-    const total = filas.filter((f) => f.evento === evento && !f.omitido).reduce((a, f) => a + f.ms, 0);
+    const total = filas.filter((f) => f.evento === evento && f.ms !== undefined).reduce((a, f) => a + f.ms, 0);
     console.log(`  ${evento.padEnd(16)} ${String(total).padStart(5)} ms`);
   }
+}
+
+if (rotos.length) {
+  console.error(
+    `\nMEDICIÓN EN ROJO — ${rotos.length} hook(s) no respetan el contrato de exit codes: ` +
+      `${rotos.map((f) => f.file).join(", ")}`,
+  );
+  console.error("Un hook que revienta al arrancar mide rapidísimo y parecería el más barato de todos.");
+  process.exit(1);
 }
 
 if (excedidos.length) {

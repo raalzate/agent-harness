@@ -508,10 +508,11 @@ gate.
 
 | Clave | Qué hace |
 |---|---|
-| `budgetMs` | el presupuesto base por hook, en milisegundos. Sin esta clave (y sin `budgets`) la medición **deja pasar**: un repo portado no se pone rojo por una señal que su equipo no eligió |
+| `budgetMs` | el presupuesto base por hook, en milisegundos. Sin esta clave (y sin `budgets`) la medición **deja pasar**: un repo portado no se pone rojo por una señal que su equipo no eligió. Un hook sin presupuesto base **ni** propio se reporta **OMITIDO**, nunca contra un presupuesto de 0 ms — así el equipo que sólo quiere acotar el hook caro declara `budgets` y nada más |
 | `runs` | cuántas veces se corre cada hook. Se reporta la **mediana**: la media la arruina un arranque frío de node, el máximo cualquier hipo del sistema operativo |
 | `budgets` | presupuesto propio por hook. Es donde se ve el **precio de las excepciones de `purity`**: los dos hooks con permiso de lanzar procesos son los dos que necesitan más presupuesto, y eso queda escrito |
-| `probe` | el payload sintético con el que se mide. `filePath` tiene que ser **código** para este repo (`gate.codeExtensions` + `gate.codeGlobs`): con un archivo cualquiera, `post-edit-check` toma el atajo y la medición reporta el camino barato, justo el que no cuesta nada |
+| `probe` | el payload sintético con el que se mide. `filePath` tiene que ser **código** para este repo (`gate.codeExtensions` + `gate.codeGlobs`): con un archivo cualquiera, `post-edit-check` toma el atajo y la medición reporta el camino barato, justo el que no cuesta nada. Sin `filePath` declarado la señal entera sale **OMITIDA** en vez de medir barato, y la plantilla viaja con él vacío: ningún perfil de stack lo puede traer, es layout del equipo |
+| `stateFiles` | opcional: los archivos de estado que un hook escribe al correr (los marcadores del gate y de `ask-first`). Se toman antes y se restauran después — medir no puede cambiar el estado que mide. Se declara en vez de deducirse para que la prueba **no quede ciega** el día que entre un tercer hook con marcador propio |
 
 Ninguna clave nombra un hook: la lista sale de `.claude/settings.json`, la misma fuente única que
 usa la regla `EVENTOS` del lint. Medir corre los hooks **de verdad**, así que los marcadores de
@@ -521,6 +522,8 @@ marcador fabricado por la medición bloquea el turno siguiente y nadie entiende 
 Los números son holgados a propósito. Lo que esto caza no son milisegundos: es el orden de
 magnitud, el día que alguien meta un typecheck completo dentro de un hook. Un rojo falso en un
 runner de CI cargado enseña a ignorar la señal entera, que es peor que no tenerla.
+
+Un hook que no respeta el contrato de exit codes (0 seguir, 2 bloquear) pone la medición en **rojo**: un hook que revienta al arrancar mide rapidísimo, y sin esa comprobación «barato» y «roto» se ven igual, los dos en verde.
 
 **Lo que no mide:** el costo en **tokens** del texto que un hook inyecta al contexto. También es
 costo y todavía no tiene comando; está declarado como deuda en `STATUS.md`.
