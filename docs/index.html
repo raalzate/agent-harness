@@ -163,6 +163,17 @@ h1 .sub { display: block; font-family: var(--f-mono); font-weight: 500; font-siz
 .term-tabs button[data-v="verde"][aria-selected="true"] { color: #5cc47c; }
 .term-tabs button[data-v="rojo"][aria-selected="true"] { color: #ef8a80; }
 .term-tabs button[data-v="omitida"][aria-selected="true"] { color: #d3ae5e; }
+.term-tabs button[data-v="sin"][aria-selected="true"] { color: #ef8a80; }
+.term-tabs button[data-v="con"][aria-selected="true"] { color: #5cc47c; }
+/* Selector de escenario: la pregunta es «¿qué estaba intentando el agente?», y la
+   respuesta es un caso concreto. Chips, no un <select>: se ven los cinco de una. */
+.term-pick { display: flex; flex-wrap: wrap; gap: .35rem; padding: .75rem .9rem .8rem; border-bottom: 1px solid var(--term-rule); }
+.term-pick .pick-lbl { flex: 1 0 100%; font-family: var(--f-mono); font-size: var(--step--1); letter-spacing: .08em; text-transform: uppercase; color: var(--term-faint); margin-bottom: .15rem; }
+.term-pick button { appearance: none; cursor: pointer; font-family: var(--f-mono); font-size: var(--step--1); line-height: 1.4; padding: .28rem .55rem; border-radius: 2px; border: 1px solid var(--term-rule); background: transparent; color: var(--term-faint); }
+.term-pick button:hover { color: var(--term-ink); }
+.term-pick button[aria-pressed="true"] { color: var(--term-bg); background: var(--term-ink); border-color: var(--term-ink); }
+.term-body .usr { color: #8fb8f0; font-weight: 700; }
+.term-body .hk { color: #d3ae5e; font-weight: 700; }
 .term-body { padding: 1.1rem 1.15rem 1.35rem; overflow-x: auto; }
 .term-body pre { margin: 0; font-family: var(--f-mono); font-size: clamp(.72rem, .68rem + .25vw, .84rem); line-height: 1.75; white-space: pre; }
 .term-body .ln { display: block; }
@@ -376,14 +387,16 @@ footer { border-top: 4px solid var(--ink); }
         </p>
       </div>
 
-      <figure class="term" style="margin:0">
-        <div class="term-tabs" role="tablist" aria-label="Veredictos del gate">
-          <button role="tab" data-v="verde" aria-selected="true" aria-controls="term-out">✓ verde</button>
-          <button role="tab" data-v="rojo" aria-selected="false" aria-controls="term-out">✗ rojo</button>
-          <button role="tab" data-v="omitida" aria-selected="false" aria-controls="term-out">– omitida</button>
+      <figure class="term" id="term-esc" style="margin:0">
+        <div class="term-pick" id="esc-pick" role="group" aria-label="Escenarios">
+          <span class="pick-lbl">El mismo turno, dos veces</span>
         </div>
-        <div class="term-body" id="term-out" role="tabpanel" data-anim="on"><pre><code></code></pre></div>
-        <figcaption class="term-note" id="term-note"></figcaption>
+        <div class="term-tabs" role="tablist" aria-label="Con arnés y sin arnés">
+          <button role="tab" data-v="sin" aria-selected="true" aria-controls="esc-out">✗ sin arnés</button>
+          <button role="tab" data-v="con" aria-selected="false" aria-controls="esc-out">✓ con arnés</button>
+        </div>
+        <div class="term-body" id="esc-out" role="tabpanel" data-anim="on"><pre><code></code></pre></div>
+        <figcaption class="term-note" id="esc-note"></figcaption>
       </figure>
     </div>
   </div>
@@ -580,6 +593,16 @@ examples/{dotnet, jvm-spring, android-kotlin,
           </tbody>
         </table>
       </div>
+
+      <figure class="term" id="term-gate" style="margin:1.75rem 0 0">
+        <div class="term-tabs" role="tablist" aria-label="Veredictos del gate">
+          <button role="tab" data-v="verde" aria-selected="true" aria-controls="term-out">✓ verde</button>
+          <button role="tab" data-v="rojo" aria-selected="false" aria-controls="term-out">✗ rojo</button>
+          <button role="tab" data-v="omitida" aria-selected="false" aria-controls="term-out">– omitida</button>
+        </div>
+        <div class="term-body" id="term-out" role="tabpanel" data-anim="on"><pre><code></code></pre></div>
+        <figcaption class="term-note" id="term-note"></figcaption>
+      </figure>
 
       <div class="pair">
         <figure class="panel blocked">
@@ -1430,8 +1453,9 @@ DRY-RUN: 38 archivo(s) a copiar, 0 conservado(s).</code></pre>
 
 <script>
 (function () {
-  // Los tres transcripts son salida real del gate de este repo. La pestaña «omitida»
-  // existe porque es la distinción que el resto de los pipelines borra.
+  // Dos terminales, una sola mecánica. `salidas` son los tres veredictos del gate de
+  // este repo —la pestaña «omitida» existe porque es la distinción que el resto de los
+  // pipelines borra—; `escenarios` es el mismo turno de trabajo con arnés y sin arnés.
   var L = function (t, c) { return { t: t, c: c || "" }; };
   var salidas = {
     verde: {
@@ -1578,33 +1602,297 @@ DRY-RUN: 38 archivo(s) a copiar, 0 conservado(s).</code></pre>
     }
   };
 
-  var out = document.querySelector("#term-out code");
-  var nota = document.getElementById("term-note");
-  var tabs = Array.prototype.slice.call(document.querySelectorAll(".term-tabs button"));
+  // Los cinco escenarios son el MISMO turno contado dos veces: a la izquierda lo que
+  // hace un agente capaz sin frenos, a la derecha lo que contesta el hook — con el
+  // texto real del bloqueo, que es lo único que el agente lee cuando lo frenás.
+  var escenarios = [
+    {
+      id: "lote",
+      chip: "borrado en lote",
+      titulo: "«Sacá los TODO de todo src/»",
+      sin: {
+        nota: "El comando corrió. 47 archivos reescritos sin commit previo, sin lista y sin vuelta atrás: el diff ya no entra en una revisión, y el que se rompió no es el archivo que mirás.",
+        lineas: [
+          L("» sacá los TODO viejos de todo src/", "usr"),
+          L(""),
+          L("$ sed -i '' '/TODO/d' $(grep -rl TODO src)", "cmd"),
+          L("47 archivos reescritos.", "dim"),
+          L(""),
+          L("$ npm test", "cmd"),
+          L("12 failing", "no"),
+          L("  src/pago/reintento.ts:88", "no"),
+          L("  se fue una línea que terminaba en «TODO»", "no"),
+          L("  dentro de un template string.", "no"),
+          L(""),
+          L("Sin commit previo: no hay a dónde volver.", "no"),
+          L("El diff tiene 47 archivos y nadie lo va a leer.", "no")
+        ]
+      },
+      con: {
+        nota: "`bash.deny` es una regla del JSON, no código. El bloqueo dice el motivo, así que el agente no reintenta lo mismo: hace commit, imprime la lista y pregunta.",
+        lineas: [
+          L("» sacá los TODO viejos de todo src/", "usr"),
+          L(""),
+          L("$ sed -i '' '/TODO/d' $(grep -rl TODO src)", "cmd"),
+          L("● PreToolUse · bash-guard · exit=2", "hk"),
+          L(""),
+          L("COMANDO BLOQUEADO: `sed -i '' '/TODO/d' …`", "no"),
+          L("Motivo: edición masiva in-place sobre fuente: el", "no"),
+          L("incidente arquetípico. Usá Edit/Write, o commit +", "no"),
+          L("dry-run antes.", "no"),
+          L("Reformulá el comando o pedí confirmación explícita", "no"),
+          L("al humano. No lo reintentes igual.", "no"),
+          L(""),
+          L("→ el agente: commit previo (punto de vuelta)", "dim"),
+          L("→ imprime los 47 archivos y espera confirmación", "dim"),
+          L("    ✓ acción amplia, reversible y a la vista", "ok")
+        ]
+      }
+    },
+    {
+      id: "protegida",
+      chip: "ruta protegida",
+      titulo: "«Agregá la API key y actualizá el lock»",
+      sin: {
+        nota: "El secreto quedó en el diff y el lockfile lo regeneró una máquina distinta de la de CI. Lo primero se descubre en la revisión —si alguien mira—; lo segundo, 40 minutos después, en rojo.",
+        lineas: [
+          L("» agregá la API key nueva y actualizá el lock", "usr"),
+          L(""),
+          L("$ edit .env", "cmd"),
+          L("+ STRIPE_KEY=sk_live_51H…", "no"),
+          L("$ edit package-lock.json", "cmd"),
+          L("1.284 líneas cambiadas", "dim"),
+          L(""),
+          L("$ git commit -am \"chore: key + lock\"", "cmd"),
+          L("[main 9f2c1ab] 2 archivos", "dim"),
+          L(""),
+          L("El secreto está en el historial: rotarlo es la", "no"),
+          L("única salida.", "no"),
+          L("CI, 40 min después: lockfile inconsistente.", "no")
+        ]
+      },
+      con: {
+        nota: "La lista de rutas protegidas sale del config y la leen el hook y `.githooks/pre-commit`: la misma regla en las dos puertas. Excepción legítima: la pide el humano y la hace él.",
+        lineas: [
+          L("» agregá la API key nueva y actualizá el lock", "usr"),
+          L(""),
+          L("$ edit .env", "cmd"),
+          L("● PreToolUse · protected-paths · exit=2", "hk"),
+          L(""),
+          L("RUTA PROTEGIDA: `.env` no se edita desde el agente.", "no"),
+          L("Motivo: secreto de entorno; en el historial no se", "no"),
+          L("borra, se rota.", "no"),
+          L("Si el cambio hace falta de verdad, pedíselo al", "no"),
+          L("humano y que lo haga él.", "no"),
+          L(""),
+          L("$ edit package-lock.json", "cmd"),
+          L("● exit=2 — derivado: lo regenera el gestor", "hk"),
+          L(""),
+          L("→ el agente pide las dos cosas y sigue con lo suyo", "dim"),
+          L("    ✓ 0 secretos en el diff", "ok")
+        ]
+      }
+    },
+    {
+      id: "pregunta",
+      chip: "pregunta → acción",
+      titulo: "«¿Por qué falla el login en producción?»",
+      sin: {
+        nota: "Nadie pidió un cambio. El agente contestó con un diff, y ahora la pregunta —que era la tarea— hay que volver a hacerla sobre un árbol distinto del que falló.",
+        lineas: [
+          L("» ¿por qué falla el login en producción?", "usr"),
+          L(""),
+          L("Falla por el TTL del token. Lo arreglo:", "dim"),
+          L("$ edit src/auth/token.ts", "cmd"),
+          L("$ edit src/auth/sesion.ts", "cmd"),
+          L("$ edit src/api/middleware.ts", "cmd"),
+          L("$ edit tests/auth.spec.ts", "cmd"),
+          L("… 6 archivos tocados", "dim"),
+          L(""),
+          L("«Listo, ya lo arreglé.»", "no"),
+          L("Nadie pidió un cambio: pidieron un diagnóstico.", "no"),
+          L("Y el árbol que fallaba ya no existe.", "no")
+        ]
+      },
+      con: {
+        nota: "`ask-first` clasifica el pedido del turno y deja un marcador; `action-guard` lo lee antes de cualquier edición. El freno se levanta solo: alcanza con que el humano pida el cambio en el mensaje siguiente.",
+        lineas: [
+          L("» ¿por qué falla el login en producción?", "usr"),
+          L("● UserPromptSubmit · ask-first · pedido informativo", "hk"),
+          L(""),
+          L("$ edit src/auth/token.ts", "cmd"),
+          L("● PreToolUse · action-guard · exit=2", "hk"),
+          L(""),
+          L("NO ACTÚES SOBRE UNA PREGUNTA: el pedido de este", "no"),
+          L("turno era informativo y estás por editar", "no"),
+          L("`src/auth/token.ts`.", "no"),
+          L("Contestá la pregunta. Si al contestarla concluís", "no"),
+          L("que hace falta un cambio, proponelo en una línea", "no"),
+          L("y esperá.", "no"),
+          L(""),
+          L("→ «El TTL se calcula en UTC y el cliente en local.", "dim"),
+          L("   Propongo normalizar en token.ts (1 archivo).»", "dim"),
+          L("    ✓ diagnóstico entregado · 0 archivos tocados", "ok")
+        ]
+      }
+    },
+    {
+      id: "listo",
+      chip: "«listo» sin gate",
+      titulo: "Cerrar la tarea y decir que está terminada",
+      sin: {
+        nota: "«Los tests pasan» no es «terminado»: son dos preguntas distintas y sólo una la contestó alguien. El costo no lo paga el turno, lo paga el que abre el pipeline.",
+        lineas: [
+          L("» dale, implementá el reintento", "usr"),
+          L(""),
+          L("$ npm test", "cmd"),
+          L("28 passing", "ok"),
+          L(""),
+          L("«Listo: implementé el reintento y los tests", "dim"),
+          L("pasan. Podés mergear.»", "dim"),
+          L(""),
+          L("$ git push  →  CI", "cmd"),
+          L("✗ lint de convenciones — [PUREZA] IO en capa pura", "no"),
+          L("✗ link-check — docs/reintentos.md no existe", "no"),
+          L("CI ROJO, 11 minutos después. Y el contexto del", "no"),
+          L("turno donde se hizo el cambio ya se cerró.", "no")
+        ]
+      },
+      con: {
+        nota: "El marcador `.git/gate-dirty` lo pone `post-edit-check` en cada edición de código y lo borra el gate. El hook `Stop` no deja cerrar el turno con el marcador puesto: «terminado» tiene un comando.",
+        lineas: [
+          L("» dale, implementá el reintento", "usr"),
+          L(""),
+          L("$ npm test", "cmd"),
+          L("28 passing", "ok"),
+          L("«Listo, podés mergear.»", "dim"),
+          L("● Stop · gate-stop · exit=2", "hk"),
+          L(""),
+          L("GATE PENDIENTE: hay código editado en esta sesión", "no"),
+          L("y el gate no quedó verde. Reportar «listo» sin gate", "no"),
+          L("verde es una violación, no un descuido.", "no"),
+          L(""),
+          L("$ npm run gate", "cmd"),
+          L("✗ lint — [PUREZA] src/pago/puntaje.ts:1", "no"),
+          L("→ el agente lo arregla en el mismo turno", "dim"),
+          L("$ npm run gate", "cmd"),
+          L("GATE VERDE — entregable.", "ok")
+        ]
+      }
+    },
+    {
+      id: "registro",
+      chip: "commit sin ítem",
+      titulo: "Dejar el cambio en el historial",
+      sin: {
+        nota: "El cambio existe sólo en el diff. Dentro de tres meses, «¿por qué reintentamos tres veces?» se contesta leyendo código, que es la forma cara de contestar mal.",
+        lineas: [
+          L("» commiteá lo del reintento", "usr"),
+          L(""),
+          L("$ git commit -am \"fix: reintento\"", "cmd"),
+          L("[main 4ad91c7] 6 archivos", "dim"),
+          L(""),
+          L("El historial no dice qué pedido lo motivó,", "no"),
+          L("ni qué se decidió, ni con quién.", "no"),
+          L("El tablero sigue mostrando la tarea abierta:", "no"),
+          L("el registro quedó partido entre dos lugares", "no"),
+          L("y ninguno de los dos está completo.", "no")
+        ]
+      },
+      con: {
+        nota: "Qué cuenta como referencia lo declara `tracker.issuePattern`: `#123`, `AB#123` o `PROJ-123`. El hook no conoce ninguna forja, aplica el regex. Saltarse el registro se puede — pero queda firmado en el historial.",
+        lineas: [
+          L("» commiteá lo del reintento", "usr"),
+          L(""),
+          L("$ git commit -am \"fix: reintento\"", "cmd"),
+          L("● .githooks/commit-msg · commit abortado", "hk"),
+          L(""),
+          L("commit-msg: este commit toca código y no queda", "no"),
+          L("registrado en ninguna parte.", "no"),
+          L("  1) Referenciá el ítem de trabajo (#123).", "no"),
+          L("  2) O declaralo, con el motivo, en una línea:", "no"),
+          L("     sin-issue: typo del tooltip, sin superficie", "no"),
+          L(""),
+          L("$ git commit -am \"fix(pago): reintento (#412)\"", "cmd"),
+          L("[main 4ad91c7] 6 archivos", "dim"),
+          L("    ✓ el trabajo quedó registrado", "ok")
+        ]
+      }
+    }
+  ];
   var quieto = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-  function pintar(v, animar) {
-    var d = salidas[v];
-    out.textContent = "";
-    d.lineas.forEach(function (l, i) {
-      var s = document.createElement("span");
-      s.className = "ln" + (l.c ? " " + l.c : "");
-      s.textContent = l.t === "" ? " " : l.t;
-      if (animar && !quieto) s.style.animationDelay = (i * 38) + "ms";
-      else s.style.animation = "none";
-      out.appendChild(s);
-    });
-    nota.textContent = d.nota;
+  // Un solo pintor para los dos terminales: entre ellos cambia de dónde sale el
+  // transcript, no cómo se dibuja. Los selectores van scopeados al <figure>, porque
+  // ahora hay dos juegos de pestañas y un querySelectorAll suelto los mezcla.
+  function pintor(fig) {
+    var out = fig.querySelector(".term-body code");
+    var nota = fig.querySelector(".term-note");
+    return function (d, animar) {
+      out.textContent = "";
+      d.lineas.forEach(function (l, i) {
+        var s = document.createElement("span");
+        s.className = "ln" + (l.c ? " " + l.c : "");
+        s.textContent = l.t === "" ? " " : l.t;
+        if (animar && !quieto) s.style.animationDelay = (i * 38) + "ms";
+        else s.style.animation = "none";
+        out.appendChild(s);
+      });
+      nota.textContent = d.nota;
+    };
   }
 
-  tabs.forEach(function (b) {
-    b.addEventListener("click", function () {
-      tabs.forEach(function (o) { o.setAttribute("aria-selected", String(o === b)); });
-      pintar(b.dataset.v, true);
+  // ── Terminal del gate: los tres veredictos ──────────────────────────────
+  var figGate = document.getElementById("term-gate");
+  if (figGate) {
+    var pintarGate = pintor(figGate);
+    var tabsGate = Array.prototype.slice.call(figGate.querySelectorAll(".term-tabs button"));
+    tabsGate.forEach(function (b) {
+      b.addEventListener("click", function () {
+        tabsGate.forEach(function (o) { o.setAttribute("aria-selected", String(o === b)); });
+        pintarGate(salidas[b.dataset.v], true);
+      });
     });
-  });
+    pintarGate(salidas.verde, false);
+  }
 
-  pintar("verde", true);
+  // ── Terminal del héroe: el mismo turno con arnés y sin arnés ────────────
+  var figEsc = document.getElementById("term-esc");
+  if (figEsc) {
+    var pintarEsc = pintor(figEsc);
+    var pick = document.getElementById("esc-pick");
+    var tabsEsc = Array.prototype.slice.call(figEsc.querySelectorAll(".term-tabs button"));
+    var actual = escenarios[0];
+    var lado = "sin";
+    var render = function (animar) { pintarEsc(actual[lado], animar); };
+
+    // Los chips se arman DESDE los datos: agregar un escenario es agregar un objeto,
+    // no tocar el marcado — la misma regla que el resto de la página.
+    var chips = escenarios.map(function (e) {
+      var b = document.createElement("button");
+      b.type = "button";
+      b.textContent = e.chip;
+      b.title = e.titulo;
+      b.setAttribute("aria-pressed", String(e === actual));
+      b.addEventListener("click", function () {
+        actual = e;
+        chips.forEach(function (o, i) { o.setAttribute("aria-pressed", String(escenarios[i] === actual)); });
+        render(true);
+      });
+      pick.appendChild(b);
+      return b;
+    });
+
+    tabsEsc.forEach(function (b) {
+      b.addEventListener("click", function () {
+        lado = b.dataset.v;
+        tabsEsc.forEach(function (o) { o.setAttribute("aria-selected", String(o === b)); });
+        render(true);
+      });
+    });
+
+    render(true);
+  }
 })();
 </script>
 
