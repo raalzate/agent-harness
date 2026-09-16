@@ -6,6 +6,8 @@ hacer las preguntas de [`../docs/portar.md`](../docs/portar.md) en ese stack.
 | Archivo | Repo típico | Forja | Lo que muestra de particular |
 |---|---|---|---|
 | [`quickstart.json`](quickstart.json) | el to-do de cuatro archivos de [`quickstart.md`](../docs/quickstart.md) | GitHub `#123` | **el más chico que igual muestra las cuatro clases de freno**: capa pura, único lector, ruta protegida y comando sin ctrl-Z. Se lee de una sentada |
+| [`trunk-based.json`](trunk-based.json) | equipo que integra a diario en `main` | GitHub `#123` | **el ciclo de desarrollo**: `workflow` con una sola rama larga y ramas de dos días (`staleAction: block`, porque en trunk-based la rama corta ES el modelo), y tres prácticas de `xp` encendidas — `pairing` apagado a propósito |
+| [`git-flow.json`](git-flow.json) | producto entregado por versión, con soporte de la anterior | GitHub `#123` | **el otro extremo del mismo ciclo**: dos ramas largas, familias con destino distinto (`mergeInto`: un `hotfix/` vuelve a `main` *y* a `develop`) y `pairing` encendido, que es lo que sostiene la propiedad colectiva cuando hay rotación |
 | [`node-typescript.json`](node-typescript.json) | app o librería TS con vitest | GitHub `#123` | `typecheck` como señal irremplazable; `purity` de la capa de dominio |
 | [`python.json`](python.json) | servicio FastAPI/Django con pytest | GitLab `#123` | `ruff` + `mypy` + `pytest` son tres señales; migraciones aplicadas = inmutables |
 | [`go.json`](go.json) | servicio Go | Jira `PROJ-123` | `vet`/`build`/`test -race` no se reemplazan; artefactos **en el repo**, no en el gestor |

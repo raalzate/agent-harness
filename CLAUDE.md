@@ -75,6 +75,7 @@ npm run gate           # EL entregable: self-test · link-check · lint · artef
 npm run selftest       # ¿los frenos muerden?
 npm run lint           # ¿el repo pasa con las reglas activas?
 npm run lint:rules     # ¿qué reglas están activas y de dónde salen?
+npm run ciclo          # ¿qué modelo de ramas y qué prácticas XP están activas?
 ```
 
 - CI (`.github/workflows/ci.yml`) corre **el mismo** `npm run gate`. No mergear en rojo.
@@ -96,6 +97,7 @@ npm run lint:rules     # ¿qué reglas están activas y de dónde salen?
 | monorepo, varios repos, plataforma | `docs/multi-proyecto.md` |
 | que corra en Windows, macOS y Linux | `docs/multiplataforma.md` |
 | qué principio ágil tiene mecanismo | `docs/agilidad.md` |
+| el ciclo de desarrollo: ramas y prácticas XP | `docs/ciclo-desarrollo.md` |
 | diseño: acoplamiento, cohesión, ADR | `docs/arquitectura.md` |
 | cómo se instala en otro repo | `docs/portar.md` |
 | portarlo a .NET, JVM, Python, Go, Rust, front | `docs/perfiles.md` |

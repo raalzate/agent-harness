@@ -394,6 +394,7 @@ footer { border-top: 4px solid var(--ink); }
     <a href="#freno" data-grupo="metodo" data-k="freno regla json bloqueo config">Anatomía de un freno</a>
     <a href="#indice" data-grupo="metodo" data-k="indice codegraph grafo leer codigo radio impacto">El índice del código</a>
     <a href="#registro" data-grupo="metodo" data-k="registro trazabilidad commit issue pr">Trazabilidad</a>
+    <a href="#ciclo" data-grupo="metodo" data-k="ciclo rama branch trunk based git flow github flow xp tdd test primero lote chico refactor pairing commit merge">Ciclo de desarrollo</a>
 
     <p class="grupo" data-grupo="portar">Portar</p>
     <a href="#portar" data-grupo="portar" data-k="portar instalador otro repo pasos">Portarlo a tu repo</a>
@@ -403,7 +404,7 @@ footer { border-top: 4px solid var(--ink); }
     <a href="#multi" data-grupo="portar" data-k="monorepo varios repos multi proyecto plataforma workspace">Varios proyectos</a>
 
     <p class="grupo" data-grupo="referencia">Referencia</p>
-    <a href="#documentacion" data-grupo="referencia" data-k="documentacion documentos indice 24">Los 24 documentos</a>
+    <a href="#documentacion" data-grupo="referencia" data-k="documentacion documentos indice 25">Los 25 documentos</a>
     <a href="#limites" data-grupo="referencia" data-k="limites no es sandbox linter criterio">Límites declarados</a>
 
     <p class="grupo" data-grupo="externo">En el repo</p>
@@ -416,7 +417,7 @@ footer { border-top: 4px solid var(--ink); }
     <a class="ext" href="https://github.com/raalzate/agent-harness/blob/main/docs/cicd.md" data-grupo="externo" data-k="cicd pipeline forja">cicd.md</a>
     <a class="ext" href="https://github.com/raalzate/agent-harness/blob/main/docs/multi-proyecto.md" data-grupo="externo" data-k="multi proyecto monorepo plataforma">multi-proyecto.md</a>
   </nav>
-  <p class="vacio">Sin resultados. La tabla de <a href="#documentacion">documentación</a> tiene los 24 documentos.</p>
+  <p class="vacio">Sin resultados. La tabla de <a href="#documentacion">documentación</a> tiene los 25 documentos.</p>
 </aside>
 
 <main class="content" id="contenido">
@@ -859,6 +860,92 @@ en el historial:
   </div>
 </section>
 
+<section id="ciclo">
+  <div class="wrap sec-inner">
+    <p class="rail"><b>rama</b>+ commit, con mecanismo</p>
+    <div>
+      <div class="col stack">
+        <p class="eyebrow">Ciclo de desarrollo</p>
+        <h2 style="font-size:var(--step-2)">El modelo de ramas es la convención menos escrita de un repo</h2>
+        <p>Se explica una vez cuando alguien entra, se ve a medias en <code>git log</code>, y nadie
+          se entera cuando deja de cumplirse. Con un agente es peor: <strong>commitea en la rama
+          donde cayó</strong>, le pone el nombre que se le ocurre y mete todo junto, porque nadie se
+          lo dijo — y decírselo en un prompt no es un mecanismo.</p>
+        <p>El arnés no tiene opinión sobre qué modelo usar. Tiene dos claves de config, un comando
+          que falla, y una regla: <strong>lo que no se puede verificar se declara como declaración,
+          no como freno</strong>.</p>
+      </div>
+
+      <div class="pair">
+        <figure class="panel">
+          <figcaption>.claude/harness.config.json</figcaption>
+          <pre><code>{ <span class="k">"model"</span>: <span class="s">"trunk-based"</span>,
+  <span class="k">"branchPattern"</span>: <span class="s">"^(feat|fix|chore)/[a-z0-9._-]+$"</span>,
+  <span class="k">"baseBranch"</span>: <span class="s">"main"</span>,
+  <span class="k">"maxAgeDays"</span>: 5, <span class="k">"staleAction"</span>: <span class="s">"warn"</span> }</code></pre>
+        </figure>
+        <figure class="panel blocked">
+          <figcaption>git push -u origin arreglos</figcaption>
+          <pre><code><span class="hdr">ciclo:</span> el nombre de la rama `arreglos`
+no sigue el modelo declarado (trunk-based).
+
+Patrón: ^(feat|fix|chore)/[a-z0-9._-]+$
+  ej.  fix/multiplataforma
+
+  git branch -m &lt;nombre-que-sigue-el-patrón&gt;</code></pre>
+        </figure>
+      </div>
+
+      <div class="col stack" style="margin-top:1.75rem">
+        <h3 style="font-size:var(--step-1)">Trunk-based, GitHub flow o git flow: el mismo mecanismo</h3>
+        <p>Lo único que cambia entre un equipo y otro es el contenido de <code>workflow</code>. El
+          nombre de la rama y su edad —medida desde donde se separó de la base— las verifica
+          <code>pre-push</code> antes de tocar la red. A dónde vuelve cada familia de ramas
+          (<code>mergeInto</code>) se <strong>declara y no se finge verificado</strong>: lo decide el
+          pull request, que el hook no ve.</p>
+      </div>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>Modelo</th><th class="mono">ramas largas</th><th class="mono">rama de trabajo</th><th>edad máxima</th></tr></thead>
+          <tbody>
+            <tr><td>Trunk-based</td><td class="mono">main</td><td class="mono">feat/… fix/…</td><td>2 días, <code>block</code></td></tr>
+            <tr><td>GitHub flow</td><td class="mono">main</td><td class="mono">feat/… fix/…</td><td>5 días, <code>warn</code></td></tr>
+            <tr><td>GitLab flow</td><td class="mono">main · staging · production</td><td class="mono">feat/… fix/…</td><td>5 días, <code>warn</code></td></tr>
+            <tr><td>Git flow</td><td class="mono">main · develop</td><td class="mono">feature/… hotfix/… release/…</td><td>10 días, <code>warn</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="col stack" style="margin-top:1.75rem">
+        <h3 style="font-size:var(--step-1)">Las cuatro prácticas de XP que se pueden verificar</h3>
+        <p>XP trae doce. Cuatro caben en un hook de <code>commit-msg</code>; el resto es juicio, y
+          decirlo es parte de que se crea la tabla. Cada una se enciende sola, y cada una tiene
+          <strong>fuga declarada con motivo</strong>: la fuga es la diferencia entre un freno que se
+          respeta y uno que alguien apaga en una semana.</p>
+      </div>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th class="mono">clave</th><th>Qué verifica</th><th>Qué NO</th><th class="mono">fuga</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">testFirst</td><td>el commit que cambia comportamiento trae también un archivo de prueba</td><td>que la prueba se escribiera antes</td><td class="mono">sin-test:</td></tr>
+            <tr><td class="mono">smallBatch</td><td>archivos y líneas bajo el límite de ese equipo</td><td>que el lote tenga sentido propio</td><td class="mono">lote-grande:</td></tr>
+            <tr><td class="mono">refactorSeparate</td><td>un commit <code>refactor:</code> no cambia pruebas</td><td>que el refactor sea un refactor</td><td class="mono">refactor-mixto:</td></tr>
+            <tr><td class="mono">pairing</td><td>el commit deja rastro de con quién se hizo</td><td>que la sesión de a dos existiera</td><td class="mono">solo:</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="col cta-box" style="border-left-color:var(--ocre)">
+        <p class="eyebrow" style="color:var(--ocre)">La trampa</p>
+        <p style="margin-top:.5rem">Encender las cuatro de una. Una práctica instalada sin cicatriz
+          detrás se desactiva en una semana <strong>y se lleva puestas a las que servían</strong>. En
+          este repo <code>pairing</code> viene apagado a propósito —con un agente y una persona, la
+          fuga sería la regla— y su mecanismo se prueba igual con un cebo del self-test: el freno
+          existe y muerde el día que alguien lo encienda.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
 <section id="portar">
   <div class="wrap sec-inner">
     <p class="rail"><b>0→5</b>una tarde, en este orden</p>
@@ -1102,7 +1189,7 @@ DRY-RUN: 38 archivo(s) a copiar, 0 conservado(s).</code></pre>
 
 <section id="documentacion">
   <div class="wrap sec-inner">
-    <p class="rail"><b>24</b>documentos, en cuatro capas</p>
+    <p class="rail"><b>25</b>documentos, en cuatro capas</p>
     <div>
       <div class="col stack">
         <p class="eyebrow">Documentación</p>
@@ -1122,6 +1209,7 @@ DRY-RUN: 38 archivo(s) a copiar, 0 conservado(s).</code></pre>
             <tr><td><a href="https://github.com/raalzate/agent-harness/blob/main/docs/caso-de-estudio.md">caso-de-estudio.md</a></td><td>Un arnés real con números verificables, cuatro mecanismos contados desde el incidente que los creó, y los huecos que ese repo declara.</td></tr>
             <tr><td><a href="https://github.com/raalzate/agent-harness/blob/main/docs/buenas-practicas.md">buenas-practicas.md</a></td><td>La guía de fondo, agnóstica de stack: qué es un arnés, las cinco decisiones del bucle, los niveles de madurez L0–L4.</td></tr>
             <tr><td><a href="https://github.com/raalzate/agent-harness/blob/main/docs/agilidad.md">agilidad.md</a></td><td>Los principios ágiles con mecanismo: diez principios, el comando que falla cuando se violan, y la lista explícita de lo que NO se hace cumplir.</td></tr>
+            <tr><td><a href="https://github.com/raalzate/agent-harness/blob/main/docs/ciclo-desarrollo.md">ciclo-desarrollo.md</a></td><td>El ciclo de desarrollo declarado: modelo de ramas (trunk-based, git flow, GitHub flow) y las cuatro prácticas de XP que tienen mecanismo, con lo que cada una NO prueba.</td></tr>
             <tr><td><a href="https://github.com/raalzate/agent-harness/blob/main/docs/arquitectura.md">arquitectura.md</a></td><td>Qué documentación de arquitectura es obligatoria, cuándo va un ADR, y la traducción de bajo acoplamiento / alta cohesión a reglas que fallan.</td></tr>
 
             <tr><td colspan="2" class="grupo">Cómo — la práctica</td></tr>

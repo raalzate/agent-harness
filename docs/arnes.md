@@ -60,8 +60,9 @@ En git, además:
 | Hook | Qué hace |
 |---|---|
 | `.githooks/pre-commit` | rutas protegidas + lint de los archivos staged |
+| `.githooks/commit-msg` | además corre `node scripts/ciclo-check.mjs --commit`: **las prácticas de XP que este equipo encendió** (`xp` → test primero, lote chico, refactor separado, de a dos), cada una con su fuga declarada y con motivo. Ver [ciclo-desarrollo.md](ciclo-desarrollo.md) |
 | `.githooks/commit-msg` | **el trabajo no entra al historial sin quedar registrado**: si el commit toca código, el mensaje referencia el ítem de trabajo (`tracker.issuePattern`) o declara `sin-issue: <motivo>`. Agnóstico de forja — ver `docs/trazabilidad.md` |
-| `.githooks/pre-push` | **el trabajo entra a `main` por PR, no de un empujón**: falla antes de la red con el motivo y el comando para mover los commits. Complemento local de la protección de rama de la forja |
+| `.githooks/pre-push` | **el trabajo entra a `main` por PR, no de un empujón**: falla antes de la red con el motivo y el comando para mover los commits. Complemento local de la protección de rama de la forja. Después corre `node scripts/ciclo-check.mjs --push`: **el nombre de la rama sigue el modelo declarado** (`workflow`) y la rama no envejeció sin integrarse |
 | `.githooks/post-commit` | opcional: refresca lo derivado (un índice, un grafo) |
 
 Se instalan con `npm run hooks:install` — `core.hooksPath` debe valer `.githooks`; `.git/hooks/`
@@ -84,7 +85,11 @@ config**, así que una regla nueva queda cubierta sin escribir un caso a mano:
 8. **el registro no es opcional**: seis casos de `commit-msg` en un repo git temporal —código sin
    referencia, con referencia, con la fuga y su motivo, la fuga pelada, extensión ignorada, un
    merge— todos derivados del config, más un cebo para `artifacts-check`;
-9. los subagentes y comandos tienen frontmatter válido (sin él, Claude Code no los ofrece).
+9. **el ciclo de desarrollo se cumple**: 16 casos de `ciclo-check` derivados de `workflow` y `xp`
+   —un nombre de rama fuera del modelo no se empuja, las ramas largas quedan exentas, y las cuatro
+   prácticas de XP muerden y dejan pasar la fuga declarada **con motivo**—. Corren sin bash, y las
+   prácticas apagadas en este repo se prueban con un cebo `--config` ([ciclo-desarrollo.md](ciclo-desarrollo.md));
+10. los subagentes y comandos tienen frontmatter válido (sin él, Claude Code no los ofrece).
 
 Lo que no puede reducir a un ejemplo lo reporta como **omitido**, nunca como pasado.
 

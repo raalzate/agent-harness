@@ -340,3 +340,21 @@ Mecanismo: `askFirst` y `branches` en `plantillas/harness.config.json`, la tabla
          8a-bis del self-test, que cruza la lista de archivos que el instalador copia contra esa
          tabla y falla nombrando el freno y la clave que le falta. Probado quitando las dos claves:
          reporta los tres frenos, uno por línea.
+
+### GOTCHA: una muestra derivada con `|` adentro es un archivo legal en macOS y un ENOENT en Windows
+
+Síntoma: los casos nuevos del ciclo de desarrollo salían verdes en macOS y en Linux, y el job de
+         Windows moría con `ENOENT: no such file or directory, mkdir
+         'C:\...\harness-ciclo-XXXX\__tests__\|.test.jsx|scripts'`. El error no menciona el `|`:
+         parece un problema de rutas largas o de permisos.
+Causa:   `sampleFromPattern` reduce un regex a un ejemplo, pero un patrón de tests es casi siempre
+         una ALTERNATIVA de layouts (`tests/` **o** `*.spec.ts` **o** el archivo del self-test), y
+         la muestra salió con los `|` de la alternativa adentro. En macOS y Linux `|` es un carácter
+         legal en un nombre de archivo, así que el caso escribía el archivo y pasaba: la muestra era
+         basura y el veredicto verde igual.
+Regla:   una muestra derivada que se va a usar como RUTA tiene que ser una ruta escribible en las
+         tres plataformas. Si no se puede fabricar, el caso se reporta **omitido**, nunca verde.
+Mecanismo: la derivación del archivo de prueba en `scripts/harness-selftest.mjs` toma la primera
+         alternativa, descarta toda muestra con `| < > : " ? * \` y **revalida contra el patrón del
+         que salió** antes de usarla; si ninguna candidata sobrevive, el grupo de casos sale
+         omitido. Lo cazó la matriz de CI (`windows-latest`), que es la única señal que lo veía.

@@ -298,6 +298,65 @@ forja, no su reemplazo: el freno fuerte vive en el servidor. Sin esta clave, el 
 
 ---
 
+## `workflow` — el modelo de ramas
+
+```json
+{
+  "model": "trunk-based",
+  "branchPattern": "^(feat|fix|chore)/[a-z0-9][a-z0-9._-]*$",
+  "longLived": ["main"],
+  "baseBranch": "main",
+  "maxAgeDays": 5,
+  "staleAction": "warn",
+  "mergeInto": [{ "branch": ".*", "into": ["main"] }]
+}
+```
+
+| Clave | Qué hace |
+|---|---|
+| `model` | informativo: `trunk-based`, `github-flow`, `git-flow`, `gitlab-flow`. Es lo que la ruta `ciclo` del router le pone delante al agente antes de que abra una rama |
+| `branchPattern` | qué nombre puede tener una rama de trabajo. Lo verifica `pre-push` → `node scripts/ciclo-check.mjs --push` |
+| `branchExamples` | ejemplos que acompañan al mensaje de bloqueo. Un freno que muestra el nombre correcto se obedece; uno que sólo muestra el regex, se saltea |
+| `longLived` | las ramas del propio modelo (`main`, `develop`, `release`), **exentas** del patrón. Vacío = se usa `branches.protected` |
+| `baseBranch` | de dónde sale la rama, y contra qué se mide su edad |
+| `maxAgeDays` + `staleAction` | rama vieja = lote grande esperando. `warn` (default) avisa por stderr sin bloquear; `block` frena el push. Sin base local, la comprobación se **saltea**: no se inventa un veredicto |
+| `mergeInto` | `[{ branch, into }]`: a qué rama vuelve cada familia. **Declarado, no verificado** — a qué rama entra el cambio lo decide el pull request, que el hook no ve |
+| `reason`, `staleReason` | el porqué que se imprime al bloquear: es lo único que el agente lee cuando lo frenás |
+
+Sin `branchPattern` ni `maxAgeDays`, el freno no corre. Criterio completo y los tres modelos en
+config: [ciclo-desarrollo.md](ciclo-desarrollo.md).
+
+---
+
+## `xp` — las prácticas de XP con mecanismo
+
+```json
+{
+  "testFirst": { "enabled": true, "testPattern": "…", "escapeLine": "sin-test:", "reason": "…" },
+  "smallBatch": { "enabled": true, "maxFiles": 15, "maxLines": 400, "escapeLine": "lote-grande:" },
+  "refactorSeparate": { "enabled": true, "subjectPattern": "^refactor(\\(|:)" },
+  "pairing": { "enabled": false, "trailer": "Co-authored-by:", "escapeLine": "solo:" }
+}
+```
+
+| Práctica | Qué verifica en el commit | Fuga declarada |
+|---|---|---|
+| `testFirst` | si el commit toca código (`codePattern`, o el de `commitMsg`) también toca un archivo de prueba (`testPattern`, o el de `tests.filePattern`) | `sin-test: <motivo>` |
+| `smallBatch` | archivos y líneas bajo `maxFiles` / `maxLines`; `ignorePattern` saca del conteo lo que crece por naturaleza | `lote-grande: <motivo>` |
+| `refactorSeparate` | un commit cuyo asunto casa `subjectPattern` no toca pruebas | `refactor-mixto: <motivo>` |
+| `pairing` | el mensaje trae `trailer` (`Co-authored-by:`) | `solo: <motivo>` |
+
+Cada práctica se enciende **sola** (`enabled: true`): una regla instalada sin cicatriz detrás se
+apaga en una semana y se lleva puestas a las que servían (P14). Toda fuga exige **motivo** — una
+línea pelada sería la misma omisión con otro nombre. Las lee `.githooks/commit-msg` →
+`node scripts/ciclo-check.mjs --commit`.
+
+Lo que estas cuatro **no** prueban (que la prueba se escribiera antes, que el lote tenga sentido
+propio, que el refactor sea un refactor, que la sesión de a dos existiera) está escrito en
+[ciclo-desarrollo.md](ciclo-desarrollo.md) y lo mira el subagente `reviewer`.
+
+---
+
 ## `askFirst` — no actuar sobre una pregunta
 
 ```json
@@ -496,6 +555,8 @@ cumplir. El detalle de qué viaja y qué no está en [perfiles.md](perfiles.md).
 | `sdd` | `sdd-router.mjs`, self-test |
 | `askFirst` | `ask-first.mjs`, `action-guard.mjs`, self-test |
 | `branches` | `.githooks/pre-push`, self-test |
+| `workflow` | `scripts/ciclo-check.mjs` (lo invoca `.githooks/pre-push`), la ruta `ciclo` del router, self-test |
+| `xp` | `scripts/ciclo-check.mjs` (lo invoca `.githooks/commit-msg`), self-test (una práctica por cebo) |
 | `postCommit` | `.githooks/post-commit` |
 | `graph` | `graph-first.mjs`, la señal `índice del código` del gate, self-test (sus regex compilan) |
 

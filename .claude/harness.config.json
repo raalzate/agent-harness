@@ -484,6 +484,23 @@
         "message": "Cambio de DISEÑO → `docs/arquitectura.md`: (1) medí el radio de impacto con el índice (`codegraph explore`), no de memoria; (2) el movimiento tiene que BAJAR acoplamiento o SUBIR cohesión — decí cuál y contra qué se mide (`purity`, `forbiddenDeps`, `singleSource`); (3) si cambia una decisión estructural, va un ADR en `docs/decisions/` en el mismo commit."
       },
       {
+        "$comment": "El ciclo de desarrollo: de dónde sale la rama, cómo se llama, qué entra en un commit. Existe porque el agente, sin que nadie se lo diga, commitea en la rama donde cayó y mete todo junto: el modelo de ramas del equipo es la convención MENOS escrita de un repo y la que más cuesta cuando se rompe. Los detalles verificables viven en `workflow` y `xp`; esto sólo se los pone delante antes de empezar.",
+        "route": "ciclo",
+        "patterns": [
+          "\\brama\\b",
+          "\\bbranch\\b",
+          "\\bcommit(e|ea|ear|eá)?\\b",
+          "\\bmerge(ar)?\\b",
+          "\\bpull request\\b",
+          "\\bPR\\b",
+          "\\brebase\\b",
+          "\\bhotfix\\b",
+          "\\btrunk\\b",
+          "\\bgit ?flow\\b"
+        ],
+        "message": "Toca el ciclo de desarrollo → `docs/ciclo-desarrollo.md`: el modelo de ramas está declarado en `workflow` (corré `node scripts/ciclo-check.mjs --rules` para verlo). Antes de empujar: la rama sale de `workflow.baseBranch`, su nombre sigue `workflow.branchPattern`, y a `branches.protected` se entra por PR. Antes de commitear: las prácticas de `xp` activas se verifican en `commit-msg` — se cumplen o se declaran con motivo en una línea, no se saltean."
+      },
+      {
         "$comment": "CI/CD: el pipeline no es un lugar aparte donde valen otras reglas. Corre EL MISMO gate que el humano, y lo que se salta la verificación no se mergea.",
         "route": "cicd",
         "patterns": [
@@ -561,6 +578,63 @@
     ],
     "reason": "el trabajo entra por pull request, con su revisión y su gate en verde. Un push directo entra sin que nadie lo mire."
   },
+  "workflow": {
+    "$comment": "EL CICLO DE DESARROLLO, declarado. `model` es informativo (trunk-based, github-flow, git-flow, gitlab-flow) y es lo que el router le dice al agente antes de que abra una rama. Lo que las máquinas leen: `branchPattern` (nombre válido de rama de trabajo), `longLived` (las ramas del modelo, exentas del patrón), `baseBranch` (de dónde sale y contra qué se mide la edad) y `maxAgeDays` + `staleAction` (rama vieja = lote grande esperando). `mergeInto` se DECLARA y no se finge verificado: a qué rama entra el cambio lo decide el pull request, que el hook no ve. Mecanismo: `.githooks/pre-push` → `node scripts/ciclo-check.mjs --push`. Sin `branchPattern` ni `maxAgeDays`, el freno no corre. Ver docs/ciclo-desarrollo.md.",
+    "model": "trunk-based",
+    "branchPattern": "^(feat|fix|docs|chore|refactor|test|ci|perf)/[a-z0-9][a-z0-9._-]*$",
+    "branchExamples": [
+      "fix/multiplataforma",
+      "feat/ciclo-de-desarrollo"
+    ],
+    "longLived": [
+      "main",
+      "master"
+    ],
+    "baseBranch": "main",
+    "mergeInto": [
+      {
+        "branch": ".*",
+        "into": [
+          "main"
+        ]
+      }
+    ],
+    "maxAgeDays": 5,
+    "staleAction": "warn",
+    "reason": "trunk-based: una sola rama larga (`main`) y ramas de trabajo cortas con nombre que dice de qué son. El nombre es lo que hace legible `git branch -a` cuando hay quince.",
+    "staleReason": "una rama que no se integra hace días es un lote grande esperando: el merge es más caro y el rojo aparece tarde. Acá avisa (`warn`) en vez de bloquear, porque una rama vieja es una señal, no siempre un error."
+  },
+  "xp": {
+    "$comment": "Prácticas de XP que tienen mecanismo. Cada una se activa sola (`enabled`): una regla instalada sin cicatriz detrás se desactiva en una semana y se lleva puestas a las que servían (P14). Todas tienen fuga DECLARADA con motivo — la fuga es la diferencia entre un freno que se respeta y uno que se saltea con `--no-verify`. Mecanismo: `.githooks/commit-msg` → `node scripts/ciclo-check.mjs --commit`. Ver docs/ciclo-desarrollo.md.",
+    "testFirst": {
+      "$comment": "No prueba que la prueba se escribiera ANTES —nada lo prueba desde un hook—, sino que el cambio de comportamiento y su prueba entran juntos al historial. En ESTE repo la prueba de un freno es su caso del self-test (P2), así que `testPattern` nombra los scripts que la contienen.",
+      "enabled": true,
+      "testPattern": "(^|/)(__tests__|tests?)/|\\.(test|spec)\\.[cm]?[jt]sx?$|^scripts/harness-(selftest|bench)\\.mjs$",
+      "escapeLine": "sin-test:",
+      "reason": "un freno sin prueba de vida es decorativo (P2), y un arreglo sin prueba no puede demostrar que arregló algo."
+    },
+    "smallBatch": {
+      "$comment": "El límite es de ESTE equipo: nadie sabe en abstracto cuántos archivos son demasiados. `ignorePattern` saca del conteo lo que crece por naturaleza (documentación, datos).",
+      "enabled": true,
+      "maxFiles": 30,
+      "maxLines": 900,
+      "escapeLine": "lote-grande:",
+      "reason": "un lote grande no se revisa de verdad: se aprueba. Y cuando algo se rompe, revertir arrastra lo que sí servía."
+    },
+    "refactorSeparate": {
+      "enabled": true,
+      "subjectPattern": "^refactor(\\(|:)",
+      "escapeLine": "refactor-mixto:",
+      "reason": "si cambian las expectativas, no era un refactor: son dos commits, y el orden importa para poder revertir uno solo."
+    },
+    "pairing": {
+      "$comment": "APAGADO acá a propósito, y con el mecanismo probado igual por un cebo del self-test: en un repo de una persona con agente, la fuga sería la regla y en una semana alguien apagaría el hook entero. Se enciende donde el equipo programa de a dos de verdad (ver examples/git-flow.json).",
+      "enabled": false,
+      "trailer": "Co-authored-by:",
+      "escapeLine": "solo:",
+      "reason": "el código que escribió una sola persona lo entiende una sola persona; el trailer deja el rastro de quién más lo vio."
+    }
+  },
   "graph": {
     "$comment": "EL ÍNDICE DEL CÓDIGO ES OBLIGATORIO, no una comodidad. La herramienta es codegraph (https://github.com/colbymchenry/codegraph): mantiene un grafo local en SQLite (`.codegraph/codegraph.db`) con símbolos, llamadas y radio de impacto, y se sincroniza solo al guardar. Activa el hook `graph-first`; sin esta clave el hook queda instalado y muerto. Instalación y flujo completo: docs/codegraph.md. La regla de lectura: PRIMERO el índice (`codegraph explore` o la herramienta MCP `codegraph_explore`), DESPUÉS abrir archivos — y sólo el fragmento que el índice señaló.",
     "tool": "codegraph",
@@ -598,7 +672,8 @@
       ".claude/hooks/ask-first.mjs": "askFirst.marker",
       ".claude/hooks/action-guard.mjs": "askFirst.marker",
       ".githooks/commit-msg": "commitMsg.codePattern",
-      ".githooks/pre-push": "branches.protected"
+      ".githooks/pre-push": "branches.protected",
+      "scripts/ciclo-check.mjs": "workflow.branchPattern"
     }
   }
 }
