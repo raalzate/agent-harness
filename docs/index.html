@@ -195,6 +195,14 @@ ol.leyes b { color: var(--ink); font-weight: 600; }
 .piece .mark { font-family: var(--f-mono); font-size: var(--step--1); color: var(--accent-ink); letter-spacing: .08em; text-transform: uppercase; }
 .piece .solves { font-family: var(--f-mono); font-size: var(--step--1); color: var(--ink-faint); border-top: 1px dashed var(--rule); padding-top: .6rem; margin-top: auto; line-height: 1.55; }
 
+/* ── Panel de números ──────────────────────────────────────────────────── */
+.stats { display: grid; gap: 1px; background: var(--rule-soft); border: 1px solid var(--rule-soft); border-radius: 3px; grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 1.75rem; }
+@media (min-width: 54rem) { .stats { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.stat { background: var(--surface); padding: 1.1rem 1.2rem 1.2rem; display: flex; flex-direction: column; gap: .3rem; }
+.stat b { font-family: var(--f-display); font-size: var(--step-3); line-height: 1; font-weight: 700; }
+.stat .lbl { font-family: var(--f-mono); font-size: var(--step--1); text-transform: uppercase; letter-spacing: .08em; color: var(--accent-ink); }
+.stat .why { font-size: var(--step--1); color: var(--ink-soft); line-height: 1.55; }
+
 /* ── Par config → bloqueo ──────────────────────────────────────────────── */
 .pair { display: grid; gap: 1rem; grid-template-columns: minmax(0, 1fr); margin-top: 1.75rem; align-items: stretch; }
 @media (min-width: 54rem) { .pair { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
@@ -362,6 +370,8 @@ footer { border-top: 4px solid var(--ink); }
           <span class="chip">8 stacks</span>
           <span class="chip">10 hooks</span>
           <span class="chip">8 clases de regla</span>
+          <span class="chip">7 señales del gate</span>
+          <span class="chip">276 ms por turno</span>
           <span class="chip">Apache-2.0</span>
         </p>
       </div>
@@ -386,12 +396,14 @@ footer { border-top: 4px solid var(--ink); }
   <nav id="nav-arbol">
     <p class="grupo" data-grupo="empezar">Empezar</p>
     <a href="#tesis" data-grupo="empezar" data-k="tesis por que contexto modelo repo">Por qué un arnés</a>
+    <a href="#prueba" data-grupo="empezar" data-k="evidencia numeros pruebas self-test banco stacks dependencias">La evidencia</a>
     <a href="#quickstart" data-grupo="empezar" data-k="quick start instalar 10 minutos ejemplo todo comandos">Quick start</a>
 
     <p class="grupo" data-grupo="metodo">Método</p>
     <a href="#leyes" data-grupo="metodo" data-k="leyes principios constitucion once">Once leyes</a>
     <a href="#piezas" data-grupo="metodo" data-k="piezas hooks gate self-test lint">Las cinco piezas</a>
     <a href="#freno" data-grupo="metodo" data-k="freno regla json bloqueo config">Anatomía de un freno</a>
+    <a href="#costo" data-grupo="metodo" data-k="costo latencia milisegundos presupuesto observability hooks-timing medir performance">Lo que cuesta el arnés</a>
     <a href="#indice" data-grupo="metodo" data-k="indice codegraph grafo leer codigo radio impacto">El índice del código</a>
     <a href="#registro" data-grupo="metodo" data-k="registro trazabilidad commit issue pr">Trazabilidad</a>
     <a href="#ciclo" data-grupo="metodo" data-k="ciclo rama branch trunk based git flow github flow xp tdd test primero lote chico refactor pairing commit merge">Ciclo de desarrollo</a>
@@ -440,6 +452,48 @@ footer { border-top: 4px solid var(--ink); }
       <p>Este repo no es una guía sobre eso. Es la infraestructura, y <strong>se audita a sí
         misma</strong>: su propio gate son las señales del arnés. Un repo de buenas prácticas que no
         las cumple no convence a nadie.</p>
+      <p>Y se mide: cada freno declara <strong>cuánto cuesta en milisegundos</strong> y el gate imprime el tiempo de cada señal. Un control que nadie puede medir es un control que alguien termina apagando — <a href="#costo">los números están acá</a>.</p>
+    </div>
+  </div>
+</section>
+
+<section id="prueba">
+  <div class="wrap sec-inner">
+    <p class="rail"><b>0</b>dependencias, y todo verificado por un comando</p>
+    <div>
+      <div class="col stack">
+        <p class="eyebrow">La evidencia</p>
+        <h2 style="font-size:var(--step-2)">Cada número de esta página lo imprime un comando</h2>
+        <p>No hay una sola cifra acá que no salga de correr algo. Son las señales del gate de este
+          repo, hoy, y cualquiera las reproduce con <code>npm run gate</code>.</p>
+      </div>
+
+      <div class="stats">
+        <div class="stat">
+          <b>288</b><span class="lbl">comprobaciones</span>
+          <span class="why">El self-test deriva cada caso <em>del propio config</em>: agregar una regla la cubre sin escribir código.</span>
+        </div>
+        <div class="stat">
+          <b>105</b><span class="lbl">sobre 9 repos reales</span>
+          <span class="why">El banco instala el arnés en un repo de juguete de cada stack con archivos reales del lenguaje. Cazó tres bugs que la forma no veía.</span>
+        </div>
+        <div class="stat">
+          <b>8</b><span class="lbl">perfiles de stack</span>
+          <span class="why">.NET, Maven, Gradle, Python, Go, Rust, Node y front. El perfil trae los hechos del lenguaje; las reglas las escribe tu equipo.</span>
+        </div>
+        <div class="stat">
+          <b>3</b><span class="lbl">sistemas operativos</span>
+          <span class="why">El <em>mismo</em> <code>npm run gate</code> en Linux, Windows y macOS. La matriz cazó tres bugs que sólo existían en Windows.</span>
+        </div>
+        <div class="stat">
+          <b>26</b><span class="lbl">configs de ejemplo</span>
+          <span class="why">Publicadas para copiar — y corridas de verdad: una regla que nunca llega a aplicarse sale roja acá, no en tu repo.</span>
+        </div>
+        <div class="stat">
+          <b>0</b><span class="lbl">dependencias</span>
+          <span class="why">Sólo <code>node</code>. Es lo que hace al arnés copiable en cualquier repo sin negociar con nadie.</span>
+        </div>
+      </div>
     </div>
   </div>
 </section>
@@ -634,7 +688,7 @@ repo-lint: 1 problema(s)
             verifica quien programa.</p>
         </div>
         <div class="piece">
-          <p class="mark">9 hooks del agente · 3 de git</p>
+          <p class="mark">10 hooks del agente · 4 de git</p>
           <h3>Frenos en el ciclo</h3>
           <p>Antes de escribir (¿te lo pidieron?, rutas protegidas, reuso), antes de un comando
             irreversible, después de cada edición (el lint del archivo tocado, con el error real) y
@@ -727,6 +781,85 @@ explícita. No lo reintentes igual.</code></pre>
             <tr><td>incidents</td><td>un incidente registrado sin su mecanismo</td><td class="mono">todo gotcha declara <code>Mecanismo:</code></td></tr>
           </tbody>
         </table>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="costo">
+  <div class="wrap sec-inner">
+    <p class="rail"><b>276 ms</b>lo que el arnés agrega a un turno</p>
+    <div>
+      <div class="col stack">
+        <p class="eyebrow">El costo, medido</p>
+        <h2 style="font-size:var(--step-2)">Un arnés que nadie puede medir es un arnés que alguien apaga</h2>
+        <p>Todo freno se paga en latencia, y se paga en el peor momento: en <strong>cada</strong>
+          prompt y en <strong>cada</strong> edición. Esa es la razón real por la que los equipos
+          desactivan sus propios controles — no porque estén en desacuerdo, sino porque estorban y
+          nadie sabe cuánto cuestan. Acá el número está impreso: <code>npm run timing</code>.</p>
+        <p>La regla que prohíbe que un hook lance procesos existía desde el primer día y se defendía
+          con una intuición («eso va a ser lento»). Una intuición se discute con otra intuición. Un
+          número se discute con datos, y convierte la excepción en algo con precio escrito:
+          los <strong>dos</strong> hooks que tienen permiso de lanzar procesos son exactamente los
+          dos que necesitan el doble de presupuesto.</p>
+      </div>
+
+      <div class="pair">
+        <figure class="panel">
+          <figcaption>.claude/harness.config.json</figcaption>
+          <pre><code>{ <span class="k">"observability"</span>: {
+    <span class="k">"budgetMs"</span>: <span class="s">400</span>,
+    <span class="k">"runs"</span>: <span class="s">3</span>,
+    <span class="k">"budgets"</span>: {
+      <span class="k">"…/post-edit-check.mjs"</span>: <span class="s">900</span>,
+      <span class="k">"…/session-start.mjs"</span>:   <span class="s">900</span>
+    } } }</code></pre>
+        </figure>
+        <figure class="panel">
+          <figcaption>npm run timing</figcaption>
+          <pre><code>✓ PreToolUse   bash-guard.mjs        69 ms
+✓ PreToolUse   protected-paths.mjs   68 ms
+✓ PostToolUse  post-edit-check.mjs  144 ms
+
+Costo por evento:
+  UserPromptSubmit   207 ms
+  PreToolUse         276 ms
+
+<span class="hdr">LATENCIA VERDE</span> — todos dentro de
+presupuesto.</code></pre>
+        </figure>
+      </div>
+
+      <div class="col stack" style="margin-top:1.75rem">
+        <h3 style="font-size:var(--step-1)">Qué mide, contra qué, y qué pasa si se degrada</h3>
+        <p>Los diez hooks declarados se corren de verdad con un payload sintético, tres veces, y se
+          reporta la <strong>mediana</strong> —la media la arruina un arranque frío, el máximo
+          cualquier hipo del sistema operativo—. Es una señal del gate más: si un hook se pasa de
+          presupuesto, <strong>no hay entregable</strong>.</p>
+      </div>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>Lo que se mide</th><th class="mono">Medido</th><th>Por qué importa</th></tr></thead>
+          <tbody>
+            <tr><td>un hook puro (no lanza procesos)</td><td class="mono">~70 ms</td><td>es el piso: arrancar <code>node</code>. Ningún freno propio cuesta más que eso</td></tr>
+            <tr><td>los 2 hooks con permiso de lanzar procesos</td><td class="mono">118 y 144 ms</td><td>el precio de la excepción, escrito en el config y no en la cabeza de alguien</td></tr>
+            <tr><td>costo por turno del agente</td><td class="mono">276 ms</td><td>lo que el arnés le agrega a una edición, sumando los cuatro frenos que corren antes de escribir</td></tr>
+            <tr><td>cada señal del gate</td><td class="mono">línea <code>Tiempo:</code></td><td>sin el número, «el gate tarda» termina sacando la señal que molesta en vez de la que cuesta</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="col stack" style="margin-top:1.5rem">
+        <p>Los presupuestos van <strong>holgados a propósito</strong>: lo que caza esta señal no son
+          milisegundos, es el orden de magnitud —el día que alguien meta un typecheck completo dentro
+          de un hook—. Un rojo falso en un runner cargado enseña a ignorar la señal entera, que es
+          peor que no tenerla. Y la medición corre los hooks de verdad, así que <strong>restaura los
+          marcadores de sesión</strong> que algunos escriben: medir no puede cambiar el estado que
+          mide.</p>
+        <p>Como todo freno de este repo, llega con su prueba de vida: con presupuesto imposible la
+          señal se pone roja, con presupuesto holgado el repo pasa, sin la clave declarada
+          <strong>deja pasar</strong> —un repo portado no se pone rojo por una señal que su equipo no
+          eligió—, y un caso verifica que medir no deje basura atrás.</p>
       </div>
     </div>
   </div>
@@ -1253,7 +1386,7 @@ DRY-RUN: 38 archivo(s) a copiar, 0 conservado(s).</code></pre>
     <p class="rail"><b>–</b>lo que no es</p>
     <div class="col stack">
       <p class="eyebrow">Límites declarados</p>
-      <h2 style="font-size:var(--step-2)">Cuatro cosas que este arnés no hace</h2>
+      <h2 style="font-size:var(--step-2)">Cinco cosas que este arnés no hace</h2>
       <ul class="nots">
         <li><strong>No es un sandbox.</strong> La lista de comandos denegados sube el costo del error
           accidental; un agente puede reformular un comando. Para aislamiento real hacen falta
@@ -1266,11 +1399,14 @@ DRY-RUN: 38 archivo(s) a copiar, 0 conservado(s).</code></pre>
           significa node en la máquina del equipo <strong>y en el runner de CI</strong>. Es el precio
           de que el arnés entero sea un puñado de archivos copiables; la alternativa —reescribir once
           hooks en cada lenguaje— es justamente lo que lo volvería inportable.</li>
+        <li><strong>No mide el costo en tokens.</strong> La latencia de cada hook sí está medida y tiene
+          presupuesto; el texto que un hook inyecta al contexto del agente también se paga, y eso
+          todavía no tiene comando. Está escrito como deuda conocida, no como señal verde.</li>
         <li><strong>No reemplaza el criterio.</strong> La intención no es verificable por máquina: por
           eso hay principios REVIEW y un subagente que revisa el diff. Lo que el arnés logra es que lo
           verificable <strong>no dependa de que alguien se acuerde</strong>.</li>
       </ul>
-      <p style="margin-top:.5rem">Los tres están escritos en el repo, con su mecanismo candidato,
+      <p style="margin-top:.5rem">Los cinco están escritos en el repo, con su mecanismo candidato,
         junto al resto de la deuda conocida.</p>
     </div>
   </div>
@@ -1340,6 +1476,11 @@ DRY-RUN: 38 archivo(s) a copiar, 0 conservado(s).</code></pre>
         L("BANCO VERDE — 105 comprobaciones sobre 9 repos de juguete", "dim"),
         L("    ✓ banco de perfiles (stacks reales)", "ok"),
         L(""),
+        L("──▶ costo del arnés (latencia de los hooks)"),
+        L("LATENCIA VERDE — todos los hooks dentro de", "dim"),
+        L("presupuesto (PreToolUse: 276 ms por turno)", "dim"),
+        L("    ✓ costo del arnés (latencia de los hooks)", "ok"),
+        L(""),
         L("GATE VERDE — entregable.", "ok")
       ]
     },
@@ -1383,6 +1524,11 @@ DRY-RUN: 38 archivo(s) a copiar, 0 conservado(s).</code></pre>
         L("BANCO VERDE — 105 comprobaciones sobre 9 repos de juguete", "dim"),
         L("    ✓ banco de perfiles (stacks reales)", "ok"),
         L(""),
+        L("──▶ costo del arnés (latencia de los hooks)"),
+        L("LATENCIA VERDE — todos los hooks dentro de", "dim"),
+        L("presupuesto (PreToolUse: 276 ms por turno)", "dim"),
+        L("    ✓ costo del arnés (latencia de los hooks)", "ok"),
+        L(""),
         L("GATE ROJO — señales fallidas: lint de convenciones", "no"),
         L("Leé el error real (archivo, línea, mensaje) antes", "dim"),
         L("de reintentar. Presupuesto: 2 intentos sobre el", "dim"),
@@ -1415,6 +1561,9 @@ DRY-RUN: 38 archivo(s) a copiar, 0 conservado(s).</code></pre>
         L(""),
         L("──▶ banco de perfiles (stacks reales)"),
         L("    – omitida en modo fast", "sk"),
+        L(""),
+        L("──▶ costo del arnés (latencia de los hooks)"),
+        L("    ✓ costo del arnés (latencia de los hooks)", "ok"),
         L(""),
         L("Señales omitidas (NO son verde):", "sk"),
         L("  índice del código (codegraph) · banco de perfiles", "sk"),

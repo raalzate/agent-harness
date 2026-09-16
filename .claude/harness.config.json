@@ -66,6 +66,14 @@
         ],
         "fastSkip": true,
         "why": "el self-test verifica la FORMA de un perfil; sólo un repo real de cada stack verifica el ENCAJE: que el matcher de DEPS case el XML de un .csproj, que PUREZA cace un `using`, y que el arnés recién instalado no apunte a la nada. Cazó dos bugs en su primera corrida"
+      },
+      {
+        "name": "costo del arnés (latencia de los hooks)",
+        "command": [
+          "node",
+          "scripts/hooks-timing.mjs"
+        ],
+        "why": "todo freno se paga en latencia en CADA prompt y en CADA edición, y hasta acá ese costo era una creencia: la regla PUREZA se defendía con una intuición y las dos excepciones no tenían precio escrito. Ninguna otra señal mira lo que el arnés le cuesta al que lo usa, y un arnés caro se desactiva entero"
       }
     ]
   },
@@ -658,6 +666,23 @@
       "\\bdependenc"
     ]
   },
+  "observability": {
+    "$comment": "EL COSTO DEL ARNES, MEDIDO. Todo freno se paga en latencia, y se paga en cada prompt y en cada edicion. La regla PUREZA prohibe que un hook lance procesos «porque cuesta latencia» y nadie habia medido cuanto: una regla defendida con una intuicion se discute con otra intuicion. `budgetMs` es el presupuesto base por hook; `budgets` lo sube SOLO para los hooks que tienen permiso explicito de lanzar procesos (los mismos dos de `purity.except`), y ese numero es lo que hace visible el precio de la excepcion. `probe` es el payload sintetico con el que se mide: ninguna clave nombra un hook. Lo lee `scripts/hooks-timing.mjs`.",
+    "budgetMs": 400,
+    "runs": 3,
+    "budgets": {
+      "$comment": "Los dos hooks con permiso de lanzar procesos (`purity.except`) tienen presupuesto propio: acá se ve el PRECIO de esa excepción, que es de lo que trata toda la clave. Los números son holgados a propósito —en esta máquina los hooks puros miden ~70 ms y estos dos ~110-140— porque un runner de CI cargado arranca node más lento y un rojo falso enseña a ignorar la señal entera. Lo que esto caza no son milisegundos: es el orden de magnitud, el día que alguien meta un typecheck completo dentro de un hook.",
+      ".claude/hooks/post-edit-check.mjs": 900,
+      ".claude/hooks/session-start.mjs": 900
+    },
+    "probe": {
+      "$comment": "El archivo tiene que ser CÓDIGO para este repo (`gate.codeExtensions` + `gate.codeGlobs`): con un archivo cualquiera, `post-edit-check` toma el atajo y la medición reporta el camino barato, justo el que no cuesta nada.",
+      "filePath": "scripts/gate.mjs",
+      "command": "git status",
+      "prompt": "¿cómo está el arnés?"
+    },
+    "reason": "un hook que tarda se paga en CADA turno; el presupuesto es lo que convierte «esto va a ser lento» en un comando que falla."
+  },
   "install": {
     "$comment": "Qué clave del config ACTIVA cada freno que el instalador copia. Un freno copiado sin su clave queda «instalado y muerto» en el repo destino — el anti-patrón que este arnés existe para evitar, cometido por el propio instalador: viajaron `ask-first`, `action-guard` y `pre-push` con la plantilla sin `askFirst` ni `branches`. El self-test verifica la plantilla contra esta tabla.",
     "activators": {
@@ -673,7 +698,8 @@
       ".claude/hooks/action-guard.mjs": "askFirst.marker",
       ".githooks/commit-msg": "commitMsg.codePattern",
       ".githooks/pre-push": "branches.protected",
-      "scripts/ciclo-check.mjs": "workflow.branchPattern"
+      "scripts/ciclo-check.mjs": "workflow.branchPattern",
+      "scripts/hooks-timing.mjs": "observability.budgetMs"
     }
   }
 }

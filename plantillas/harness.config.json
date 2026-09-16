@@ -55,6 +55,14 @@
         ],
         "skipIfMissing": ".codegraph",
         "why": "el agente lee el repo con el índice, no a mano: sin él abre archivos de más y se pierde las relaciones (quién llama a quién, qué se rompe si toco esto). Un índice desincronizado miente peor que no tenerlo, y eso es lo que mira `codegraph status`. Mientras nadie corra `codegraph init` la señal sale OMITIDA — y omitido no es verde"
+      },
+      {
+        "name": "costo del arnés (latencia de los hooks)",
+        "command": [
+          "node",
+          "scripts/hooks-timing.mjs"
+        ],
+        "why": "ninguna otra señal mira lo que el arnés le cuesta al que lo usa, y un arnés caro no se discute: se desactiva entero. Sin `observability.budgetMs` la señal deja pasar sola"
       }
     ]
   },
@@ -380,6 +388,18 @@
       "\\brefactor",
       "\\bdependenc"
     ]
+  },
+  "observability": {
+    "$comment": "EL COSTO DEL ARNÉS, MEDIDO. Todo freno se paga en latencia, y se paga en CADA prompt y en CADA edición. `purity` prohíbe que un hook lance procesos por ese motivo: sin un número, esa regla se defiende con una intuición. `budgetMs` es el presupuesto base por hook; `budgets` lo sube SÓLO para los hooks con permiso explícito de lanzar procesos, y ahí se ve el precio de la excepción. Los números van holgados: lo que se caza es el orden de magnitud (un typecheck metido dentro de un hook), no milisegundos — un rojo falso en un runner cargado enseña a ignorar la señal entera. `probe.filePath` tiene que ser CÓDIGO para este repo o `post-edit-check` toma el atajo y se mide el camino barato. Lo lee scripts/hooks-timing.mjs.",
+    "budgetMs": 400,
+    "runs": 3,
+    "budgets": {},
+    "probe": {
+      "filePath": "src/index.js",
+      "command": "git status",
+      "prompt": "¿cómo está el arnés?"
+    },
+    "reason": "un hook que tarda se paga en CADA turno; el presupuesto convierte «esto va a ser lento» en un comando que falla."
   },
   "commitMsg": {
     "$comment": "Qué commits piden registro. La documentación no: ES el registro, no el cambio. `escapeLine` exige motivo — un `sin-issue:` pelado sería la misma omisión con otro nombre.",

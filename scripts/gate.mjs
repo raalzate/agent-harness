@@ -65,6 +65,7 @@ const nombreRepo = (() => {
 console.log(`Gate (modo: ${MODE}) — ${nombreRepo}`);
 
 const fallidas = [];
+const duraciones = [];
 const omitidas = [];
 let corridas = 0;
 
@@ -91,26 +92,38 @@ for (const senal of senales) {
   // `shell: false` es deliberado: ningún dato del config se interpola en una línea de
   // comandos. En Windows, los lanzadores `.cmd`/`.bat` (npm, npx, gradlew) sólo se pueden
   // ejecutar a través del shell, así que ESOS —y sólo ésos— se resuelven a su archivo real.
+  const t0 = process.hrtime.bigint();
   const r = spawnSync(resolverEjecutable(argv[0]), argv.slice(1), {
     cwd: REPO_ROOT,
     stdio: "inherit",
     shell: false,
   });
+  // Cuánto tardó cada señal. Sin el número, «el gate tarda» es una sensación, y la discusión
+  // termina sacando la señal que a alguien le molesta en vez de la que cuesta. Con el número
+  // se discute la cara, y `fastSkip` se decide con datos.
+  const ms = Math.round(Number(process.hrtime.bigint() - t0) / 1e6);
+  duraciones.push({ name: senal.name, ms });
   corridas += 1;
 
   if (r.error?.code === "ENOENT") {
     console.log(`    ✗ ${senal.name} — no encontré el ejecutable \`${argv[0]}\``);
     fallidas.push(senal.name);
   } else if (r.status === 0) {
-    console.log(`    ✓ ${senal.name}`);
+    console.log(`    ✓ ${senal.name} (${ms} ms)`);
   } else {
-    console.log(`    ✗ ${senal.name}`);
+    console.log(`    ✗ ${senal.name} (${ms} ms)`);
     fallidas.push(senal.name);
   }
 }
 
 console.log("");
 if (omitidas.length) console.log(`Señales omitidas (NO son verde): ${omitidas.join(" ")}`);
+if (duraciones.length) {
+  const total = duraciones.reduce((a, d) => a + d.ms, 0);
+  const caras = [...duraciones].sort((a, b) => b.ms - a.ms).slice(0, 3);
+  const fmt = (d) => `${d.name} ${(d.ms / 1000).toFixed(1)}s`;
+  console.log(`Tiempo: ${(total / 1000).toFixed(1)}s en ${duraciones.length} señal(es) — las más caras: ${caras.map(fmt).join(' · ')}`);
+}
 
 // Un gate donde NO corrió ninguna señal no es verde: es un gate que no existe. Pasó una vez
 // (un separador de campos mal elegido omitía todo) y reportó "entregable".

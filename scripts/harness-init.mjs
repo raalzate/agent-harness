@@ -202,6 +202,7 @@ const COPIAR = [
   "scripts/docs-linkcheck.mjs",
   "scripts/artifacts-check.mjs",
   "scripts/ciclo-check.mjs",
+  "scripts/hooks-timing.mjs",
   // Documentos AGNÓSTICOS que el arnés instalado cita: sin ellos, el propio arnés arranca
   // apuntando a la nada en el repo destino (P10 violado por el instalador). Lo destapó el
   // banco de perfiles: `docs-linkcheck` del repo portado salía rojo el primer día.

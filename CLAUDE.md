@@ -29,6 +29,7 @@ scripts/repo-lint.mjs         8 clases de regla, todas configurables
 scripts/harness-selftest.mjs  prueba de vida: genera los casos DESDE el config
 scripts/harness-bench.mjs     el arnés instalado en un repo real de cada stack (el encaje)
 scripts/harness-init.mjs      instalador en otro repo (dry-run por defecto, con perfil de stack)
+scripts/hooks-timing.mjs      el costo del arnés: latencia de cada hook contra su presupuesto
 plantillas/perfiles/          8 perfiles de stack: hechos del lenguaje, nunca reglas
 plantillas/ examples/ docs/   lo que se copia y lo que se lee
 ```
@@ -76,6 +77,8 @@ npm run selftest       # ¿los frenos muerden?
 npm run lint           # ¿el repo pasa con las reglas activas?
 npm run lint:rules     # ¿qué reglas están activas y de dónde salen?
 npm run ciclo          # ¿qué modelo de ramas y qué prácticas XP están activas?
+npm run timing         # ¿cuánto cuesta el arnés en cada prompt y en cada edición?
+npm run timing:rules   # ¿qué presupuesto de latencia rige cada hook?
 ```
 
 - CI (`.github/workflows/ci.yml`) corre **el mismo** `npm run gate`. No mergear en rojo.

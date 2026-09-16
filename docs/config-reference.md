@@ -489,6 +489,44 @@ de omitir en vez de fallar está en
 
 ---
 
+## `observability` — el costo del arnés, medido
+
+```json
+"observability": {
+  "budgetMs": 400,
+  "runs": 3,
+  "budgets": { ".claude/hooks/post-edit-check.mjs": 900 },
+  "probe": { "filePath": "scripts/gate.mjs", "command": "git status", "prompt": "¿cómo está el arnés?" }
+}
+```
+
+Todo freno se paga en latencia, y se paga en el peor momento: en **cada** prompt y en **cada**
+edición. La regla `purity` prohíbe que un hook lance procesos «porque cuesta latencia» — y ese
+costo era una intuición. Una regla defendida con una intuición se discute con otra intuición;
+con un número se discute con datos. Lo lee `node scripts/hooks-timing.mjs`, que es una señal del
+gate.
+
+| Clave | Qué hace |
+|---|---|
+| `budgetMs` | el presupuesto base por hook, en milisegundos. Sin esta clave (y sin `budgets`) la medición **deja pasar**: un repo portado no se pone rojo por una señal que su equipo no eligió |
+| `runs` | cuántas veces se corre cada hook. Se reporta la **mediana**: la media la arruina un arranque frío de node, el máximo cualquier hipo del sistema operativo |
+| `budgets` | presupuesto propio por hook. Es donde se ve el **precio de las excepciones de `purity`**: los dos hooks con permiso de lanzar procesos son los dos que necesitan más presupuesto, y eso queda escrito |
+| `probe` | el payload sintético con el que se mide. `filePath` tiene que ser **código** para este repo (`gate.codeExtensions` + `gate.codeGlobs`): con un archivo cualquiera, `post-edit-check` toma el atajo y la medición reporta el camino barato, justo el que no cuesta nada |
+
+Ninguna clave nombra un hook: la lista sale de `.claude/settings.json`, la misma fuente única que
+usa la regla `EVENTOS` del lint. Medir corre los hooks **de verdad**, así que los marcadores de
+sesión que algunos escriben (`gate.marker`, `askFirst.marker`) se restauran al terminar — un
+marcador fabricado por la medición bloquea el turno siguiente y nadie entiende por qué.
+
+Los números son holgados a propósito. Lo que esto caza no son milisegundos: es el orden de
+magnitud, el día que alguien meta un typecheck completo dentro de un hook. Un rojo falso en un
+runner de CI cargado enseña a ignorar la señal entera, que es peor que no tenerla.
+
+**Lo que no mide:** el costo en **tokens** del texto que un hook inyecta al contexto. También es
+costo y todavía no tiene comando; está declarado como deuda en `STATUS.md`.
+
+---
+
 ## `install` — qué clave activa cada freno que viaja
 
 ```json
@@ -559,6 +597,7 @@ cumplir. El detalle de qué viaja y qué no está en [perfiles.md](perfiles.md).
 | `xp` | `scripts/ciclo-check.mjs` (lo invoca `.githooks/commit-msg`), self-test (una práctica por cebo) |
 | `postCommit` | `.githooks/post-commit` |
 | `graph` | `graph-first.mjs`, la señal `índice del código` del gate, self-test (sus regex compilan) |
+| `observability` | `scripts/hooks-timing.mjs` (la señal `costo del arnés` del gate), self-test (sección 9) |
 
 Todo lo que aparece en esta tabla lo verifica `node scripts/harness-selftest.mjs`: una ruta que no
 existe o un regex que no compila es **gate rojo**, no un misterio de la semana que viene.
