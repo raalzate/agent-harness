@@ -6,10 +6,11 @@
 
 ## Contexto
 
-`npm run gate` tardaba **129s** con diez núcleos al 88% de **uno**. Medido señal por señal:
-el banco 77.7s, el self-test 46.8s, el resto ~4s. Dentro del banco, un solo caso —el
-`quickstart`— eran 50.2s: dos gates anidados y un self-test suelto que resultó ser, comando
-por comando y config por config, la primera señal de esos mismos gates.
+`npm run gate` tardaba **119s** con diez núcleos al 88% de **uno** (mediana de 3 corridas en un
+clone limpio; una sola corrida varía ±6s). Medido señal por señal: el banco 69s, el self-test
+43s, el resto ~4s. Dentro del banco, un solo caso —el
+`quickstart`— eran 50s: dos gates anidados y un self-test suelto que resultó ser, comando por
+comando y config por config, la primera señal de esos mismos gates.
 
 El trabajo no es pesado. Es **arranque de procesos en serie**: ~65ms de `node` por invocación,
 cientos de invocaciones, una atrás de la otra. Un gate que tarda dos minutos se corre menos, y
@@ -42,9 +43,12 @@ señal del gate anidado que corre dos líneas después. **−14s sin perder una 
 
 ## Consecuencias
 
-- El gate pasó de **129s a ~82s**; el banco, de 77.7s a ~33s. El **self-test es ahora el
-  camino crítico** (44s), y ahí las secciones caras son las mismas de siempre por la misma
-  razón: §8 (perfiles y ejemplos) y §3 (los frenos muerden), las dos en serie.
+- El gate pasó de **119.3s a 83.0s** (−30%); el banco, de 69.4s a 33.7s (−51%). El self-test
+  **subió** 2.6s (42.8 → 45.4): lo que cuestan los tres casos nuevos. Todo medido igual en los
+  dos lados —mediana de 3 corridas en un clone limpio de cada rama—, que es lo único que hace
+  comparables dos números con ±6s de ruido. El **self-test es ahora el camino crítico**, y ahí
+  las secciones caras son las mismas de siempre por la misma razón: §8 (perfiles y ejemplos) y
+  §3 (los frenos muerden), las dos en serie.
 - **La ganancia depende de los núcleos.** En un runner de dos, el paralelismo es 2 y el
   `quickstart` (32s, dos gates anidados) domina el total: el número de arriba es de una
   máquina de diez y no se puede publicar como el de CI sin medirlo ahí.
