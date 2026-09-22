@@ -4,8 +4,15 @@
  *
  *   node scripts/harness-bench.mjs                 # todos los stacks, sin el gate del destino
  *   node scripts/harness-bench.mjs --con-gate      # además corre el gate del repo portado (lento)
- *   node scripts/harness-bench.mjs --solo=dotnet   # un stack
+ *   node scripts/harness-bench.mjs --solo=dotnet   # un caso
+ *   node scripts/harness-bench.mjs --paralelo=1    # en serie (para depurar: la salida sale en vivo)
  *   node scripts/harness-bench.mjs --conservar     # deja los repos temporales para inspeccionar
+ *
+ * Cada caso es independiente por construcción —su propio repo git temporal, nada compartido—,
+ * así que por defecto corren en paralelo: un hijo por caso, tantos a la vez como núcleos. El
+ * padre no prueba nada, junta. La salida se imprime por bloques en el orden declarado, no en
+ * el orden en que terminan: un banco cuya salida cambia de orden entre corridas no se puede
+ * leer en un diff de CI.
  *
  * El self-test verifica la FORMA de un perfil (que traiga sus claves, que no lleve reglas
  * ajenas). Esto verifica el ENCAJE, que es lo que el self-test no puede: que el `matcher` de
@@ -23,13 +30,16 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 
 import { fileURLToPath } from "node:url";
 
 const ARNES = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
 const CONSERVAR = process.argv.includes("--conservar");
 const SOLO = process.argv.find((a) => a.startsWith("--solo="))?.split("=")[1];
+// Modo hijo: el padre necesita los resultados como datos, no como texto para leer con los ojos.
+const JSON_MODE = process.argv.includes("--json");
+const MARCA_JSON = "__BANCO_JSON__ ";
 // El gate del repo portado corre su propio self-test completo: son ~8s por stack, así que en
 // el gate de este repo se omite y queda para CI y para el uso a mano.
 const CON_GATE = process.argv.includes("--con-gate");
@@ -553,14 +563,11 @@ function probarQuickStart() {
     }
     fs.copyFileSync(configEjemplo, path.join(repo, ".claude/harness.config.json"));
 
-    // El documento afirma SELF-TEST VERDE con ese config, sin tocar nada más.
-    const self = correr("node", [path.join(repo, "scripts/harness-selftest.mjs")], { cwd: repo });
-    registrar(
-      stack,
-      "el self-test sale VERDE con el config del ejemplo",
-      self.status === 0,
-      self.salida.split("\n").filter((l) => l.includes("✗")).join("\n").slice(0, 300),
-    );
+    // El documento afirma SELF-TEST VERDE con ese config — y eso lo prueba el gate de abajo,
+    // cuya PRIMERA señal es ese mismo self-test con ese mismo config sobre este mismo repo.
+    // Correrlo suelto acá era el mismo comando dos veces: 14s de los 50s que costaba este
+    // caso, sin una sola afirmación extra. Si el self-test se cae, el gate sale rojo y el
+    // detalle que se imprime son sus propias líneas `✗`.
 
     // Los tres frenos que el documento muestra mordiendo, con su exit=2.
     const rechaza = (hook, payload) => hook_(repo, hook, payload) === 2;
@@ -578,7 +585,12 @@ function probarQuickStart() {
 
     // El gate verde, y el rojo a propósito que el documento muestra al final.
     const verde = correr("bash", [path.join(repo, "scripts/gate.sh")], { cwd: repo });
-    registrar(stack, "el gate del quick start sale VERDE", verde.status === 0, verde.salida.split("\n").slice(-4).join("\n"));
+    registrar(
+      stack,
+      "el gate del quick start sale VERDE (self-test, link-check, lint y tests del ejemplo)",
+      verde.status === 0,
+      [...verde.salida.split("\n").filter((l) => l.includes("✗")), ...verde.salida.split("\n").slice(-2)].join("\n").slice(0, 400),
+    );
 
     const puro = path.join(repo, "src/lib/puntaje.mjs");
     fs.writeFileSync(puro, `import { readFileSync } from "node:fs";\n${fs.readFileSync(puro, "utf8")}`);
@@ -594,15 +606,143 @@ function probarQuickStart() {
 
 // ── Ejecución ────────────────────────────────────────────────────────────────
 
-console.log(`Banco de perfiles — arnés en ${ARNES}`);
-console.log("Cada stack se instala en su propio repo git temporal. Nada se escribe en el arnés.");
+/** Los casos del banco, en el orden en que se imprimen. `quickstart` es uno más. */
+const CASOS = [...Object.keys(FIXTURES), "quickstart"];
 
-for (const [stack, fx] of Object.entries(FIXTURES)) {
-  if (SOLO && stack !== SOLO) continue;
-  probar(stack, fx);
+/**
+ * Cuántos casos a la vez. Por defecto, los núcleos disponibles (en un contenedor de CI con
+ * cuota, `availableParallelism` devuelve la cuota y no el host). `--paralelo=1` vuelve al
+ * modo en serie, que es el que hay que usar para depurar: la salida sale en vivo.
+ */
+const PARALELO = (() => {
+  const flag = process.argv.find((a) => a.startsWith("--paralelo="))?.split("=")[1];
+  const n = flag !== undefined ? Number(flag) : (os.availableParallelism?.() ?? os.cpus().length);
+  if (!Number.isFinite(n) || n < 1) return 1;
+  return Math.min(Math.trunc(n), CASOS.length);
+})();
+
+/**
+ * Qué casos se piden. Un nombre que no existe tiene que ser ROJO, no un banco vacío en verde:
+ * importa el doble desde que el PADRE invoca a los hijos por nombre, porque ahí adentro un
+ * nombre mal escrito no lo ve nadie y el banco reportaría «VERDE» sin haber probado un stack.
+ *
+ * `--solo=` sin valor y `--solo caso` (con espacio, sin `=`) erraban al otro lado: pasaban la
+ * guarda y corrían los NUEVE casos diciendo que corrían uno. Pedir un caso y probar otra cosa
+ * es el mismo agujero mirando para el otro lado, así que también es ROJO.
+ */
+const PEDIDOS = (() => {
+  const crudo = process.argv.filter((a) => a.startsWith("--solo=") || a.startsWith("--casos="));
+  const nombres = crudo.flatMap((a) => a.slice(a.indexOf("=") + 1).split(",")).map((x) => x.trim());
+  if (crudo.length && !nombres.filter(Boolean).length) {
+    console.log("BANCO ROJO — `--solo=`/`--casos=` sin valor: pediste un caso y correrían todos.");
+    console.log(`Casos: ${CASOS.join(" ")}`);
+    process.exit(1);
+  }
+  const malos = nombres.filter((n) => !CASOS.includes(n));
+  if (malos.length) {
+    console.log(`BANCO ROJO — no existe el caso \`${malos[0]}\`.`);
+    console.log(`Casos: ${CASOS.join(" ")}`);
+    process.exit(1);
+  }
+  return nombres.length ? CASOS.filter((c) => nombres.includes(c)) : CASOS;
+})();
+
+/**
+ * Costura para el self-test: el hijo de este caso NO entrega resultados. Es la única forma de
+ * ejercitar el camino del padre cuando un hijo revienta —el que convierte un caso muerto en
+ * ROJO—, y ese camino es justamente el que no se puede provocar a mano. Sólo puede poner el
+ * banco más rojo, nunca más verde.
+ */
+const HIJO_MUDO = process.argv.find((a) => a.startsWith("--hijo-mudo="))?.split("=")[1];
+
+/** Un caso en su propio proceso. Devuelve su salida y sus resultados, nunca lanza. */
+function correrHijo(caso) {
+  return new Promise((resolve) => {
+    const args = [fileURLToPath(import.meta.url), `--solo=${caso}`, "--json"];
+    if (CONSERVAR) args.push("--conservar");
+    if (CON_GATE) args.push("--con-gate");
+    if (HIJO_MUDO) args.push(`--hijo-mudo=${HIJO_MUDO}`);
+    const hijo = spawn(process.execPath, args, { stdio: ["ignore", "pipe", "pipe"] });
+    let out = "";
+    let err = "";
+    hijo.stdout.on("data", (d) => { out += d; });
+    hijo.stderr.on("data", (d) => { err += d; });
+    hijo.on("close", (code) => resolve({ caso, code, out, err }));
+    hijo.on("error", (e) => resolve({ caso, code: null, out, err: e.message }));
+  });
 }
 
-if (!SOLO || SOLO === "quickstart") probarQuickStart();
+/** Pool con tope: arranca `limite` y va reponiendo. Devuelve en el orden de `items`. */
+async function enParalelo(items, fn, limite) {
+  const salidas = new Array(items.length);
+  let siguiente = 0;
+  const obrero = async () => {
+    while (siguiente < items.length) {
+      const i = siguiente;
+      siguiente += 1;
+      salidas[i] = await fn(items[i], i);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limite, items.length) }, obrero));
+  return salidas;
+}
+
+if (!JSON_MODE) {
+  console.log(`Banco de perfiles — arnés en ${ARNES}`);
+  console.log("Cada stack se instala en su propio repo git temporal. Nada se escribe en el arnés.");
+}
+
+if (!SOLO && PARALELO > 1) {
+  console.log(`${PEDIDOS.length} caso(s), hasta ${PARALELO} a la vez.`);
+  const hijos = await enParalelo(PEDIDOS, correrHijo, PARALELO);
+  for (const h of hijos) {
+    const lineas = h.out.split("\n");
+    const marca = lineas.find((l) => l.startsWith(MARCA_JSON));
+    // El `\n` de más no es cosmética: es el camino del crash, y sin él la línea del fallo
+    // queda pegada a media línea de la salida del hijo, que es lo último que uno quiere leer.
+    const texto = lineas.filter((l) => !l.startsWith(MARCA_JSON)).join("\n");
+    process.stdout.write(texto.endsWith("\n") ? texto : `${texto}\n`);
+
+    // Un hijo que se murió sin entregar resultados es ROJO. Sin esto, un caso que revienta
+    // por una excepción del propio banco desaparecería del resumen y el total daría verde.
+    if (!marca) {
+      registrar(h.caso, `el caso \`${h.caso}\` entregó resultados`, false,
+        `el proceso hijo terminó con exit ${h.code} sin resultados${h.err ? `\n${h.err.trim().split("\n").slice(-3).join("\n")}` : ""}`);
+      continue;
+    }
+
+    let entregados;
+    try {
+      entregados = JSON.parse(marca.slice(MARCA_JSON.length));
+    } catch (e) {
+      registrar(h.caso, `los resultados de \`${h.caso}\` se pueden leer`, false, `la marca del hijo no es JSON: ${e.message}`);
+      continue;
+    }
+    for (const r of entregados) resultados.push(r);
+
+    // El exit code del hijo y sus datos tienen que contar la misma historia. Un hijo que se
+    // cae DESPUÉS de entregar (un `finally` que revienta al borrar el temporal) traía todos
+    // sus `ok` y el padre lo contaba verde: el contrato se cerraba por la mitad.
+    const decia = entregados.some((r) => !r.ok);
+    if (h.code !== 0 && !decia) {
+      registrar(h.caso, `el caso \`${h.caso}\` terminó como dice`, false,
+        `entregó ${entregados.length} comprobaciones en verde pero el proceso salió con exit ${h.code}`);
+    }
+  }
+} else {
+  for (const [stack, fx] of Object.entries(FIXTURES)) {
+    if (!PEDIDOS.includes(stack)) continue;
+    probar(stack, fx);
+  }
+  if (PEDIDOS.includes("quickstart")) probarQuickStart();
+}
+
+// El hijo no resume: entrega. El resumen lo imprime el padre una sola vez.
+if (JSON_MODE) {
+  if (HIJO_MUDO && PEDIDOS.includes(HIJO_MUDO)) process.exit(0); // costura del self-test: no entrega
+  console.log(MARCA_JSON + JSON.stringify(resultados));
+  process.exit(resultados.some((r) => !r.ok) ? 1 : 0);
+}
 
 // Resumen
 const porStack = new Map();
@@ -612,6 +752,17 @@ for (const r of resultados) {
   porStack.set(r.stack, acc);
 }
 console.log(`\n${"═".repeat(64)}\nRESUMEN\n`);
+
+// Un banco sin comprobaciones no es verde: es un banco que no existe. Hoy no hay forma de
+// llegar acá —las dos guardas de arriba (caso inexistente, hijo que no entrega) atajan los
+// caminos conocidos y las dos tienen su caso en el self-test—, así que esto NO es el freno:
+// es el cinturón para un caso futuro que termine sin registrar nada. Queda sin prueba de
+// vida a propósito y dicho en voz alta, que es distinto de creerse probado.
+if (!resultados.length) {
+  console.log("BANCO ROJO — ninguna comprobación llegó a correr.");
+  console.log(`Revisá los casos (\`--solo=\`): ${CASOS.join(" ")}`);
+  process.exit(1);
+}
 for (const [stack, { ok, mal }] of porStack) {
   console.log(`  ${mal ? "✗" : "✓"} ${stack.padEnd(12)} ${ok} pasan${mal ? `, ${mal} FALLAN` : ""}`);
 }
