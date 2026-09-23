@@ -1402,6 +1402,59 @@ for (const dir of [".claude/agents", ".claude/commands"]) {
   }
 }
 
+// 6b. El banco corre sus casos en procesos hijos, uno por stack. Eso mete tres maneras nuevas
+//     de reportar VERDE sin haber probado nada, y ninguna la ve otra señal:
+//       · un nombre de caso mal escrito → el hijo no prueba nada y el total sale vacío;
+//       · `--solo=` sin valor → se piden uno y corren todos (pedir un caso y probar otra cosa);
+//       · un hijo que revienta → sus resultados no llegan y el padre los cuenta como cero.
+//     Los tres son la misma cicatriz que el gate ya tiene («ninguna señal llegó a correr»), y
+//     los tres se prueban acá: el caso más caro corre UN caso del banco (~3s), no los nueve.
+{
+  const banco = abs("scripts/harness-bench.mjs");
+  const correrBanco = (...args) => {
+    const r = spawnSync("node", [banco, ...args], { cwd: REPO_ROOT, encoding: "utf8" });
+    return { status: r.status, salida: `${r.stdout ?? ""}${r.stderr ?? ""}` };
+  };
+
+  if (!fs.existsSync(banco)) {
+    skip("el banco es rojo si no probó nada", "este repo no lleva `scripts/harness-bench.mjs` (es del arnés, no de los repos portados)");
+  } else {
+    const inexistente = correrBanco("--solo=no-existe-este-caso");
+    if (inexistente.status !== 0 && /no existe el caso/.test(inexistente.salida))
+      ok("el banco es ROJO con un caso que no existe (no verde vacío)");
+    else
+      bad("el banco es ROJO con un caso que no existe", `exit ${inexistente.status}: un nombre mal escrito daría «BANCO VERDE — 0 comprobaciones»`);
+
+    const vacio = correrBanco("--solo=");
+    if (vacio.status !== 0 && /sin valor/.test(vacio.salida))
+      ok("el banco es ROJO con `--solo=` sin valor (pedir uno y correr nueve es probar otra cosa)");
+    else
+      bad("el banco es ROJO con `--solo=` sin valor", `exit ${vacio.status}: corrió los nueve casos diciendo que corría uno`);
+
+    // El nombre del caso sale de la lista que el propio banco imprime: cablear `dotnet` acá
+    // metería un stack en el self-test (que tiene que ser agnóstico) y, peor, haría que
+    // renombrar un fixture fallara con el mensaje del protocolo JSON en vez del suyo.
+    const primero = /^Casos: (.+)$/m.exec(inexistente.salida)?.[1]?.trim().split(/\s+/)[0];
+    if (!primero) {
+      bad("el banco lista sus casos al rechazar uno", "sin la línea `Casos:` nadie sabe qué pedirle, ni este self-test");
+    } else {
+      // El camino feliz —el hijo entrega, el padre junta— NO se prueba acá a propósito: lo
+      // prueba el banco entero, que es la señal siguiente del gate. Si el hijo dejara de
+      // emitir la marca, el banco registra los nueve casos como «no entregó resultados» y
+      // sale ROJO solo. Correr acá un caso del banco costaba 4s para afirmar lo mismo: es la
+      // misma duplicación que se sacó del `quickstart`, más chica y en el camino crítico.
+
+      // Lo que el banco NO puede producir solo: un hijo que no entrega. La costura
+      // `--hijo-mudo` existe sólo para esto y sólo puede poner el banco más rojo.
+      const mudo = correrBanco(`--casos=${primero}`, `--hijo-mudo=${primero}`);
+      if (mudo.status !== 0 && new RegExp(`el caso .${primero}. entregó resultados`).test(mudo.salida))
+        ok("el banco es ROJO si un hijo no entrega resultados (y nombra el caso)");
+      else
+        bad("el banco es ROJO si un hijo no entrega resultados", `exit ${mudo.status}: un caso que revienta desaparecería del resumen y el total daría verde`);
+    }
+  }
+}
+
 // ── 7. Kit SDD declarado ─────────────────────────────────────────────────────
 section("7. kit SDD");
 const fases = config.sdd?.phases ?? [];
