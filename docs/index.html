@@ -217,6 +217,22 @@ ol.leyes b { color: var(--ink); font-weight: 600; }
 /* ── Par config → bloqueo ──────────────────────────────────────────────── */
 .pair { display: grid; gap: 1rem; grid-template-columns: minmax(0, 1fr); margin-top: 1.75rem; align-items: stretch; }
 @media (min-width: 54rem) { .pair { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
+/* Con espacio, la prosa de apertura y su par de figuras van LADO A LADO: con la prosa en su
+   ancho de lectura y las figuras debajo, en una pantalla ancha quedaba media sección vacía a la
+   derecha del texto. Es una container query y no un corte de pantalla porque el ancho útil
+   depende de si la navegación y el índice lateral están a la vista. El contenedor es `.sec-inner`
+   y no el div que cambia: una container query no le cambia el estilo al propio contenedor, y
+   declarada ahí la regla nunca se activaba. Por debajo del umbral, igual que antes. */
+.sec-inner { container-type: inline-size; }
+@container (min-width: 56rem) {
+  /* 10:11 y no mitades: con mitades exactas dos bloques de código que antes entraban pasaban a
+     desplazarse por 5-12 px. La prosa queda en ~50ch, dentro del ancho cómodo de lectura. */
+  div:has(> .col:first-child + .pair) { display: grid; grid-template-columns: minmax(0, 10fr) minmax(0, 11fr); column-gap: clamp(1.5rem, 3vw, 2.75rem); align-items: start; }
+  div:has(> .col:first-child + .pair) > * { grid-column: 1 / -1; }
+  div:has(> .col:first-child + .pair) > .col:first-child { grid-column: 1; }
+  div:has(> .col:first-child + .pair) > .col:first-child + .pair { grid-column: 2; grid-row: 1; margin-top: 0; grid-template-columns: minmax(0, 1fr); align-content: start; }
+  div:has(> .col:first-child + .pair) > .col:first-child + .pair > figure { margin: 0; }
+}
 .panel { background: var(--surface); border: 1px solid var(--rule); border-radius: 3px; overflow: hidden; display: flex; flex-direction: column; }
 .panel > figcaption { font-family: var(--f-mono); font-size: var(--step--1); text-transform: uppercase; letter-spacing: .09em; color: var(--ink-faint); padding: .6rem .9rem; border-bottom: 1px solid var(--rule-soft); background: var(--surface-2); }
 .panel pre { margin: 0; padding: 1rem .9rem; overflow-x: auto; font-family: var(--f-mono); font-size: clamp(.72rem, .69rem + .2vw, .82rem); line-height: 1.7; }
@@ -292,6 +308,15 @@ footer { border-top: 4px solid var(--ink); }
 .search::before { content: "⌕"; position: absolute; left: .5rem; font-size: 1.05rem; line-height: 1; color: var(--bar-ink-2); pointer-events: none; }
 .topbar .repo { font-family: var(--f-mono); font-size: var(--step--1); text-decoration: none; color: var(--bar-ink-2); white-space: nowrap; }
 .topbar .repo:hover { color: var(--bar-ink); }
+/* En un celular la barra no entraba: marca con versión + buscador + «GitHub ↗» sumaban 425 px en
+   una pantalla de 390, y la página entera se desplazaba de costado. Se cede de lo menos
+   necesario a lo más: primero la versión y el ancho del buscador; en lo más angosto, la palabra. */
+@media (max-width: 30rem) {
+  .topbar-inner { gap: .5rem; }
+  .brand .ver { display: none; }
+  .search input { width: clamp(5.5rem, 28vw, 7rem); }
+}
+@media (max-width: 22rem) { .topbar .repo-txt { display: none; } }
 .drawer-btn { display: none; appearance: none; background: transparent; border: 1px solid var(--bar-rule); border-radius: 3px; color: var(--bar-ink); font-family: var(--f-mono); font-size: 1rem; line-height: 1; padding: .4rem .55rem; cursor: pointer; }
 
 /* Tres columnas: nav · contenido · TOC. Cada corte agrega una columna. */
@@ -360,7 +385,7 @@ footer { border-top: 4px solid var(--ink); }
       <span class="skip">Buscar en la navegación</span>
       <input id="buscar" type="search" placeholder="Buscar…  /" autocomplete="off" spellcheck="false">
     </label>
-    <a class="repo" href="https://github.com/raalzate/agent-harness">GitHub&nbsp;↗</a>
+    <a class="repo" href="https://github.com/raalzate/agent-harness" aria-label="El repositorio en GitHub"><span class="repo-txt">GitHub&nbsp;</span>↗</a>
   </div>
 </div>
 
