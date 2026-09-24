@@ -27,6 +27,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
+import { existeEjecutable } from "../.claude/hooks/harness.mjs";
 
 const args = process.argv.slice(2);
 const flag = (nombre) => {
@@ -289,8 +290,12 @@ function revisarRojo(base) {
   // Un comando que no llegó a correr (binario ausente, timeout, señal) no es una prueba roja:
   // `status` vale null y `null !== 0` certificaba la prueba. Lo cazó el reviewer.
   const noCorrio = (r) => Boolean(r.error) || r.status === null;
+  // Que el binario exista se pregunta antes de lanzarlo: en Windows (shell) un binario ausente es
+  // un exit 1 como cualquier prueba roja, y se certificaba la rama (ver `existeEjecutable`).
   const correr = ([cmd, ...cmdArgs]) =>
-    spawnSync(cmd, cmdArgs, { cwd: arbol, encoding: "utf8", timeout: rojo.timeoutMs ?? 600000, shell: process.platform === "win32" });
+    existeEjecutable(cmd)
+      ? spawnSync(cmd, cmdArgs, { cwd: arbol, encoding: "utf8", timeout: rojo.timeoutMs ?? 600000, shell: process.platform === "win32" })
+      : { status: null, error: { code: "ENOENT" } };
   let status = null;
   let invalida = null;
   try {

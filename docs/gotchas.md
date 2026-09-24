@@ -378,3 +378,19 @@ Mecanismo: `scripts/reviewer-eval.mjs` corre al revisor en un directorio tempora
          de `reviewerEval.context`. El self-test lo prueba con un revisor de mentira que sólo
          contesta si encuentra su contexto donde corre, y escribe algo ahí (sección 10b): el eval
          tiene que pasar y nada de lo escrito puede aparecer en el repo.
+
+### GOTCHA: en Windows un binario ausente no es ENOENT
+
+Síntoma: la matriz de CI salió roja SÓLO en `windows-latest`: `--verify-red` daba por buena una
+         rama cuyo comando de pruebas no existía («las pruebas fallan sin el cambio… prueban
+         algo»), y el eval del revisor salía ROTO en vez de OMITIDO sin la CLI instalada.
+Causa:   en Windows los comandos del config se lanzan por `cmd.exe` (Node no ejecuta un `.cmd`
+         como `npm` sin shell). Ahí un binario ausente no da `ENOENT`: da un exit 1 con «no se
+         reconoce como comando», indistinguible de una prueba roja. Los dos scripts deducían la
+         ausencia del error, y en macOS y Linux eso andaba.
+Regla:   que un ejecutable exista se PREGUNTA antes de lanzarlo, con la búsqueda de la
+         plataforma (PATHEXT en Windows); nunca se deduce del código de salida.
+Mecanismo: `existeEjecutable` en `.claude/hooks/harness.mjs`, usada por `scripts/cycle-check.mjs`,
+         `scripts/reviewer-eval.mjs` y el self-test (que tenía su propia copia sin PATHEXT). Caso
+         1d del self-test, más los casos de `--verify-red` y del eval que corren en la matriz.
+

@@ -34,7 +34,7 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 // El mismo helper que usan el hook y el lint: comparar contra la lista DECLARADA dejaba pasar
 // justo el caso del incidente (el gate declara una extensión que el default agnóstico no tiene).
-import { codeExtensions, depsMatcher, importSyntax, segmentosDeRuta, relativaDesdeRaiz, esUnidadPelada, parseHookCommand, firstMatch } from "../.claude/hooks/harness.mjs";
+import { codeExtensions, depsMatcher, importSyntax, segmentosDeRuta, relativaDesdeRaiz, esUnidadPelada, parseHookCommand, firstMatch, existeEjecutable } from "../.claude/hooks/harness.mjs";
 
 const REPO_ROOT = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
 const abs = (p) => path.join(REPO_ROOT, p);
@@ -168,18 +168,9 @@ function sampleFromPattern(pattern) {
  */
 const analizarComando = parseHookCommand;
 
-/** ¿El ejecutable existe? Por ruta, o buscándolo en PATH si es un nombre suelto. */
-function existeEjecutable(cmd) {
-  if (cmd.includes("/")) return fs.existsSync(cmd) || fs.existsSync(abs(cmd));
-  const dirs = (process.env.PATH ?? "").split(path.delimiter).filter(Boolean);
-  return dirs.some((d) => {
-    try {
-      return fs.statSync(path.join(d, cmd)).isFile();
-    } catch {
-      return false;
-    }
-  });
-}
+// ¿El ejecutable existe? La pregunta vive en `.claude/hooks/harness.mjs` (`existeEjecutable`):
+// acá había una copia sin la búsqueda de Windows (PATHEXT), la misma falla que tenían
+// `--verify-red` y el eval del revisor. Dos versiones de la misma pregunta son dos verdades.
 
 // ── 1. Hooks declarados vs. hooks que existen ────────────────────────────────
 section("1. settings.json → hooks declarados");
@@ -257,6 +248,16 @@ section("1b. scripts del arnés");
     bad(`analizarComando(${comando})`, `esperaba {${tipo}, ${file}} y dio {${r?.tipo}, ${r?.file}}`);
   }
   if (!malos) ok(`${casos.length} formas de declarar un hook se analizan bien (binario externo, \`$CLAUDE_PROJECT_DIR\`, flags de node)`);
+}
+
+// 1d. Si un binario existe se pregunta antes de lanzarlo. En Windows los comandos del config van
+//     por `cmd.exe`, y ahí un binario ausente es un exit 1 como cualquier otro: `--verify-red` lo
+//     leía como «las pruebas fallan» y el eval del revisor como roto. Lo destapó la matriz de CI.
+{
+  const ausente = "comando-que-no-existe-en-ninguna-maquina";
+  if (existeEjecutable("node") && !existeEjecutable(ausente) && !existeEjecutable(ausente, "win32") && existeEjecutable("scripts/gate.mjs") && !existeEjecutable("scripts/nada.mjs")) // linkcheck:ignore — ruta ficticia
+    ok("un binario ausente se detecta ANTES de lanzarlo, también con la búsqueda de Windows (PATHEXT)");
+  else bad("existeEjecutable", "no distingue un binario presente de uno ausente");
 }
 
 // ── 2. El config no apunta a la nada ─────────────────────────────────────────
