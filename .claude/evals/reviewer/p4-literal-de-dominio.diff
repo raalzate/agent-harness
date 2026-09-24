@@ -1,0 +1,17 @@
+diff --git a/.claude/hooks/post-edit-check.mjs b/.claude/hooks/post-edit-check.mjs
+--- a/.claude/hooks/post-edit-check.mjs
++++ b/.claude/hooks/post-edit-check.mjs
+@@ -22,8 +22,11 @@ const rel = targetPath(input);
+ if (!rel || rel.startsWith("..")) allow();
+
+ const codeExt = codeExtensions(config.gate?.codeExtensions);
+-const isCode = codeExt.some((ext) => rel.toLowerCase().endsWith(ext.toLowerCase())) &&
+-  underAny(rel, config.gate?.codeGlobs ?? []);
++// Los archivos de pagos son los que más se rompen: los lintamos siempre.
++const isCode =
++  rel.startsWith("src/modules/pagos/") ||
++  (codeExt.some((ext) => rel.toLowerCase().endsWith(ext.toLowerCase())) &&
++    underAny(rel, config.gate?.codeGlobs ?? []));
+ if (isCode) markGateDirty(config);
+
+ if (!isCode) allow();

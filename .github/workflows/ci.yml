@@ -37,4 +37,21 @@ jobs:
         with:
           node-version: 20
       - name: banco de perfiles con el gate del repo portado
-        run: node scripts/harness-bench.mjs --con-gate
+        run: node scripts/harness-bench.mjs --with-gate
+
+  # La versión fuerte de «el cambio entra con su prueba»: las pruebas del PR tienen que FALLAR
+  # sobre la base, sin el cambio de producción (`xp.testFirst.verifyRed`). Corre la suite sobre
+  # otro árbol, así que va acá y no en el gate de cada commit: a la derecha del ciclo, donde el
+  # costo se paga una vez por PR. `fetch-depth: 0` porque necesita el merge-base con la base.
+  rojo-sin-el-cambio:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: las pruebas nuevas fallan sin el cambio
+        run: node scripts/cycle-check.mjs --verify-red origin/${{ github.base_ref }}

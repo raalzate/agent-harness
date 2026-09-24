@@ -16,7 +16,7 @@
     "installHooksCommand": "npm run hooks:install",
     "signals": [
       {
-        "name": "self-test del arnés",
+        "name": "harness self-test",
         "command": [
           "node",
           "scripts/harness-selftest.mjs"
@@ -24,7 +24,7 @@
         "why": "un hook roto o un config que apunta a la nada fallan en silencio: ninguna otra señal los ve"
       },
       {
-        "name": "lint de convenciones",
+        "name": "convention lint",
         "command": [
           "node",
           "scripts/repo-lint.mjs"
@@ -61,7 +61,7 @@
         "why": "dev y prod difieren: resolución de módulos y empaquetado"
       },
       {
-        "name": "artefactos en su lugar",
+        "name": "artifacts in place",
         "command": [
           "node",
           "scripts/artifacts-check.mjs"
@@ -69,7 +69,7 @@
         "why": "el trabajo vive en Boards: un plan suelto en el repo parte el registro en dos"
       },
       {
-        "name": "índice del código (codegraph)",
+        "name": "code index (codegraph)",
         "command": [
           "codegraph",
           "status"
@@ -234,7 +234,7 @@
       "fixup! ",
       "squash! "
     ],
-    "escapeLine": "sin-issue:"
+    "escapeLine": "no-issue:"
   },
   "graph": {
     "$comment": "EL ÍNDICE DEL CÓDIGO. Activa el hook `graph-first` y la señal del gate. Herramienta por default: codegraph (https://github.com/colbymchenry/codegraph). Regla: primero el índice, después abrir archivos. Ver docs/codegraph.md.",

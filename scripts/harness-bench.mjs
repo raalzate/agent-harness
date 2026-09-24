@@ -3,10 +3,10 @@
  * Banco de perfiles — el arnés instalado en un repo REAL de cada stack.
  *
  *   node scripts/harness-bench.mjs                 # todos los stacks, sin el gate del destino
- *   node scripts/harness-bench.mjs --con-gate      # además corre el gate del repo portado (lento)
- *   node scripts/harness-bench.mjs --solo=dotnet   # un caso
- *   node scripts/harness-bench.mjs --paralelo=1    # en serie (para depurar: la salida sale en vivo)
- *   node scripts/harness-bench.mjs --conservar     # deja los repos temporales para inspeccionar
+ *   node scripts/harness-bench.mjs --with-gate      # además corre el gate del repo portado (lento)
+ *   node scripts/harness-bench.mjs --only=dotnet   # un caso
+ *   node scripts/harness-bench.mjs --parallel=1    # en serie (para depurar: la salida sale en vivo)
+ *   node scripts/harness-bench.mjs --keep     # deja los repos temporales para inspeccionar
  *
  * Cada caso es independiente por construcción —su propio repo git temporal, nada compartido—,
  * así que por defecto corren en paralelo: un hijo por caso, tantos a la vez como núcleos. El
@@ -35,14 +35,14 @@ import { spawn, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 const ARNES = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
-const CONSERVAR = process.argv.includes("--conservar");
-const SOLO = process.argv.find((a) => a.startsWith("--solo="))?.split("=")[1];
+const CONSERVAR = process.argv.includes("--keep");
+const SOLO = process.argv.find((a) => a.startsWith("--only="))?.split("=")[1];
 // Modo hijo: el padre necesita los resultados como datos, no como texto para leer con los ojos.
 const JSON_MODE = process.argv.includes("--json");
 const MARCA_JSON = "__BANCO_JSON__ ";
 // El gate del repo portado corre su propio self-test completo: son ~8s por stack, así que en
 // el gate de este repo se omite y queda para CI y para el uso a mano.
-const CON_GATE = process.argv.includes("--con-gate");
+const CON_GATE = process.argv.includes("--with-gate");
 
 /**
  * Un repo de juguete por stack, con archivos REALES del stack (no plantillas del arnés):
@@ -343,7 +343,7 @@ function probar(stack, fx) {
     correr("git", ["-C", repo, "config", "user.email", "banco@example.com"]);
     correr("git", ["-C", repo, "config", "user.name", "banco"]);
 
-    // 2. Detección automática del stack (sin --perfil).
+    // 2. Detección automática del stack (sin --profile).
     const deteccion = correr("node", [path.join(ARNES, "scripts/harness-init.mjs"), repo]);
     const detectado = /Perfil de stack \(detectado\): (\S+)/.exec(deteccion.salida)?.[1];
     const varios = /Varios stacks detectados: (.+)/.exec(deteccion.salida)?.[1];
@@ -356,12 +356,12 @@ function probar(stack, fx) {
     registrar(stack, "el dry-run no escribe nada", !fs.existsSync(path.join(repo, ".claude")), "apareció .claude/ en dry-run");
 
     // 3. Instalación real con el perfil.
-    const instalar = correr("node", [path.join(ARNES, "scripts/harness-init.mjs"), repo, "--perfil", stack, "--apply"]);
+    const instalar = correr("node", [path.join(ARNES, "scripts/harness-init.mjs"), repo, "--profile", stack, "--apply"]);
     if (instalar.status !== 0) {
       registrar(stack, "instalación", false, instalar.salida.trim());
       return;
     }
-    registrar(stack, "instalación con --perfil", true);
+    registrar(stack, "instalación con --profile", true);
 
     // 4. Llenar el config como lo haría el equipo (es el paso que ninguna herramienta hace).
     const cfgPath = path.join(repo, ".claude/harness.config.json");
@@ -448,7 +448,7 @@ function probar(stack, fx) {
     //     explicable (los placeholders del config de arranque), no que sea verde.
     if (CON_GATE) {
       const gate = correr("bash", [path.join(repo, "scripts/gate.sh")], { cwd: repo });
-      const corrio = /──▶ self-test del arnés/.test(gate.salida);
+      const corrio = /──▶ harness self-test/.test(gate.salida);
       registrar(stack, "el gate del repo portado corre", corrio, gate.salida.trim().split("\n").slice(-3).join("\n"));
       const razones = [...gate.salida.matchAll(/✗ (.+)/g)].map((m) => m[1]);
       console.log(`   · gate del destino: ${gate.status === 0 ? "VERDE" : "ROJO"}${razones.length ? ` (${razones.join(", ")})` : ""}`);
@@ -611,11 +611,11 @@ const CASOS = [...Object.keys(FIXTURES), "quickstart"];
 
 /**
  * Cuántos casos a la vez. Por defecto, los núcleos disponibles (en un contenedor de CI con
- * cuota, `availableParallelism` devuelve la cuota y no el host). `--paralelo=1` vuelve al
+ * cuota, `availableParallelism` devuelve la cuota y no el host). `--parallel=1` vuelve al
  * modo en serie, que es el que hay que usar para depurar: la salida sale en vivo.
  */
 const PARALELO = (() => {
-  const flag = process.argv.find((a) => a.startsWith("--paralelo="))?.split("=")[1];
+  const flag = process.argv.find((a) => a.startsWith("--parallel="))?.split("=")[1];
   const n = flag !== undefined ? Number(flag) : (os.availableParallelism?.() ?? os.cpus().length);
   if (!Number.isFinite(n) || n < 1) return 1;
   return Math.min(Math.trunc(n), CASOS.length);
@@ -626,15 +626,15 @@ const PARALELO = (() => {
  * importa el doble desde que el PADRE invoca a los hijos por nombre, porque ahí adentro un
  * nombre mal escrito no lo ve nadie y el banco reportaría «VERDE» sin haber probado un stack.
  *
- * `--solo=` sin valor y `--solo caso` (con espacio, sin `=`) erraban al otro lado: pasaban la
+ * `--only=` sin valor y `--only caso` (con espacio, sin `=`) erraban al otro lado: pasaban la
  * guarda y corrían los NUEVE casos diciendo que corrían uno. Pedir un caso y probar otra cosa
  * es el mismo agujero mirando para el otro lado, así que también es ROJO.
  */
 const PEDIDOS = (() => {
-  const crudo = process.argv.filter((a) => a.startsWith("--solo=") || a.startsWith("--casos="));
+  const crudo = process.argv.filter((a) => a.startsWith("--only=") || a.startsWith("--cases="));
   const nombres = crudo.flatMap((a) => a.slice(a.indexOf("=") + 1).split(",")).map((x) => x.trim());
   if (crudo.length && !nombres.filter(Boolean).length) {
-    console.log("BANCO ROJO — `--solo=`/`--casos=` sin valor: pediste un caso y correrían todos.");
+    console.log("BANCO ROJO — `--only=`/`--cases=` sin valor: pediste un caso y correrían todos.");
     console.log(`Casos: ${CASOS.join(" ")}`);
     process.exit(1);
   }
@@ -653,15 +653,15 @@ const PEDIDOS = (() => {
  * ROJO—, y ese camino es justamente el que no se puede provocar a mano. Sólo puede poner el
  * banco más rojo, nunca más verde.
  */
-const HIJO_MUDO = process.argv.find((a) => a.startsWith("--hijo-mudo="))?.split("=")[1];
+const HIJO_MUDO = process.argv.find((a) => a.startsWith("--mute-child="))?.split("=")[1];
 
 /** Un caso en su propio proceso. Devuelve su salida y sus resultados, nunca lanza. */
 function correrHijo(caso) {
   return new Promise((resolve) => {
-    const args = [fileURLToPath(import.meta.url), `--solo=${caso}`, "--json"];
-    if (CONSERVAR) args.push("--conservar");
-    if (CON_GATE) args.push("--con-gate");
-    if (HIJO_MUDO) args.push(`--hijo-mudo=${HIJO_MUDO}`);
+    const args = [fileURLToPath(import.meta.url), `--only=${caso}`, "--json"];
+    if (CONSERVAR) args.push("--keep");
+    if (CON_GATE) args.push("--with-gate");
+    if (HIJO_MUDO) args.push(`--mute-child=${HIJO_MUDO}`);
     const hijo = spawn(process.execPath, args, { stdio: ["ignore", "pipe", "pipe"] });
     let out = "";
     let err = "";
@@ -760,7 +760,7 @@ console.log(`\n${"═".repeat(64)}\nRESUMEN\n`);
 // vida a propósito y dicho en voz alta, que es distinto de creerse probado.
 if (!resultados.length) {
   console.log("BANCO ROJO — ninguna comprobación llegó a correr.");
-  console.log(`Revisá los casos (\`--solo=\`): ${CASOS.join(" ")}`);
+  console.log(`Revisá los casos (\`--only=\`): ${CASOS.join(" ")}`);
   process.exit(1);
 }
 for (const [stack, { ok, mal }] of porStack) {

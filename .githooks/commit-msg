@@ -9,7 +9,7 @@
 # Regla: si el commit toca CÓDIGO (no sólo documentación), el mensaje referencia
 # un ítem de trabajo, o declara por qué no lo lleva:
 #
-#     sin-issue: typo en el tooltip, sin superficie nueva
+#     no-issue: typo en el tooltip, sin superficie nueva
 #
 # La declaración va en su propia línea y queda en el historial: saltarse el
 # registro es una decisión firmada, no un silencio.
@@ -60,9 +60,9 @@ try {
   if (new RegExp(tr.issuePattern).test(msg)) process.exit(0);
 } catch { process.exit(0); }
 
-// La declaración explícita: en su propia línea y CON motivo (un `sin-issue:`
+// La declaración explícita: en su propia línea y CON motivo (un `no-issue:`
 // pelado sería la misma omisión con otro nombre).
-const fuga = cm.escapeLine || "sin-issue:";
+const fuga = cm.escapeLine || "no-issue:";
 const reFuga = new RegExp("^" + fuga.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\s*\\S+", "im");
 if (reFuga.test(msg)) process.exit(0);
 
@@ -94,8 +94,8 @@ fi
 
 # Prácticas de XP con mecanismo (test primero, lote chico, refactor separado, de a dos).
 # Cada una se activa por su clave en `xp`; ninguna corre si el equipo no la encendió.
-if [ -f "scripts/ciclo-check.mjs" ]; then
-  node scripts/ciclo-check.mjs --commit "$MSG_FILE" || exit 1
+if [ -f "scripts/cycle-check.mjs" ]; then
+  node scripts/cycle-check.mjs --commit "$MSG_FILE" || exit 1
 fi
 
 exit 0

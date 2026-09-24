@@ -1,6 +1,6 @@
 # Constitución — Agent Harness
 
-**Versión 1.1.0** · Principios que no se negocian **en este repo**. Las convenciones operativas
+**Versión 1.2.0** · Principios que no se negocian **en este repo**. Las convenciones operativas
 viven en `CLAUDE.md`; el arnés que hace cumplir estos principios, en `docs/arnes.md`.
 
 Cada principio dice su **fuerza**:
@@ -18,7 +18,7 @@ cuerpo. Un principio que nadie hace cumplir se borra o se convierte en mecanismo
 
 ## P1 — Nada se entrega sin gate verde · BLOCKING
 
-El entregable es `npm run gate`: self-test del arnés, link-check de docs y lint de convenciones.
+El entregable es `npm run gate`: harness self-test, docs link-check y convention lint.
 Una señal **omitida** no es verde, y `gate:fast` verde tampoco.
 
 *Mecanismo:* `scripts/gate.sh`, el hook `Stop` (`.claude/hooks/gate-stop.mjs`) y el job `gate` de CI.
@@ -31,6 +31,8 @@ hook nuevo llega con su caso escrito a mano**.
 
 *Mecanismo:* `node scripts/harness-selftest.mjs` — verifica que cada hook exista y parsee, que cada
 ruta y regex del config resuelva, y que cada regla bloquee una muestra concreta derivada de ella.
+El sensor inferencial (`reviewer`) no cabe en el gate —es caro y no determinista—, así que su
+prueba de vida es una tasa: `node scripts/reviewer-eval.mjs` en el barrido programado.
 
 ## P3 — Todo freno prueba que NO muerde de más · BLOCKING
 
@@ -137,6 +139,21 @@ que gasta contexto del agente y paciencia del equipo. Lo que se comparte entre r
 constitución, el método de portado y las clases de regla. Una regla instalada sin cicatriz detrás
 es un hallazgo de review.
 
+## Precedencia — cuando dos BLOCKING chocan · REVIEW
+
+Ningún comando resuelve un conflicto entre dos principios: cada freno ve su regla, no la del
+vecino. Cuando cumplir uno obliga a violar otro, gana el que está más arriba en esta lista, y
+**el agente para y escala** — no elige en silencio:
+
+1. **P8 · P9** — lo que protege el trabajo y los secretos del humano. Un gate rojo que sólo se
+   arregla editando una ruta protegida o con un borrado en lote se escala; no se fuerza.
+2. **P5** — el contrato de los hooks. Un arnés roto deja pasar; nunca bloquea al humano.
+3. **P1** — el gate verde. Nada se entrega en rojo, pero el gate no se pone verde a costa de
+   1 o 2 (saltarse la verificación está en `bash.deny`: si el gate estorba, se arregla el gate).
+4. El resto, en su orden de número.
+
+El `reviewer` verifica que un choque se haya escalado y no resuelto a escondidas.
+
 ---
 
 ### Historial
@@ -145,3 +162,4 @@ es un hallazgo de review.
 |---|---|---|
 | 1.0.0 | 2026-08-21 | Primera versión (ver `docs/decisions/0001-arnes-portable.md`). |
 | 1.1.0 | 2026-08-25 | P11 nuevo: el trabajo queda registrado (`commit-msg` + `artifacts-check`), agnóstico de forja. Los principios siguientes corren un número. |
+| 1.2.0 | 2026-09-24 | Precedencia entre BLOCKING (la pregunta abierta de `docs/guias-y-sensores.md`). P2 alcanza al único sensor inferencial: el `reviewer` tiene prueba de vida (`scripts/reviewer-eval.mjs`, fuera del gate). |

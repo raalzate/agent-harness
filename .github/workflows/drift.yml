@@ -1,0 +1,56 @@
+# El barrido programado: la etapa «continua» del ciclo (docs/guias-y-sensores.md, sección 4).
+# Acá va lo que NO puede ir en el gate de cada commit: lo que depende del reloj (la deriva) y
+# lo que es caro y no determinista (la prueba de vida del reviewer). Si esto se pone rojo, no
+# se rompió un cambio: se degradó algo que nadie tocó, y por eso nadie lo iba a mirar.
+name: Deriva
+
+on:
+  schedule:
+    - cron: "0 12 * * 1" # lunes, 12:00 UTC
+  workflow_dispatch:
+
+jobs:
+  # El mismo gate de siempre, sobre main sin cambios: una dependencia del runner, una versión
+  # nueva de node o una herramienta externa que se movió aparecen acá antes que en un PR ajeno.
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: gate
+        run: npm run gate
+
+  deriva:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # el barrido de reglas lee el historial
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: lo que se degradó sin que ningún cambio lo rompiera
+        run: npm run drift
+
+  # El único sensor inferencial del arnés, con su prueba de vida. Necesita la CLI del agente
+  # y una clave: sin el secreto el paso se omite, y el resumen del job lo dice — omitido no es verde.
+  revisor:
+    runs-on: ubuntu-latest
+    env:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: sin clave, la prueba del revisor queda OMITIDA
+        if: env.ANTHROPIC_API_KEY == ''
+        run: echo "::warning::prueba de vida del reviewer OMITIDA — falta el secreto ANTHROPIC_API_KEY. Omitido no es verde."
+      - name: instalar la CLI del agente
+        if: env.ANTHROPIC_API_KEY != ''
+        run: npm install -g @anthropic-ai/claude-code
+      - name: prueba de vida del reviewer
+        if: env.ANTHROPIC_API_KEY != ''
+        run: npm run eval:reviewer

@@ -28,7 +28,7 @@ arnés (`purity`, `reuse`, `forbiddenDeps`) verifican fronteras que alguien tuvo
 - La herramienta por default es [codegraph](https://github.com/colbymchenry/codegraph): grafo local
   en SQLite, sin dependencias de servicio, auto-sincronizado al guardar, agnóstico de lenguaje. Se
   declara en `graph` — el hook no la conoce: lee `graphFile`, `queryCommand` y `questionPatterns`.
-- **Señal del gate** `índice del código (codegraph)` → `codegraph status`, con
+- **Señal del gate** `code index (codegraph)` → `codegraph status`, con
   `skipIfMissing: ".codegraph"`. Sin índice no falla: se reporta **OMITIDA**, y una señal omitida
   no es verde. La omisión impresa en cada corrida es el recordatorio.
 - **`protectedPaths`** cubre `^\.codegraph/`: el índice es derivado, se reconstruye, no se edita.

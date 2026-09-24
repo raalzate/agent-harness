@@ -15,7 +15,7 @@
     "installHooksCommand": "git config core.hooksPath .githooks",
     "signals": [
       {
-        "name": "self-test del arnés",
+        "name": "harness self-test",
         "command": [
           "node",
           "scripts/harness-selftest.mjs"
@@ -23,7 +23,7 @@
         "why": "un hook roto falla en silencio: ninguna otra señal lo ve"
       },
       {
-        "name": "lint de convenciones",
+        "name": "convention lint",
         "command": [
           "node",
           "scripts/repo-lint.mjs"
@@ -47,7 +47,7 @@
         "why": "la suite que existe, corriendo de verdad. Los tests rotos heredados se arreglan o se borran: uno ignorado enseña que el rojo es normal"
       },
       {
-        "name": "artefactos en su lugar",
+        "name": "artifacts in place",
         "command": [
           "node",
           "scripts/artifacts-check.mjs"
@@ -55,7 +55,7 @@
         "why": "el trabajo vive en Jira: un plan suelto en el repo parte el registro en dos"
       },
       {
-        "name": "índice del código (codegraph)",
+        "name": "code index (codegraph)",
         "command": [
           "codegraph",
           "status"
@@ -230,7 +230,7 @@
       "fixup! ",
       "squash! "
     ],
-    "escapeLine": "sin-issue:"
+    "escapeLine": "no-issue:"
   },
   "graph": {
     "$comment": "EL ÍNDICE DEL CÓDIGO. Activa el hook `graph-first` y la señal del gate. Herramienta por default: codegraph (https://github.com/colbymchenry/codegraph). Regla: primero el índice, después abrir archivos. Ver docs/codegraph.md.",

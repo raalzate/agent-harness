@@ -607,7 +607,7 @@ examples/{dotnet, jvm-spring, android-kotlin,
       <div class="pair">
         <figure class="panel blocked">
           <figcaption>$ bash scripts/gate.sh — con IO en la capa pura</figcaption>
-          <pre><code>──▶ lint de convenciones
+          <pre><code>──▶ convention lint
 repo-lint: 1 problema(s)
 
   &lt;capa pura&gt;/puntaje.*:1  <span class="hdr">[PUREZA]</span>
@@ -617,10 +617,10 @@ repo-lint: 1 problema(s)
   la lógica lee el disco, testearla exige un
   archivo de verdad y deja de ser lógica.
 
-    ✗ lint de convenciones
+    ✗ convention lint
 
 <span class="hdr">GATE ROJO</span> — señales fallidas:
-  lint de convenciones</code></pre>
+  convention lint</code></pre>
         </figure>
         <div class="cta-box" style="margin-top:0">
           <p class="eyebrow">Los comandos con su salida real</p>
@@ -917,11 +917,11 @@ codegraph explore "cómo llega el pago a la cola"</code></pre>
         </figure>
         <figure class="panel">
           <figcaption>npm run gate — sin índice construido</figcaption>
-          <pre><code>──▶ índice del código (codegraph)
+          <pre><code>──▶ code index (codegraph)
     – OMITIDA: no existe `.codegraph`
 
 Señales omitidas (NO son verde):
-  índice del código (codegraph)</code></pre>
+  code index (codegraph)</code></pre>
         </figure>
       </div>
 
@@ -954,7 +954,7 @@ Señales omitidas (NO son verde):
 
 <section id="registro">
   <div class="wrap sec-inner">
-    <p class="rail"><b>#123</b>o <code>sin-issue:</code>, pero algo</p>
+    <p class="rail"><b>#123</b>o <code>no-issue:</code>, pero algo</p>
     <div>
       <div class="col stack">
         <p class="eyebrow">Trazabilidad</p>
@@ -983,7 +983,7 @@ Elegí una de las dos, y que quede
 en el historial:
 
   1) Referenciá el ítem: AB#123
-  2) sin-issue: &lt;por qué no hace falta&gt;</code></pre>
+  2) no-issue: &lt;por qué no hace falta&gt;</code></pre>
         </figure>
       </div>
 
@@ -1083,9 +1083,9 @@ Patrón: ^(feat|fix|chore)/[a-z0-9._-]+$
         <table>
           <thead><tr><th class="mono">clave</th><th>Qué verifica</th><th>Qué NO</th><th class="mono">fuga</th></tr></thead>
           <tbody>
-            <tr><td class="mono">testFirst</td><td>el commit que cambia comportamiento trae también un archivo de prueba</td><td>que la prueba se escribiera antes</td><td class="mono">sin-test:</td></tr>
-            <tr><td class="mono">smallBatch</td><td>archivos y líneas bajo el límite de ese equipo</td><td>que el lote tenga sentido propio</td><td class="mono">lote-grande:</td></tr>
-            <tr><td class="mono">refactorSeparate</td><td>un commit <code>refactor:</code> no cambia pruebas</td><td>que el refactor sea un refactor</td><td class="mono">refactor-mixto:</td></tr>
+            <tr><td class="mono">testFirst</td><td>el commit que cambia comportamiento trae también un archivo de prueba</td><td>que la prueba se escribiera antes</td><td class="mono">no-test:</td></tr>
+            <tr><td class="mono">smallBatch</td><td>archivos y líneas bajo el límite de ese equipo</td><td>que el lote tenga sentido propio</td><td class="mono">big-batch:</td></tr>
+            <tr><td class="mono">refactorSeparate</td><td>un commit <code>refactor:</code> no cambia pruebas</td><td>que el refactor sea un refactor</td><td class="mono">mixed-refactor:</td></tr>
             <tr><td class="mono">pairing</td><td>el commit deja rastro de con quién se hizo</td><td>que la sesión de a dos existiera</td><td class="mono">solo:</td></tr>
           </tbody>
         </table>
@@ -1364,6 +1364,7 @@ DRY-RUN: 38 archivo(s) a copiar, 0 conservado(s).</code></pre>
             <tr><td><a href="https://github.com/raalzate/agent-harness/blob/main/docs/metodo.md">metodo.md</a></td><td>El ciclo de trabajo y las once leyes, cada una con su cicatriz, cómo se ve cuando falta y el comando que la hace cumplir.</td></tr>
             <tr><td><a href="https://github.com/raalzate/agent-harness/blob/main/docs/caso-de-estudio.md">caso-de-estudio.md</a></td><td>Un arnés real con números verificables, cuatro mecanismos contados desde el incidente que los creó, y los huecos que ese repo declara.</td></tr>
             <tr><td><a href="https://github.com/raalzate/agent-harness/blob/main/docs/buenas-practicas.md">buenas-practicas.md</a></td><td>La guía de fondo, agnóstica de stack: qué es un arnés, las cinco decisiones del bucle, los niveles de madurez L0–L4.</td></tr>
+            <tr><td><a href="https://github.com/raalzate/agent-harness/blob/main/docs/guias-y-sensores.md">guias-y-sensores.md</a></td><td>El marco de <em>harness engineering</em> (Böckeler, martinfowler.com) aplicado: guías y sensores, computacional e inferencial, qué mecanismo cubre cada idea y qué huecos quedan declarados.</td></tr>
             <tr><td><a href="https://github.com/raalzate/agent-harness/blob/main/docs/agilidad.md">agilidad.md</a></td><td>Los principios ágiles con mecanismo: diez principios, el comando que falla cuando se violan, y la lista explícita de lo que NO se hace cumplir.</td></tr>
             <tr><td><a href="https://github.com/raalzate/agent-harness/blob/main/docs/ciclo-desarrollo.md">ciclo-desarrollo.md</a></td><td>El ciclo de desarrollo declarado: modelo de ramas (trunk-based, git flow, GitHub flow) y las cuatro prácticas de XP que tienen mecanismo, con lo que cada una NO prueba.</td></tr>
             <tr><td><a href="https://github.com/raalzate/agent-harness/blob/main/docs/arquitectura.md">arquitectura.md</a></td><td>Qué documentación de arquitectura es obligatoria, cuándo va un ADR, y la traducción de bajo acoplamiento / alta cohesión a reglas que fallan.</td></tr>
@@ -1393,6 +1394,7 @@ DRY-RUN: 38 archivo(s) a copiar, 0 conservado(s).</code></pre>
             <tr><td><a href="https://github.com/raalzate/agent-harness/blob/main/docs/decisions/0004-contrato-de-hooks.md">0004</a></td><td>El contrato de exit codes, y por qué un arnés roto <em>deja pasar</em>.</td></tr>
             <tr><td><a href="https://github.com/raalzate/agent-harness/blob/main/docs/decisions/0005-indice-obligatorio.md">0005</a></td><td>El índice del código pasa de recomendación a requisito — y por qué su señal se omite en vez de fallar.</td></tr>
             <tr><td><a href="https://github.com/raalzate/agent-harness/blob/main/docs/decisions/0006-banco-en-paralelo.md">0006</a></td><td>El banco corre un proceso hijo por caso y el contrato entre padre e hijo es la salida — el gate de 129s a ~82s.</td></tr>
+            <tr><td><a href="https://github.com/raalzate/agent-harness/blob/main/docs/decisions/0007-controles-fuera-del-gate.md">0007</a></td><td>Los controles caros o que dependen del reloj van fuera del gate, con el pipeline que los corre declarado y verificado por el self-test.</td></tr>
           </tbody>
         </table>
       </div>
@@ -1465,7 +1467,7 @@ DRY-RUN: 38 archivo(s) a copiar, 0 conservado(s).</code></pre>
         L("$ npm run gate", "cmd"),
         L("Gate (modo: full) — agent-harness", "dim"),
         L(""),
-        L("──▶ self-test del arnés"),
+        L("──▶ harness self-test"),
         L("  ✓ 64 regex del config compilan", "ok"),
         L("  ✓ 16 rutas del config resuelven", "ok"),
         L("  ✓ protected-paths bloquea `.env`", "ok"),
@@ -1479,32 +1481,32 @@ DRY-RUN: 38 archivo(s) a copiar, 0 conservado(s).</code></pre>
         L("  – fases SDD instaladas (omitido: sin kit declarado)", "sk"),
         L("SELF-TEST VERDE — cada regla del config tiene un", "dim"),
         L("comando que falla si se la viola.", "dim"),
-        L("    ✓ self-test del arnés", "ok"),
+        L("    ✓ harness self-test", "ok"),
         L(""),
-        L("──▶ link-check de docs"),
+        L("──▶ docs link-check"),
         L("docs-linkcheck: ok", "dim"),
-        L("    ✓ link-check de docs", "ok"),
+        L("    ✓ docs link-check", "ok"),
         L(""),
-        L("──▶ lint de convenciones"),
+        L("──▶ convention lint"),
         L("repo-lint: OK", "dim"),
-        L("    ✓ lint de convenciones", "ok"),
+        L("    ✓ convention lint", "ok"),
         L(""),
-        L("──▶ artefactos en su lugar"),
+        L("──▶ artifacts in place"),
         L("artifacts-check: OK — sin artefactos sueltos", "dim"),
-        L("    ✓ artefactos en su lugar", "ok"),
+        L("    ✓ artifacts in place", "ok"),
         L(""),
-        L("──▶ índice del código (codegraph)"),
+        L("──▶ code index (codegraph)"),
         L("codegraph: 1.284 símbolos · índice sincronizado", "dim"),
-        L("    ✓ índice del código (codegraph)", "ok"),
+        L("    ✓ code index (codegraph)", "ok"),
         L(""),
-        L("──▶ banco de perfiles (stacks reales)"),
+        L("──▶ profile bench (real stacks)"),
         L("BANCO VERDE — 105 comprobaciones sobre 9 repos de juguete", "dim"),
-        L("    ✓ banco de perfiles (stacks reales)", "ok"),
+        L("    ✓ profile bench (real stacks)", "ok"),
         L(""),
-        L("──▶ costo del arnés (latencia de los hooks)"),
+        L("──▶ harness cost (hook latency)"),
         L("LATENCIA VERDE — todos los hooks dentro de", "dim"),
         L("presupuesto (PreToolUse: 276 ms por turno)", "dim"),
-        L("    ✓ costo del arnés (latencia de los hooks)", "ok"),
+        L("    ✓ harness cost (hook latency)", "ok"),
         L(""),
         L("GATE VERDE — entregable.", "ok")
       ]
@@ -1515,16 +1517,16 @@ DRY-RUN: 38 archivo(s) a copiar, 0 conservado(s).</code></pre>
         L("$ npm run gate", "cmd"),
         L("Gate (modo: full) — agent-harness", "dim"),
         L(""),
-        L("──▶ self-test del arnés"),
+        L("──▶ harness self-test"),
         L("SELF-TEST VERDE — cada regla del config tiene un", "dim"),
         L("comando que falla si se la viola.", "dim"),
-        L("    ✓ self-test del arnés", "ok"),
+        L("    ✓ harness self-test", "ok"),
         L(""),
-        L("──▶ link-check de docs"),
+        L("──▶ docs link-check"),
         L("docs-linkcheck: ok", "dim"),
-        L("    ✓ link-check de docs", "ok"),
+        L("    ✓ docs link-check", "ok"),
         L(""),
-        L("──▶ lint de convenciones"),
+        L("──▶ convention lint"),
         L("repo-lint: 1 problema(s)", "dim"),
         L(""),
         L("  docs/gotchas.md:344  [INCIDENTE]  el gotcha", "no"),
@@ -1535,26 +1537,26 @@ DRY-RUN: 38 archivo(s) a copiar, 0 conservado(s).</code></pre>
         L("Cada regla vive en `.claude/harness.config.json`.", "dim"),
         L("Si la regla está mal, se discute y se cambia ahí", "dim"),
         L("— no se ignora.", "dim"),
-        L("    ✗ lint de convenciones", "no"),
+        L("    ✗ convention lint", "no"),
         L(""),
-        L("──▶ artefactos en su lugar"),
+        L("──▶ artifacts in place"),
         L("artifacts-check: OK — artefactos en el gestor", "dim"),
-        L("    ✓ artefactos en su lugar", "ok"),
+        L("    ✓ artifacts in place", "ok"),
         L(""),
-        L("──▶ índice del código (codegraph)"),
+        L("──▶ code index (codegraph)"),
         L("codegraph: 1.284 símbolos · índice sincronizado", "dim"),
-        L("    ✓ índice del código (codegraph)", "ok"),
+        L("    ✓ code index (codegraph)", "ok"),
         L(""),
-        L("──▶ banco de perfiles (stacks reales)"),
+        L("──▶ profile bench (real stacks)"),
         L("BANCO VERDE — 105 comprobaciones sobre 9 repos de juguete", "dim"),
-        L("    ✓ banco de perfiles (stacks reales)", "ok"),
+        L("    ✓ profile bench (real stacks)", "ok"),
         L(""),
-        L("──▶ costo del arnés (latencia de los hooks)"),
+        L("──▶ harness cost (hook latency)"),
         L("LATENCIA VERDE — todos los hooks dentro de", "dim"),
         L("presupuesto (PreToolUse: 276 ms por turno)", "dim"),
-        L("    ✓ costo del arnés (latencia de los hooks)", "ok"),
+        L("    ✓ harness cost (hook latency)", "ok"),
         L(""),
-        L("GATE ROJO — señales fallidas: lint de convenciones", "no"),
+        L("GATE ROJO — señales fallidas: convention lint", "no"),
         L("Leé el error real (archivo, línea, mensaje) antes", "dim"),
         L("de reintentar. Presupuesto: 2 intentos sobre el", "dim"),
         L("mismo error.", "dim")
@@ -1566,32 +1568,32 @@ DRY-RUN: 38 archivo(s) a copiar, 0 conservado(s).</code></pre>
         L("$ npm run gate:fast", "cmd"),
         L("Gate (modo: fast) — agent-harness", "dim"),
         L(""),
-        L("──▶ self-test del arnés"),
-        L("    ✓ self-test del arnés", "ok"),
+        L("──▶ harness self-test"),
+        L("    ✓ harness self-test", "ok"),
         L(""),
-        L("──▶ link-check de docs"),
+        L("──▶ docs link-check"),
         L("docs-linkcheck: ok", "dim"),
-        L("    ✓ link-check de docs", "ok"),
+        L("    ✓ docs link-check", "ok"),
         L(""),
-        L("──▶ lint de convenciones"),
+        L("──▶ convention lint"),
         L("repo-lint: OK", "dim"),
-        L("    ✓ lint de convenciones", "ok"),
+        L("    ✓ convention lint", "ok"),
         L(""),
-        L("──▶ artefactos en su lugar"),
+        L("──▶ artifacts in place"),
         L("artifacts-check: OK — artefactos en el gestor", "dim"),
-        L("    ✓ artefactos en su lugar", "ok"),
+        L("    ✓ artifacts in place", "ok"),
         L(""),
-        L("──▶ índice del código (codegraph)"),
+        L("──▶ code index (codegraph)"),
         L("    – OMITIDA: no existe `.codegraph` (omitido ≠ pasó)", "sk"),
         L(""),
-        L("──▶ banco de perfiles (stacks reales)"),
+        L("──▶ profile bench (real stacks)"),
         L("    – omitida en modo fast", "sk"),
         L(""),
-        L("──▶ costo del arnés (latencia de los hooks)"),
-        L("    ✓ costo del arnés (latencia de los hooks)", "ok"),
+        L("──▶ harness cost (hook latency)"),
+        L("    ✓ harness cost (hook latency)", "ok"),
         L(""),
         L("Señales omitidas (NO son verde):", "sk"),
-        L("  índice del código (codegraph) · banco de perfiles", "sk"),
+        L("  code index (codegraph) · banco de perfiles", "sk"),
         L(""),
         L("GATE FAST VERDE — señal de desarrollo.", "sk"),
         L("NO es entregable: faltan las señales lentas.", "sk"),
@@ -1753,7 +1755,7 @@ DRY-RUN: 38 archivo(s) a copiar, 0 conservado(s).</code></pre>
           L("pasan. Podés mergear.»", "dim"),
           L(""),
           L("$ git push  →  CI", "cmd"),
-          L("✗ lint de convenciones — [PUREZA] IO en capa pura", "no"),
+          L("✗ convention lint — [PUREZA] IO en capa pura", "no"),
           L("✗ link-check — docs/reintentos.md no existe", "no"),
           L("CI ROJO, 11 minutos después. Y el contexto del", "no"),
           L("turno donde se hizo el cambio ya se cerró.", "no")
@@ -1812,7 +1814,7 @@ DRY-RUN: 38 archivo(s) a copiar, 0 conservado(s).</code></pre>
           L("registrado en ninguna parte.", "no"),
           L("  1) Referenciá el ítem de trabajo (#123).", "no"),
           L("  2) O declaralo, con el motivo, en una línea:", "no"),
-          L("     sin-issue: typo del tooltip, sin superficie", "no"),
+          L("     no-issue: typo del tooltip, sin superficie", "no"),
           L(""),
           L("$ git commit -am \"fix(pago): reintento (#412)\"", "cmd"),
           L("[main 4ad91c7] 6 archivos", "dim"),

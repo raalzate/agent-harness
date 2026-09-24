@@ -314,8 +314,8 @@ forja, no su reemplazo: el freno fuerte vive en el servidor. Sin esta clave, el 
 
 | Clave | Qué hace |
 |---|---|
-| `model` | informativo: `trunk-based`, `github-flow`, `git-flow`, `gitlab-flow`. Es lo que la ruta `ciclo` del router le pone delante al agente antes de que abra una rama |
-| `branchPattern` | qué nombre puede tener una rama de trabajo. Lo verifica `pre-push` → `node scripts/ciclo-check.mjs --push` |
+| `model` | informativo: `trunk-based`, `github-flow`, `git-flow`, `gitlab-flow`. Es lo que la ruta `cycle` del router le pone delante al agente antes de que abra una rama |
+| `branchPattern` | qué nombre puede tener una rama de trabajo. Lo verifica `pre-push` → `node scripts/cycle-check.mjs --push` |
 | `branchExamples` | ejemplos que acompañan al mensaje de bloqueo. Un freno que muestra el nombre correcto se obedece; uno que sólo muestra el regex, se saltea |
 | `longLived` | las ramas del propio modelo (`main`, `develop`, `release`), **exentas** del patrón. Vacío = se usa `branches.protected` |
 | `baseBranch` | de dónde sale la rama, y contra qué se mide su edad |
@@ -332,8 +332,8 @@ config: [ciclo-desarrollo.md](ciclo-desarrollo.md).
 
 ```json
 {
-  "testFirst": { "enabled": true, "testPattern": "…", "escapeLine": "sin-test:", "reason": "…" },
-  "smallBatch": { "enabled": true, "maxFiles": 15, "maxLines": 400, "escapeLine": "lote-grande:" },
+  "testFirst": { "enabled": true, "testPattern": "…", "escapeLine": "no-test:", "reason": "…" },
+  "smallBatch": { "enabled": true, "maxFiles": 15, "maxLines": 400, "escapeLine": "big-batch:" },
   "refactorSeparate": { "enabled": true, "subjectPattern": "^refactor(\\(|:)" },
   "pairing": { "enabled": false, "trailer": "Co-authored-by:", "escapeLine": "solo:" }
 }
@@ -341,19 +341,50 @@ config: [ciclo-desarrollo.md](ciclo-desarrollo.md).
 
 | Práctica | Qué verifica en el commit | Fuga declarada |
 |---|---|---|
-| `testFirst` | si el commit toca código (`codePattern`, o el de `commitMsg`) también toca un archivo de prueba (`testPattern`, o el de `tests.filePattern`) | `sin-test: <motivo>` |
-| `smallBatch` | archivos y líneas bajo `maxFiles` / `maxLines`; `ignorePattern` saca del conteo lo que crece por naturaleza | `lote-grande: <motivo>` |
-| `refactorSeparate` | un commit cuyo asunto casa `subjectPattern` no toca pruebas | `refactor-mixto: <motivo>` |
+| `testFirst` | si el commit toca código (`codePattern`, o el de `commitMsg`) también toca un archivo de prueba (`testPattern`, o el de `tests.filePattern`) | `no-test: <motivo>` |
+| `smallBatch` | archivos y líneas bajo `maxFiles` / `maxLines`; `ignorePattern` saca del conteo lo que crece por naturaleza | `big-batch: <motivo>` |
+| `refactorSeparate` | un commit cuyo asunto casa `subjectPattern` no toca pruebas | `mixed-refactor: <motivo>` |
 | `pairing` | el mensaje trae `trailer` (`Co-authored-by:`) | `solo: <motivo>` |
 
 Cada práctica se enciende **sola** (`enabled: true`): una regla instalada sin cicatriz detrás se
 apaga en una semana y se lleva puestas a las que servían (P14). Toda fuga exige **motivo** — una
 línea pelada sería la misma omisión con otro nombre. Las lee `.githooks/commit-msg` →
-`node scripts/ciclo-check.mjs --commit`.
+`node scripts/cycle-check.mjs --commit`.
 
 Lo que estas cuatro **no** prueban (que la prueba se escribiera antes, que el lote tenga sentido
 propio, que el refactor sea un refactor, que la sesión de a dos existiera) está escrito en
 [ciclo-desarrollo.md](ciclo-desarrollo.md) y lo mira el subagente `reviewer`.
+
+### `xp.testFirst.verifyRed` — la prueba falla sin el cambio
+
+```json
+"verifyRed": {
+  "enabled": true,
+  "command": ["node", "scripts/harness-selftest.mjs"],
+  "timeoutMs": 600000,
+  "runner": ".github/workflows/ci.yml",
+  "escapeLine": "no-red:",
+  "reason": "…"
+}
+```
+
+La versión fuerte de `testFirst`: las pruebas de la rama tienen que **fallar sobre la base**, sin el
+cambio de producción. `node scripts/cycle-check.mjs --verify-red <base>` arma un worktree temporal
+fuera del repo (P7) en el merge-base, pone encima los archivos de prueba de HEAD y corre `command`
+ahí; si pasa, la prueba es un espejo del código y el paso sale rojo. Es caro, así que va en CI sobre
+el PR (`runner` lo declara, y el self-test verifica que ese pipeline lo invoque). Fuga:
+`no-red: <motivo>` en cualquier commit de la rama.
+
+`setupCommand` (opcional, argv) corre en el árbol de la base **antes** de medir. Un worktree no trae
+nada ignorado —`node_modules/`, `.venv`, `target/`—, así que en un repo con dependencias hay que
+declararlo (`["npm", "ci"]`, `["pip", "install", "-r", "requirements.txt"]`…): sin eso la suite falla
+por falta de dependencias y el freno pasa siempre. Un comando que no llega a correr (binario
+ausente, timeout) o un `setupCommand` que falla **invalidan** la medición (rojo): nunca cuentan como
+prueba roja.
+
+Lo que no prueba: que falle por la razón **correcta**. Donde "la prueba" es una suite enorme (en
+este repo, el self-test entero), casi cualquier cambio suyo sale rojo sobre la base y la señal es
+débil por construcción.
 
 ---
 
@@ -415,12 +446,12 @@ los patrones tipo Jira que cazan `UTF-8`, en [trazabilidad.md](trazabilidad.md).
 
 ```json
 { "codePattern": "^(src/|scripts/)", "ignoreExtensions": [".md", ".png"],
-  "skipSubjects": ["Merge ", "Revert ", "fixup! ", "squash! "], "escapeLine": "sin-issue:" }
+  "skipSubjects": ["Merge ", "Revert ", "fixup! ", "squash! "], "escapeLine": "no-issue:" }
 ```
 
 Lo lee `.githooks/commit-msg`. `codePattern` decide qué es **código**; la documentación no pide
 registro porque *es* el registro. `escapeLine` es la fuga declarada y exige motivo: un
-`sin-issue:` pelado sería la misma omisión con otro nombre. Sin `tracker.issuePattern`, el freno
+`no-issue:` pelado sería la misma omisión con otro nombre. Sin `tracker.issuePattern`, el freno
 no corre — se configuran juntos.
 
 ---
@@ -482,7 +513,7 @@ auto-sincronizado al guardar). Instalación y flujo completo: [codegraph.md](cod
 El hook **no conoce ninguna herramienta**: con otro índice (un LSP, `ctags`, un grafo propio) se
 cambian estas claves y nada más. Lo que no es negociable es la regla.
 
-Además: la señal del gate `índice del código (codegraph)` corre `statusCommand` con
+Además: la señal del gate `code index (codegraph)` corre `statusCommand` con
 `skipIfMissing: ".codegraph"` — sin índice se reporta **OMITIDA**, y omitido no es verde. El porqué
 de omitir en vez de fallar está en
 [decisions/0005-indice-obligatorio.md](decisions/0005-indice-obligatorio.md).
@@ -575,6 +606,73 @@ cumplir. El detalle de qué viaja y qué no está en [perfiles.md](perfiles.md).
 
 ---
 
+## `coherence` — guía y freno no se contradicen
+
+```json
+{
+  "guides": ["CLAUDE.md", ".claude/commands", ".claude/skills", ".claude/agents"],
+  "commandPattern": "^(git|npm|npx|node|gh|codegraph|sed|perl|rm|find|curl)\\s",
+  "configKeys": ["reason", "message", "staleReason"],
+  "reason": "…"
+}
+```
+
+Regla `COHERENCIA` de `scripts/repo-lint.mjs`. Lo que un archivo de `guides` recomienda en un bloque
+de shell, y cada comando citado entre backticks en las claves `configKeys` del config, no puede estar
+vedado por `bash.deny`: el agente haría lo que le dijeron, el hook lo frenaría, y reintentaría en
+bucle. `commandPattern` dice qué palabra abre un comando en este repo; sin él la regla no corre. Un
+comando que la **propia** regla de `bash.deny` caza es la ofensa que su motivo describe, no una
+recomendación, y no cuenta. La primera corrida cazó a `/code-index` recomendando `curl … | sh`.
+
+## `drift` — el barrido de deriva
+
+```json
+{
+  "statusDatePattern": "Fecha del último gate completo:\\W*(\\d{4}-\\d{2}-\\d{2})",
+  "statusMaxAgeDays": 14,
+  "historyCommits": 400,
+  "runner": ".github/workflows/drift.yml",
+  "reason": "…"
+}
+```
+
+Lo lee `scripts/drift-check.mjs` (`npm run drift`). Mide lo que se degrada sin que ningún cambio lo
+rompa: un `status.file` cuyo veredicto es más viejo que `statusMaxAgeDays` es **rojo** (el hook de
+sesión se lo imprime al agente como verdad de hoy); una regla de `patterns`/`reuse` que no casó con
+ninguna línea de los últimos `historyCommits` commits sale como **aviso** (¿sin cicatriz, o ya
+ganó?). No es señal del gate —depende del reloj—: lo corre `runner`, programado.
+
+## `reviewerEval` — la prueba de vida del reviewer
+
+```json
+{
+  "command": ["claude", "-p", "--agent", "reviewer", "--allowedTools", "Read,Grep,Glob",
+              "--disallowedTools", "Bash,Edit,Write,NotebookEdit", "--settings", "{\"disableAllHooks\": true}"],
+  "verdictPattern": "VEREDICTO:\\W*(rechazado|aprobado)",
+  "minScore": 0.8,
+  "runner": ".github/workflows/drift.yml",
+  "cases": [{ "name": "…", "diff": ".claude/evals/reviewer/…diff", "expect": "rechazado", "mustCite": "P5" }]
+}
+```
+
+Lo lee `scripts/reviewer-eval.mjs` (`npm run eval:reviewer`). Le pasa cada `diff` al revisor con
+`command` (el prompt va por stdin, o con la plantilla de `prompt` si está), compara el grupo 1 de
+`verdictPattern` contra `expect`, y exige `mustCite` en la salida. Un juez probabilístico se mide con
+una **tasa** contra `minScore`. Sin `command` instalado sale OMITIDA. Si el revisor toca los archivos
+de `observability.stateFiles` es **rojo** aunque acierte (ver el gotcha del revisor que corrió el
+gate): por eso `command` lo aísla de herramientas que ejecutan y de los hooks del repo.
+
+## `taxonomy` — el arnés como sistema de control
+
+Lo lee `scripts/harness-map.mjs` (`npm run map`). Ubica cada pieza en tres ejes: dirección (guía ·
+freno · sensor), tipo (computacional · inferencial) y etapa (`stages`). `events` clasifica cada
+evento de `.claude/settings.json` —la dirección de un hook la pone su evento—; `gitHooks`, cada
+archivo de `gitHooksDir`; `agents`, cada subagente; `gateStages`, dónde corre el gate **completo**;
+`guides` y `pipelines`, la prosa y los pipelines. Una pieza sin clasificar es **rojo**; una etapa
+sin control se informa como hueco. Ver [guias-y-sensores.md](guias-y-sensores.md).
+
+---
+
 ## Quién lee cada clave
 
 | Clave | Lo leen |
@@ -596,11 +694,16 @@ cumplir. El detalle de qué viaja y qué no está en [perfiles.md](perfiles.md).
 | `sdd` | `sdd-router.mjs`, self-test |
 | `askFirst` | `ask-first.mjs`, `action-guard.mjs`, self-test |
 | `branches` | `.githooks/pre-push`, self-test |
-| `workflow` | `scripts/ciclo-check.mjs` (lo invoca `.githooks/pre-push`), la ruta `ciclo` del router, self-test |
-| `xp` | `scripts/ciclo-check.mjs` (lo invoca `.githooks/commit-msg`), self-test (una práctica por cebo) |
+| `workflow` | `scripts/cycle-check.mjs` (lo invoca `.githooks/pre-push`), la ruta `cycle` del router, self-test |
+| `xp` | `scripts/cycle-check.mjs` (lo invoca `.githooks/commit-msg`), self-test (una práctica por cebo) |
 | `postCommit` | `.githooks/post-commit` |
 | `graph` | `graph-first.mjs`, la señal `índice del código` del gate, self-test (sus regex compilan) |
-| `observability` | `scripts/hooks-timing.mjs` (la señal `costo del arnés` del gate), self-test (sección 9) |
+| `observability` | `scripts/hooks-timing.mjs` (la señal `costo del arnés` del gate), `scripts/reviewer-eval.mjs` (`stateFiles`: la foto de la sesión), self-test (secciones 9 y 10) |
+| `xp.testFirst.verifyRed` | `scripts/cycle-check.mjs`, modo `--verify-red` (lo invoca `.github/workflows/ci.yml` en el PR), self-test (3f-ter) |
+| `coherence` | `scripts/repo-lint.mjs` (regla `COHERENCIA`), self-test (4e-bis) |
+| `drift` (y `status.file`, `patterns`, `reuse`) | `scripts/drift-check.mjs` (lo invoca `.github/workflows/drift.yml`), self-test (10a) |
+| `reviewerEval` | `scripts/reviewer-eval.mjs` (lo invoca `.github/workflows/drift.yml`), self-test (10b) |
+| `taxonomy` | `scripts/harness-map.mjs`, self-test (10c) |
 
 Todo lo que aparece en esta tabla lo verifica `node scripts/harness-selftest.mjs`: una ruta que no
 existe o un regex que no compila es **gate rojo**, no un misterio de la semana que viene.

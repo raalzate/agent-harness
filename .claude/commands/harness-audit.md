@@ -26,6 +26,12 @@ es **"instalado y muerto"**: archivos presentes cuyo eslabón activador nunca co
     Una frontera sin regla (`purity`, `forbiddenDeps`, `singleSource`) es una frontera muerta.
 11. **Agilidad** (`docs/agilidad.md`) — de los principios de esa tabla, ¿cuáles tienen hoy
     mecanismo vivo en ESTE repo y cuáles quedaron en prosa?
+12. `node scripts/harness-map.mjs` — el arnés como sistema de control (guías, frenos y sensores):
+    ¿qué guía nunca se entera de si sirvió? ¿qué etapa no tiene ningún control? ¿cuánto del
+    arnés es inferencial? Una pieza sin clasificar en `taxonomy` es roja.
+13. `node scripts/drift-check.mjs` — ¿el veredicto de `STATUS.md` está vencido? ¿qué reglas nunca
+    cazaron nada en el historial? Cada una es una decisión pendiente: cicatriz que se documenta o
+    regla que se va.
 
 ## Salida
 

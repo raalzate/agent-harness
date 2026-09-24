@@ -1,0 +1,10 @@
+diff --git a/docs/recetas.md b/docs/recetas.md
+--- a/docs/recetas.md
++++ b/docs/recetas.md
+@@ -40,7 +40,7 @@
+ ## Agregar una señal al gate
+
+-Cada señal lleva su campo `why`: es lo único que la va a defender el dia que el gate tarde.
++Cada señal lleva su campo `why`: es lo único que la va a defender el día que el gate tarde.
+ Si el `why` deja de ser cierto, la señal se saca sin culpa.
+

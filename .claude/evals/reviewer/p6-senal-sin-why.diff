@@ -1,0 +1,14 @@
+diff --git a/.claude/harness.config.json b/.claude/harness.config.json
+--- a/.claude/harness.config.json
++++ b/.claude/harness.config.json
+@@ -20,6 +20,13 @@
+         "command": ["node", "scripts/docs-linkcheck.mjs"],
+         "why": "mover un archivo rompe punteros de la memoria del agente que nadie más mira"
+       },
++      {
++        "name": "typecheck",
++        "command": ["npx", "tsc", "--noEmit"]
++      },
+       {
+         "name": "convention lint",
+         "command": ["node", "scripts/repo-lint.mjs"],

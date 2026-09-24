@@ -10,7 +10,7 @@
     ],
     "signals": [
       {
-        "name": "self-test del arnés",
+        "name": "harness self-test",
         "command": [
           "node",
           "scripts/harness-selftest.mjs"
@@ -18,7 +18,7 @@
         "why": "un hook roto o un config que apunta a la nada fallan en silencio"
       },
       {
-        "name": "link-check de docs",
+        "name": "docs link-check",
         "command": [
           "node",
           "scripts/docs-linkcheck.mjs"
@@ -26,7 +26,7 @@
         "why": "mover un doc rompe punteros de la memoria del agente"
       },
       {
-        "name": "lint de convenciones",
+        "name": "convention lint",
         "command": [
           "node",
           "scripts/repo-lint.mjs"
@@ -73,7 +73,7 @@
         "why": "un modelo cambiado sin su migración pasa todos los tests y revienta en el deploy"
       },
       {
-        "name": "artefactos en su lugar",
+        "name": "artifacts in place",
         "command": [
           "node",
           "scripts/artifacts-check.mjs"
@@ -81,7 +81,7 @@
         "why": "un plan suelto en el repo cuando el trabajo vive en el gestor parte el registro en dos, y ninguna otra señal lo mira"
       },
       {
-        "name": "índice del código (codegraph)",
+        "name": "code index (codegraph)",
         "command": [
           "codegraph",
           "status"
@@ -268,7 +268,7 @@
       "fixup! ",
       "squash! "
     ],
-    "escapeLine": "sin-issue:"
+    "escapeLine": "no-issue:"
   },
   "graph": {
     "$comment": "EL ÍNDICE DEL CÓDIGO. Activa el hook `graph-first`, que sin esta clave viaja instalado y muerto, y la señal del gate que corre `statusCommand`. La herramienta por default es codegraph (https://github.com/colbymchenry/codegraph): grafo local en SQLite, agnóstico de lenguaje, auto-sincronizado al guardar. La regla: primero el índice, después abrir archivos. Ver docs/codegraph.md.",

@@ -1,0 +1,14 @@
+diff --git a/.claude/harness.config.json b/.claude/harness.config.json
+--- a/.claude/harness.config.json
++++ b/.claude/harness.config.json
+@@ -310,7 +310,10 @@
+       "literals": ["SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "Stop", "SubagentStop", "PreCompact"],
+       "appliesTo": "^\\.claude/hooks/.*\\.mjs$",
+-      "allow": [],
++      "allow": [
++        ".claude/hooks/session-start.mjs",
++        ".claude/hooks/gate-stop.mjs"
++      ],
+       "reason": "los nombres de evento de Claude Code se declaran en `.claude/settings.json`; un hook no decide en qué evento corre."
+     }
+   ],

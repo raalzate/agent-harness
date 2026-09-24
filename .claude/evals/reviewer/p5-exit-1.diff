@@ -1,0 +1,16 @@
+diff --git a/.claude/hooks/protected-paths.mjs b/.claude/hooks/protected-paths.mjs
+--- a/.claude/hooks/protected-paths.mjs
++++ b/.claude/hooks/protected-paths.mjs
+@@ -10,9 +10,12 @@ import { readInput, loadConfig, deny, allow, targetPaths, underAny } from "./harness.mjs";
+ const input = await readInput();
+ const config = loadConfig();
+-if (!config) allow();
++if (!config) {
++  process.stderr.write("protected-paths: no hay config, no puedo decidir\n");
++  process.exit(1);
++}
+
+ for (const rel of targetPaths(input)) {
+   const hit = (config.protectedPaths ?? []).find((p) => underAny(rel, [p.path]));
+   if (hit) deny(`RUTA PROTEGIDA: \`${rel}\`\nMotivo: ${hit.reason}`);
+ }

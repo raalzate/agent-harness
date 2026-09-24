@@ -15,7 +15,7 @@
     "installHooksCommand": "npm run hooks:install",
     "signals": [
       {
-        "name": "self-test del arnés",
+        "name": "harness self-test",
         "command": [
           "node",
           "scripts/harness-selftest.mjs"
@@ -23,7 +23,7 @@
         "why": "un hook roto o un config que apunta a la nada fallan en silencio: ninguna otra señal los ve"
       },
       {
-        "name": "link-check de docs",
+        "name": "docs link-check",
         "command": [
           "node",
           "scripts/docs-linkcheck.mjs"
@@ -31,7 +31,7 @@
         "why": "un puntero roto manda al agente a leer un archivo que no existe y le gasta el turno"
       },
       {
-        "name": "lint de convenciones",
+        "name": "convention lint",
         "command": [
           "node",
           "scripts/repo-lint.mjs"
@@ -47,7 +47,7 @@
         "why": "el comportamiento del puntaje: es lo único que garantiza que «urgente» siga pesando más que «algún día»"
       },
       {
-        "name": "artefactos en su lugar",
+        "name": "artifacts in place",
         "command": [
           "node",
           "scripts/artifacts-check.mjs"
@@ -55,7 +55,7 @@
         "why": "un plan suelto en el repo cuando el trabajo vive en el gestor deja el registro partido en dos"
       },
       {
-        "name": "índice del código (codegraph)",
+        "name": "code index (codegraph)",
         "command": [
           "codegraph",
           "status"
@@ -140,7 +140,7 @@
     "testFirst": {
       "enabled": true,
       "testPattern": "(^|/)(__tests__|tests?)/|\\.(test|spec)\\.[cm]?[jt]sx?$",
-      "escapeLine": "sin-test:",
+      "escapeLine": "no-test:",
       "reason": "un arreglo sin prueba no tiene cómo demostrar que arregló algo, y el siguiente cambio lo rompe sin que nadie se entere."
     },
     "smallBatch": {
@@ -148,13 +148,13 @@
       "maxFiles": 15,
       "maxLines": 400,
       "ignorePattern": "^(docs/|CHANGELOG\\.md$)",
-      "escapeLine": "lote-grande:",
+      "escapeLine": "big-batch:",
       "reason": "un PR de 40 archivos no se revisa: se aprueba. El límite es de este equipo, no una verdad universal."
     },
     "refactorSeparate": {
       "enabled": true,
       "subjectPattern": "^refactor(\\(|:)",
-      "escapeLine": "refactor-mixto:",
+      "escapeLine": "mixed-refactor:",
       "reason": "si cambian las expectativas, no era un refactor: son dos commits, y el orden importa para poder revertir uno solo."
     },
     "pairing": {
@@ -333,7 +333,7 @@
       "fixup! ",
       "squash! "
     ],
-    "escapeLine": "sin-issue:"
+    "escapeLine": "no-issue:"
   },
   "graph": {
     "$comment": "EL ÍNDICE DEL CÓDIGO. Activa el hook `graph-first`, que sin esta clave viaja instalado y muerto, y la señal del gate que corre `statusCommand`. La herramienta por default es codegraph (https://github.com/colbymchenry/codegraph): grafo local en SQLite, agnóstico de lenguaje, auto-sincronizado al guardar. La regla: primero el índice, después abrir archivos. Ver docs/codegraph.md.",

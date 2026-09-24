@@ -29,8 +29,10 @@ desde PowerShell; los pasos 2 y 3 son idénticos. El resto de esta página vale 
 sistemas.
 
 ```bash
-# 1. la CLI (no necesita Node)
-curl -fsSL https://raw.githubusercontent.com/colbymchenry/codegraph/main/install.sh | sh
+# 1. la CLI (no necesita Node). Se baja, se lee y DESPUÉS se corre: `curl | sh` ejecuta
+#    código remoto sin revisarlo, y el agente lo tiene vedado en `bash.deny`.
+curl -fsSL -o /tmp/codegraph-install.sh https://raw.githubusercontent.com/colbymchenry/codegraph/main/install.sh
+sh /tmp/codegraph-install.sh
 
 # 2. conectarla a los agentes de esta máquina (Claude Code entre ellos)
 codegraph install
@@ -62,7 +64,7 @@ archivo y **ese** rango: el índice ya dijo dónde.
 
 | Mecanismo | Fuerza | Qué hace |
 |---|---|---|
-| señal del gate **índice del código (codegraph)** | alta | corre `codegraph status`. Si `.codegraph/` no existe se reporta **OMITIDA**, y una señal omitida **no es verde**: la omisión es el recordatorio, impreso en cada gate |
+| señal del gate **code index (codegraph)** | alta | corre `codegraph status`. Si `.codegraph/` no existe se reporta **OMITIDA**, y una señal omitida **no es verde**: la omisión es el recordatorio, impreso en cada gate |
 | hook `graph-first` (`UserPromptSubmit`) | media | con el índice construido, cuando el pedido es "dónde/quién usa/qué rompe/acoplamiento", pone la regla delante del agente antes de que abra nada. Callado si no hay índice: un hook que habla sin tener qué ofrecer se deja de leer |
 | `protectedPaths` → `^\.codegraph/` | alta | el agente no edita el índice (`node .claude/hooks/protected-paths.mjs` devuelve exit 2) |
 | subagente `explorer` | media | su paso 1 es el índice; `Grep`/`Glob` son el recurso para lo que el grafo no ve (strings, comentarios, config) |

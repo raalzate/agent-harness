@@ -10,7 +10,7 @@ arnés. En tu repo serían tipos, tests y build; el mecanismo es idéntico.
 ## El gate
 
 ```bash
-npm run gate        # self-test · link-check de docs · lint de convenciones
+npm run gate        # self-test · docs link-check · convention lint
 npm run gate:fast   # igual (este repo no tiene señales lentas todavía)
 ```
 
@@ -21,16 +21,31 @@ borra `.git/gate-dirty`, que es lo que mira el hook `Stop`.
 
 | Señal (nombre en `gate.signals` · comando) | Qué prueba | Por qué no la cubre otra |
 |---|---|---|
-| **self-test del arnés**<br>`node scripts/harness-selftest.mjs` | que los frenos bloquean lo que dicen bloquear y que ninguna ruta ni regex del config apunta a la nada | un hook roto o un config inválido fallan en silencio: ninguna otra señal los ve |
-| **link-check de docs**<br>`node scripts/docs-linkcheck.mjs` | que ninguna referencia a un doc o a una ruta del repo apunte a la nada | mover un archivo rompe punteros que ninguna otra señal mira |
-| **artefactos en su lugar**<br>`node scripts/artifacts-check.mjs` | que los artefactos de trabajo estén donde el equipo declaró (`tracker.artifactsIn`), sin tocar la red | tener spec y plan a medias en dos lugares no lo mira ninguna otra señal, y se descubre cuando alguien busca el plan |
-| **lint de convenciones**<br>`node scripts/repo-lint.mjs` | las convenciones del repo: pureza de los hooks, contrato de exit codes, literales de evento, TODOs sin issue, que todo gotcha declare su `Mecanismo:` y que ningún perfil de stack lleve reglas ajenas (`PERFIL`) | son reglas de dominio: ninguna config estándar las conoce |
-| **índice del código (codegraph)**<br>`codegraph status` | que el repo tenga un índice de símbolos, llamadas y radio de impacto, y que esté sincronizado con el código | ninguna otra señal mira **cómo lee** el agente: sin índice abre archivos de más y no ve las relaciones que el texto no muestra (despacho dinámico, interfaz → implementación). Es `skipIfMissing: .codegraph`: mientras nadie corra `codegraph init` sale **OMITIDA**, y omitido no es verde — esa línea impresa en cada gate es el recordatorio. Ver [codegraph.md](codegraph.md) |
-| **banco de perfiles (stacks reales)**<br>`node scripts/harness-bench.mjs` | instala el arnés en un repo de juguete de cada stack (.NET, Maven, Gradle, Python, Go, Rust, Node, front) con archivos **reales** del lenguaje, y verifica el encaje: que el `matcher` de DEPS case el XML de un `.csproj`, que PUREZA cace un `using`, que `tests.filePattern` reconozca el layout, que los hooks muerdan y que el arnés instalado no apunte a la nada | el self-test verifica la **forma** de un perfil, no el **encaje**: cazó dos bugs en su primera corrida (el caso de PUREZA daba falso rojo fuera de JS, y el instalador dejaba punteros rotos). Cada caso vive en su propio repo git temporal y no comparte nada, así que corren **en paralelo** (un proceso por caso, tantos a la vez como núcleos; `--paralelo=1` para depurar en serie). El padre no prueba: junta, e imprime los bloques en el orden declarado. Es `fastSkip`: en modo fast se omite, y `--con-gate` (que además corre el gate de cada repo portado) queda para CI |
-| **costo del arnés (latencia de los hooks)**<br>`node scripts/hooks-timing.mjs` | el tiempo de pared de cada hook declarado en `.claude/settings.json`, corrido con un payload sintético, contra el presupuesto de `observability` (base + uno propio para los dos hooks con permiso de lanzar procesos). Reporta además el costo por evento: lo que el arnés le agrega a un turno. Tres formas de no mentir: un hook sin presupuesto sale OMITIDO (nunca contra 0 ms), sin archivo de prueba declarado la señal entera sale OMITIDA en vez de medir el camino barato, y un hook que revienta al arrancar la pone en rojo —barato y roto no se ven igual— | ninguna otra señal mira lo que el arnés le cuesta **al que lo usa**. La regla PUREZA prohíbe lanzar procesos «porque cuesta latencia» y ese costo era una intuición: una regla defendida con una intuición se discute con otra intuición. Lo que caza no son milisegundos sino el orden de magnitud —un typecheck completo metido dentro de un hook—, y un arnés caro no se discute: se desactiva entero |
+| **harness self-test**<br>`node scripts/harness-selftest.mjs` | que los frenos bloquean lo que dicen bloquear y que ninguna ruta ni regex del config apunta a la nada | un hook roto o un config inválido fallan en silencio: ninguna otra señal los ve |
+| **docs link-check**<br>`node scripts/docs-linkcheck.mjs` | que ninguna referencia a un doc o a una ruta del repo apunte a la nada | mover un archivo rompe punteros que ninguna otra señal mira |
+| **artifacts in place**<br>`node scripts/artifacts-check.mjs` | que los artefactos de trabajo estén donde el equipo declaró (`tracker.artifactsIn`), sin tocar la red | tener spec y plan a medias en dos lugares no lo mira ninguna otra señal, y se descubre cuando alguien busca el plan |
+| **convention lint**<br>`node scripts/repo-lint.mjs` | las convenciones del repo: pureza de los hooks, contrato de exit codes, literales de evento, TODOs sin issue, que todo gotcha declare su `Mecanismo:`, que ningún perfil de stack lleve reglas ajenas (`PERFIL`) y que ninguna guía recomiende lo que `bash.deny` veda (`COHERENCIA`) | son reglas de dominio: ninguna config estándar las conoce |
+| **code index (codegraph)**<br>`codegraph status` | que el repo tenga un índice de símbolos, llamadas y radio de impacto, y que esté sincronizado con el código | ninguna otra señal mira **cómo lee** el agente: sin índice abre archivos de más y no ve las relaciones que el texto no muestra (despacho dinámico, interfaz → implementación). Es `skipIfMissing: .codegraph`: mientras nadie corra `codegraph init` sale **OMITIDA**, y omitido no es verde — esa línea impresa en cada gate es el recordatorio. Ver [codegraph.md](codegraph.md) |
+| **profile bench (real stacks)**<br>`node scripts/harness-bench.mjs` | instala el arnés en un repo de juguete de cada stack (.NET, Maven, Gradle, Python, Go, Rust, Node, front) con archivos **reales** del lenguaje, y verifica el encaje: que el `matcher` de DEPS case el XML de un `.csproj`, que PUREZA cace un `using`, que `tests.filePattern` reconozca el layout, que los hooks muerdan y que el arnés instalado no apunte a la nada | el self-test verifica la **forma** de un perfil, no el **encaje**: cazó dos bugs en su primera corrida (el caso de PUREZA daba falso rojo fuera de JS, y el instalador dejaba punteros rotos). Cada caso vive en su propio repo git temporal y no comparte nada, así que corren **en paralelo** (un proceso por caso, tantos a la vez como núcleos; `--parallel=1` para depurar en serie). El padre no prueba: junta, e imprime los bloques en el orden declarado. Es `fastSkip`: en modo fast se omite, y `--with-gate` (que además corre el gate de cada repo portado) queda para CI |
+| **harness cost (hook latency)**<br>`node scripts/hooks-timing.mjs` | el tiempo de pared de cada hook declarado en `.claude/settings.json`, corrido con un payload sintético, contra el presupuesto de `observability` (base + uno propio para los dos hooks con permiso de lanzar procesos). Reporta además el costo por evento: lo que el arnés le agrega a un turno. Tres formas de no mentir: un hook sin presupuesto sale OMITIDO (nunca contra 0 ms), sin archivo de prueba declarado la señal entera sale OMITIDA en vez de medir el camino barato, y un hook que revienta al arrancar la pone en rojo —barato y roto no se ven igual— | ninguna otra señal mira lo que el arnés le cuesta **al que lo usa**. La regla PUREZA prohíbe lanzar procesos «porque cuesta latencia» y ese costo era una intuición: una regla defendida con una intuición se discute con otra intuición. Lo que caza no son milisegundos sino el orden de magnitud —un typecheck completo metido dentro de un hook—, y un arnés caro no se discute: se desactiva entero |
 
 **Test verde ≠ compila ≠ entregable.** Reportar "listo" sin gate verde es una violación, no un
 descuido. Y una señal **omitida no es verde**: el gate imprime las omisiones aparte, siempre.
+
+### Fuera del gate, con quien los corra
+
+Tres controles no van en el gate de cada commit —son caros, no deterministas o dependen del
+reloj— y por eso cada uno declara en su clave (`runner`) el pipeline que lo corre; el self-test
+verifica que ese pipeline lo invoque:
+
+| Control | Comando | Dónde corre | Qué caza |
+|---|---|---|---|
+| rojo sin el cambio | `node scripts/cycle-check.mjs --verify-red <base>` | `.github/workflows/ci.yml`, en cada PR | una prueba que pasa igual sin el cambio de producción: un espejo del código |
+| deriva | `npm run drift` | `.github/workflows/drift.yml`, semanal | un `STATUS.md` con veredicto vencido (rojo) y reglas que nunca cazaron nada en el historial (aviso) |
+| prueba de vida del reviewer | `npm run eval:reviewer` | `.github/workflows/drift.yml`, semanal, si hay clave | que el único sensor inferencial encuentre lo que dice encontrar, como **tasa** contra un umbral |
+
+`npm run map` muestra todas las piezas del arnés —estas incluidas— por etapa, con su dirección
+(guía · freno · sensor) y su tipo (computacional · inferencial). Ver [guias-y-sensores.md](guias-y-sensores.md).
 
 ## Hooks del ciclo del agente (`.claude/settings.json`)
 
@@ -61,9 +76,9 @@ En git, además:
 | Hook | Qué hace |
 |---|---|
 | `.githooks/pre-commit` | rutas protegidas + lint de los archivos staged |
-| `.githooks/commit-msg` | además corre `node scripts/ciclo-check.mjs --commit`: **las prácticas de XP que este equipo encendió** (`xp` → test primero, lote chico, refactor separado, de a dos), cada una con su fuga declarada y con motivo. Ver [ciclo-desarrollo.md](ciclo-desarrollo.md) |
-| `.githooks/commit-msg` | **el trabajo no entra al historial sin quedar registrado**: si el commit toca código, el mensaje referencia el ítem de trabajo (`tracker.issuePattern`) o declara `sin-issue: <motivo>`. Agnóstico de forja — ver `docs/trazabilidad.md` |
-| `.githooks/pre-push` | **el trabajo entra a `main` por PR, no de un empujón**: falla antes de la red con el motivo y el comando para mover los commits. Complemento local de la protección de rama de la forja. Después corre `node scripts/ciclo-check.mjs --push`: **el nombre de la rama sigue el modelo declarado** (`workflow`) y la rama no envejeció sin integrarse |
+| `.githooks/commit-msg` | además corre `node scripts/cycle-check.mjs --commit`: **las prácticas de XP que este equipo encendió** (`xp` → test primero, lote chico, refactor separado, de a dos), cada una con su fuga declarada y con motivo. Ver [ciclo-desarrollo.md](ciclo-desarrollo.md) |
+| `.githooks/commit-msg` | **el trabajo no entra al historial sin quedar registrado**: si el commit toca código, el mensaje referencia el ítem de trabajo (`tracker.issuePattern`) o declara `no-issue: <motivo>`. Agnóstico de forja — ver `docs/trazabilidad.md` |
+| `.githooks/pre-push` | **el trabajo entra a `main` por PR, no de un empujón**: falla antes de la red con el motivo y el comando para mover los commits. Complemento local de la protección de rama de la forja. Después corre `node scripts/cycle-check.mjs --push`: **el nombre de la rama sigue el modelo declarado** (`workflow`) y la rama no envejeció sin integrarse |
 | `.githooks/post-commit` | opcional: refresca lo derivado (un índice, un grafo) |
 
 Se instalan con `npm run hooks:install` — `core.hooksPath` debe valer `.githooks`; `.git/hooks/`
@@ -86,11 +101,16 @@ config**, así que una regla nueva queda cubierta sin escribir un caso a mano:
 8. **el registro no es opcional**: seis casos de `commit-msg` en un repo git temporal —código sin
    referencia, con referencia, con la fuga y su motivo, la fuga pelada, extensión ignorada, un
    merge— todos derivados del config, más un cebo para `artifacts-check`;
-9. **el ciclo de desarrollo se cumple**: 16 casos de `ciclo-check` derivados de `workflow` y `xp`
+9. **el ciclo de desarrollo se cumple**: 16 casos de `cycle-check` derivados de `workflow` y `xp`
    —un nombre de rama fuera del modelo no se empuja, las ramas largas quedan exentas, y las cuatro
    prácticas de XP muerden y dejan pasar la fuga declarada **con motivo**—. Corren sin bash, y las
    prácticas apagadas en este repo se prueban con un cebo `--config` ([ciclo-desarrollo.md](ciclo-desarrollo.md));
-10. los subagentes y comandos tienen frontmatter válido (sin él, Claude Code no los ofrece).
+10. los subagentes y comandos tienen frontmatter válido (sin él, Claude Code no los ofrece);
+11. **los controles fuera del gate están vivos**: `--verify-red` en un repo git temporal (la prueba
+    que describe el cambio pasa, la prueba espejo bloquea), la deriva con un STATUS vencido, uno de
+    hoy y uno sin fecha, el eval del reviewer con revisores de mentira (uno que acierta, uno
+    complaciente, uno que toca la sesión, uno ausente), el mapa con un evento sin clasificar, y que
+    el pipeline declarado en cada `runner` los invoque.
 
 Lo que no puede reducir a un ejemplo lo reporta como **omitido**, nunca como pasado.
 
@@ -110,14 +130,14 @@ Lo que no puede reducir a un ejemplo lo reporta como **omitido**, nunca como pas
 | `/lesson <incidente>` | ciclo RHO: minar la causa → codificar en el mecanismo más fuerte → validar con el gate |
 | `/harness-audit` | prueba de vida: ¿qué comando falla si se viola cada regla? |
 | `/harness-port <repo>` | instalar el arnés en otro repo y dejarlo verde allá |
-| `/arquitectura <símbolo>` | medir el radio de impacto con el índice antes de mover código, y dejar el ADR escrito ([arquitectura.md](arquitectura.md)) |
-| `/indice [init]` | verificar (o instalar) el índice del código: sin él, el agente lee caro ([codegraph.md](codegraph.md)) |
+| `/architecture <símbolo>` | medir el radio de impacto con el índice antes de mover código, y dejar el ADR escrito ([arquitectura.md](arquitectura.md)) |
+| `/code-index [init]` | verificar (o instalar) el índice del código: sin él, el agente lee caro ([codegraph.md](codegraph.md)) |
 
 ## Skills (`.claude/skills/`)
 
 | Skill | Para qué |
 |---|---|
-| `nuevo-freno` | convierte una regla escrita en prosa en un freno ejecutable, con su prueba de vida |
+| `new-guardrail` | convierte una regla escrita en prosa en un freno ejecutable, con su prueba de vida |
 
 ## Memoria
 

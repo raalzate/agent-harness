@@ -24,17 +24,17 @@ de fuentes. No comparten nada. Correrlos en serie era una decisión que nadie ha
 
 **El banco corre un proceso hijo por caso, tantos a la vez como núcleos disponibles**
 (`os.availableParallelism()`, que en un contenedor de CI devuelve la cuota y no el host).
-`--paralelo=1` vuelve a la serie, que es el modo para depurar porque la salida sale en vivo.
+`--parallel=1` vuelve a la serie, que es el modo para depurar porque la salida sale en vivo.
 
 Tres cosas que no son detalle de implementación:
 
 1. **El padre no prueba: junta.** Toda la lógica de un caso sigue en el mismo lugar y corre
-   igual que antes; lo único nuevo es quién la invoca. Por eso `--paralelo=1` no es un modo
+   igual que antes; lo único nuevo es quién la invoca. Por eso `--parallel=1` no es un modo
    degradado: es el mismo camino.
 2. **La salida se imprime en el orden declarado**, no en el de terminación. Un banco cuya
    salida cambia de orden entre corridas no se puede leer en un diff de CI.
 3. **El contrato entre padre e hijo es una marca en la salida** (`__BANCO_JSON__` + JSON),
-   no un canal de IPC. Es lo que mantiene al hijo invocable a mano (`--solo=x --json`) y al
+   no un canal de IPC. Es lo que mantiene al hijo invocable a mano (`--only=x --json`) y al
    banco sin dependencias (ADR [0002](0002-sin-dependencias.md)). El costo: todo caso futuro
    tiene que entregar esa marca al final y ninguna otra línea puede empezar con ella.
 
@@ -53,11 +53,11 @@ señal del gate anidado que corre dos líneas después. **−14s sin perder una 
   `quickstart` (32s, dos gates anidados) domina el total: el número de arriba es de una
   máquina de diez y no se puede publicar como el de CI sin medirlo ahí.
 - **Tres maneras nuevas de reportar verde sin haber probado nada**, todas con caso propio en
-  el self-test (P2): un nombre de caso que no existe, `--solo=` sin valor —pedías uno y
+  el self-test (P2): un nombre de caso que no existe, `--only=` sin valor —pedías uno y
   corrían nueve— y un hijo que revienta sin entregar. La última necesitó una costura
-  (`--hijo-mudo=`): es el único camino que no se puede provocar a mano, y sólo puede poner el
+  (`--mute-child=`): es el único camino que no se puede provocar a mano, y sólo puede poner el
   banco más rojo.
-- El bug de fondo ya estaba antes de este cambio: `--solo=inexistente` imprimía
+- El bug de fondo ya estaba antes de este cambio: `--only=inexistente` imprimía
   `BANCO VERDE — 0 comprobaciones` y salía 0. Inofensivo mientras el flag lo escribía un
   humano; letal desde que **el padre invoca a los hijos por nombre**.
 

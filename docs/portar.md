@@ -33,8 +33,8 @@ escribe un import, dónde vive el manifiesto de dependencias, qué directorios s
 detecta varios stacks no elige por vos: los lista.
 
 ```bash
-node scripts/harness-init.mjs /ruta/a/tu/repo --perfil dotnet
-node scripts/harness-init.mjs /ruta/a/tu/repo --perfil node,jvm-maven   # monorepo
+node scripts/harness-init.mjs /ruta/a/tu/repo --profile dotnet
+node scripts/harness-init.mjs /ruta/a/tu/repo --profile node,jvm-maven   # monorepo
 ```
 
 Lo que el perfil **no** trae son reglas ni señales del gate: eso son cicatrices de un equipo y
@@ -190,7 +190,7 @@ rápido: cuatro arreglos pueden estar terminados en una sesión sin que ninguno 
 
 Configurá `tracker` con **el patrón de referencia de tu forja** — no el de otro equipo: si tu
 gestor usa `PROJ-123` y quedó el `#123` de GitHub, el freno nunca encuentra la referencia y todos
-terminan escribiendo `sin-issue:` como ritual. Después decidí dónde viven los artefactos de una
+terminan escribiendo `no-issue:` como ritual. Después decidí dónde viven los artefactos de una
 feature (`artifactsIn`) y dejá que `artifacts-check` lo verifique.
 
 La tabla por forja —GitHub, GitLab, Azure Boards, Jira, Gitea, Linear— y la trampa de los patrones
