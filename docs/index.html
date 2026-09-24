@@ -224,6 +224,14 @@ ol.leyes b { color: var(--ink); font-weight: 600; }
    y no el div que cambia: una container query no le cambia el estilo al propio contenedor, y
    declarada ahí la regla nunca se activaba. Por debajo del umbral, igual que antes. */
 .sec-inner { container-type: inline-size; }
+/* Un bloque de IDEAS (párrafos que arrancan con su idea en negrita): en una columna de lectura
+   dejaba media sección vacía a la derecha. Una columna por defecto —el celular no depende de ningún
+   corte—, y dos cuando el contenedor tiene espacio: cada una queda en ~52-55ch. Con 44rem, en
+   una tablet salían dos de 41ch: angostas para leer, así que ahí sigue siendo una. */
+.ideas { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1.1rem clamp(1.5rem, 3vw, 2.75rem); align-items: start; }
+.ideas > p { margin: 0; }
+/* En una columna conserva el ancho de lectura de `.col`; sólo con dos se libera el ancho. */
+@container (min-width: 50rem) { .ideas { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); max-width: none; } }
 @container (min-width: 56rem) {
   /* 10:11 y no mitades: con mitades exactas dos bloques de código que antes entraban pasaban a
      desplazarse por 5-12 px. La prosa queda en ~50ch, dentro del ancho cómodo de lectura. */
@@ -948,7 +956,7 @@ presupuesto.</code></pre>
         </figure>
       </div>
 
-      <div class="col stack" style="margin-top:1.75rem">
+      <div class="col ideas" style="margin-top:1.75rem">
         <p><strong>La salud no inventa criterios.</strong> Cada alarma es la versión visible de algo
           que un comando ya pone en rojo, y lo nombra: un freno copiado sin la clave que lo enciende
           («instalado y muerto»), un hook declarado que no existe, una señal sin <code>why</code>, un
