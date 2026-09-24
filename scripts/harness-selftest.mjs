@@ -2682,7 +2682,9 @@ section("11. el panel del arnés");
         w("repo/docs/b.md", "b @a.md\n"); // linkcheck:ignore — ruta ficticia del cebo
         w("home/extra.md", "extra\n"); // linkcheck:ignore — ruta ficticia del cebo
         const guias = M.guiasAlArrancar(path.join(t, "repo"), { home: path.join(t, "home"), claudeDir: path.join(t, "home/.claude") });
-        const nombres = guias.map((g) => `${path.relative(t, g.abs)}:${g.existe}`);
+        // Con `/` en cualquier plataforma: en Windows `path.relative` usa `\`, y el caso comparaba
+        // separadores en vez de resolución (lo mostró la matriz de CI).
+        const nombres = guias.map((g) => `${path.relative(t, g.abs).split(path.sep).join("/")}:${g.existe}`);
         const esperado = ["home/.claude/CLAUDE.md:true", "repo/CLAUDE.md:true", "repo/docs/a.md:true", "repo/docs/b.md:true", "home/extra.md:true", "repo/falta.md:false"]; // linkcheck:ignore — ruta ficticia del cebo
         if (esperado.every((e) => nombres.includes(e)) && !nombres.some((n) => /no-es-import|tampoco/.test(n))) ok("memoria: los @imports se resuelven como Claude Code (relativo al que importa, ~/ al home, en código no, ciclo sin colgar)");
         else bad("memoria: @imports", nombres.join(" · "));
@@ -2724,7 +2726,7 @@ section("11. el panel del arnés");
         const uso = (id, name, input) => linea({ type: "assistant", timestamp: hoy, message: { content: [{ type: "tool_use", id, name, input }] } });
         w(
           "tr/s1.jsonl",
-          uso("a", "Bash", { command: "cat >> docs/x.md <<EOF" }) + uso("b", "Bash", { command: "sed -n 1,20p docs/x.md" }) + uso("c", "Read", { file_path: "/r/docs/x.md" }) + uso("d", "Bash", { command: "git add docs/x.md" }) + uso("e", "Bash", { command: "cat docs/x.mdx" }) + linea({ type: "user", timestamp: hoy, message: { content: "<command-name>/mi-skill</command-name>" } }) + uso("f", "Skill", { skill: "mi-skill" }) + uso("g", "Agent", { subagent_type: "reviewer" }) + uso("g", "Agent", { subagent_type: "reviewer" }) + linea({ type: "assistant", timestamp: "2000-01-01T00:00:00Z", message: { content: [{ type: "tool_use", id: "viejo", name: "Agent", input: { subagent_type: "reviewer" } }] } }), // linkcheck:ignore — ruta ficticia del cebo
+          uso("a", "Bash", { command: "cat >> docs/x.md <<EOF" }) + uso("b", "Bash", { command: "sed -n 1,20p docs/x.md" }) + uso("c", "Read", { file_path: "C:\\r\\docs\\x.md" }) + uso("d", "Bash", { command: "git add docs/x.md" }) + uso("e", "Bash", { command: "cat docs/x.mdx" }) + linea({ type: "user", timestamp: hoy, message: { content: "<command-name>/mi-skill</command-name>" } }) + uso("f", "Skill", { skill: "mi-skill" }) + uso("g", "Agent", { subagent_type: "reviewer" }) + uso("g", "Agent", { subagent_type: "reviewer" }) + linea({ type: "assistant", timestamp: "2000-01-01T00:00:00Z", message: { content: [{ type: "tool_use", id: "viejo", name: "Agent", input: { subagent_type: "reviewer" } }] } }), // linkcheck:ignore — ruta ficticia del cebo
         );
         w("tr/s1/subagents/a.jsonl", uso("h", "Bash", { command: "head docs/x.md" })); // linkcheck:ignore — ruta ficticia del cebo
         const u = M.leerUsos(path.join(t, "tr"), { rutas: ["docs/x.md"] }); // linkcheck:ignore — ruta ficticia del cebo

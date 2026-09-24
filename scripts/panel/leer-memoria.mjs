@@ -510,7 +510,8 @@ export function leerUsos(dir, { ahora = new Date(), dias = 14, rutas = [] } = {}
         if (c.name === "Skill" && c.input?.skill) sumar("skill", String(c.input.skill));
         else if ((c.name === "Agent" || c.name === "Task") && c.input?.subagent_type) sumar("subagente", String(c.input.subagent_type));
         if (c.name === "Read") {
-          const donde = String(c.input?.file_path ?? "");
+          // Con `/` siempre: en Windows la transcripción trae `C:\\repo\\docs\\x.md` y no casaba nunca.
+          const donde = String(c.input?.file_path ?? "").replace(/\\/g, "/");
           for (const r of rutas) if (donde.endsWith(`/${r}`) || donde === r) sumar("lectura", r);
         } else if (c.name === "Bash") {
           const cmd = String(c.input?.command ?? "");
