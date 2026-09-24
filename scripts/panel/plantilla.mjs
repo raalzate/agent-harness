@@ -60,7 +60,9 @@ const TONO_ETIQUETA = { verde: "verde", rojo: "rojo", omitido: "omitida", advert
 
 const punto = (tono) => `<span class="punto punto--${tono}" title="${TONO_ETIQUETA[tono] ?? tono}"></span>`;
 
-const chip = (texto, clase = "") => `<span class="chip ${clase}">${texto}</span>`;
+// El espacio final NO es decorativo: dos `inline-block` pegados no dejan dónde cortar la línea, y
+// una lista larga de chips estiraba la tabla a 3.469 px (lo mostró la memoria personal).
+const chip = (texto, clase = "") => `<span class="chip ${clase}">${texto}</span> `;
 
 // ── Etiquetas ───────────────────────────────────────────────────────────────
 
@@ -657,6 +659,151 @@ function pestanaPlan(plan) {
   );
 }
 
+// ── Memoria: lo que el agente lee, no lo que el repo tiene ──────────────────
+
+const TONO_QUIEN = { "el equipo (versionado)": "verde", "sólo esta máquina": "advertencia", "se calcula al arrancar": "info" };
+
+function barra(valor, maximo) {
+  const pct = maximo ? Math.max(2, Math.round((valor / maximo) * 100)) : 0;
+  return `<div class="avance avance--ancho" title="${valor}"><div class="avance__lleno avance__lleno--info" style="width:${pct}%"></div></div>`;
+}
+
+function pestanaMemoria(m, rutaRaiz) {
+  const v = m.enVivo;
+  const dec = m.decisiones;
+  const decisiones = dec?.existe
+    ? tabla(
+        ["", "Decisión", "Estado"],
+        dec.adr.map((a) => [punto(a.tono), `<a href="${escapar(`${rutaRaiz}/${a.archivo}`)}" data-buscar>${inline(a.titulo)}</a>`, chip(escapar(a.estado), a.tono === "verde" ? "chip--ok" : a.tono === "info" ? "chip--info" : "chip--gris")]),
+      )
+    : `<p class="vacio">No hay <code>${escapar(dec?.dir ?? "docs/decisions")}</code>: el porqué de las decisiones no está escrito en el repo.</p>`;
+  const seccionDecisiones = seccion("decisiones", "Versionada: las decisiones (el porqué)", `${decisiones}<p class="nota">La memoria del porqué: un ADR no se inyecta en cada sesión, se lee cuando hace falta. Su estado dice si todavía manda.</p>`, { extra: `<small>${dec?.adr?.length ?? 0}</small>` });
+
+  if (v?.memoria?.error) return [`<p>${chip("no se pudo leer la memoria", "chip--mal")} <code>${escapar(v.memoria.error)}</code></p><p class="nota">El resto del panel salió igual: la memoria falla abierta.</p>`, seccionDecisiones].join("");
+  if (!v?.memoria) return [`<p class="nota">Sin la capa en vivo no se sabe qué lee el agente al arrancar: eso depende de esta máquina. Regenerá sin <code>--sin-vivo</code>.</p>`, seccionDecisiones].join("");
+
+  const a = v.memoria.alArrancar;
+  const maxT = Math.max(1, ...a.piezas.map((x) => x.tokens));
+  const filas = a.piezas.map((x) => [
+    escapar(x.capa) + (x.via ? ` <span class="tenue">(vía ${escapar(x.via)})</span>` : ""),
+    `<code data-buscar>${escapar(x.ruta)}</code>${x.existe ? "" : " " + chip("no existe", "chip--mal")}`,
+    `${punto(TONO_QUIEN[x.quien] ?? "neutro")} ${escapar(x.quien)}`,
+    String(x.lineas),
+    `≈${abreviar(x.tokens)}`,
+    barra(x.tokens, maxT),
+  ]);
+  const presupuesto = a.presupuesto
+    ? `<p>${a.excede ? chip(`excede el presupuesto: ≈${abreviar(a.total)} de ${abreviar(a.presupuesto)}`, "chip--mal") : chip(`dentro del presupuesto: ≈${abreviar(a.total)} de ${abreviar(a.presupuesto)}`, "chip--ok")}</p>`
+    : `<p class="tenue">Sin presupuesto declarado (<code>panel.memory.injectBudgetTokens</code>): el número se muestra, no se juzga.</p>`;
+  const salidas = v.memoria.sesion
+    .map((x) => (x.corrido ? detalles(`Lo que imprime <code>${escapar(x.hook)}</code> <small>${x.lineas} líneas · ≈${abreviar(tokensDe(x.chars))} tokens · ${x.ms} ms</small>`, `<pre class="diff">${escapar(x.texto)}</pre>`) : `<p class="tenue"><code>${escapar(x.hook)}</code>: ${escapar(x.motivo)}</p>`))
+    .join("");
+  const alArrancar = seccion(
+    "al-arrancar",
+    "Lo que el agente lee al arrancar",
+    `<div class="indicadores indicadores--compactos">
+      ${indicador(`≥ ≈${abreviar(a.total)}`, "tokens que agregan el repo y esta máquina", { tono: a.excede ? "rojo" : "info", detalle: "en cada sesión, antes del primer pedido" })}
+      ${indicador(String(a.piezas.length), "piezas", { detalle: `${a.piezas.filter((x) => x.quien === "sólo esta máquina").length} sólo de esta máquina` })}
+    </div>
+    ${tabla(["Capa", "Archivo", "Quién la ve", "Líneas", "Tokens", ""], filas, "memoria")}
+    ${presupuesto}
+    ${!a.hooksCorridos && a.hooksDeSesion ? `<p>${chip(`${a.hooksDeSesion} hook(s) de SessionStart sin medir`, "chip--gris")} El panel no los ejecuta si el config no lo pide (<code>panel.memory.runSessionHooks: true</code>): ejecutar un hook es ejecutar código del repo, y hay que saber antes que no escribe estado. Lo que imprimen falta en el total.</p>` : ""}
+    ${salidas}
+    <p class="nota">Esto entra al contexto en CADA sesión, antes de que el humano escriba nada: es el costo fijo de la memoria, y lo que compite con el pedido por la atención del agente. Es un PISO («≥»): no incluye el prompt del sistema, las herramientas, las instrucciones de los servidores MCP ni lo que traen los plugins, que no se ven desde el repo. Lo que es «sólo de esta máquina» no lo ve el equipo ni CI: si una regla importante vive ahí, en otra máquina no existe. Los tokens son una estimación (caracteres / 4).</p>`,
+    { abierta: true, extra: `<small>≈${abreviar(a.total)}</small>`, resumen: `≈${abreviar(a.total)} tokens en ${a.piezas.length} piezas` },
+  );
+
+  const selectiva = seccionSelectiva(v.memoria.selectiva, rutaRaiz);
+
+  const p = v.memoria.personal;
+  let personal;
+  if (!p?.existe) {
+    personal = seccion("personal", "Personal: la memoria automática de esta máquina", `<p class="vacio">No hay memoria automática de este repo en esta máquina (<code>${escapar(p?.dir ?? "—")}</code>).</p>`, {});
+  } else {
+    const filasP = p.entradas.map((e) => {
+      const rotas = e.rutas.filter((r) => !r.existe);
+      return [
+        `<strong data-buscar>${escapar(e.nombre)}</strong>${e.anunciada ? "" : " " + chip("el índice no la anuncia", "chip--atencion")}<br><span class="tenue">${escapar(e.descripcion.slice(0, 160))}</span>`,
+        e.tipo ? chip(escapar(e.tipo), "chip--gris") : "—",
+        e.dias === null ? "—" : `${e.dias} d`,
+        e.lecturas === null || e.lecturas === undefined ? '<span class="tenue">—</span>' : e.lecturas ? chip(`≈${e.lecturas}`, "chip--ok") : chip("nunca abierta", "chip--gris"),
+        e.rutas.length ? e.rutas.map((r) => chip(`${escapar(r.ruta)}${r.existe ? "" : " · no resuelve"}`, r.existe ? "chip--ok" : "chip--mal")).join("") : '<span class="tenue">no cita rutas</span>',
+        rotas.length ? punto("advertencia") : punto("verde"),
+      ];
+    });
+    personal = seccion(
+      "personal",
+      "Personal: la memoria automática de esta máquina",
+      `<div class="indicadores indicadores--compactos">
+        ${indicador(String(p.entradas.length), "entradas", { detalle: p.indice ? `índice de ${p.indice.lineas} líneas` : "sin índice MEMORY.md" })}
+        ${indicador(String(p.conRutasRotas), "con rutas que no resuelven", { tono: p.conRutasRotas ? "advertencia" : "verde", detalle: "¿vencida, abreviada o de otro repo?" })}
+        ${indicador(String(p.fueraDelIndice.length), "no anunciadas en el índice", { tono: p.fueraDelIndice.length ? "advertencia" : "verde", detalle: "el agente no sabe que existen" })}
+      </div>
+      ${tabla(["Memoria", "Tipo", "Edad", "Lecturas", "Rutas del repo que cita", ""], filasP, "memoria")}
+      <p class="nota">La escribe el agente, en <code>${escapar(p.dir)}</code>: la ve SÓLO esta máquina. Las rutas se miden contra lo que git versiona: una que no resuelve puede ser memoria vencida (el archivo se movió), una ruta abreviada o una de otro repo; el panel no afirma cuál, dice que el agente no la puede abrir tal como está escrita. Al arrancar se carga el ÍNDICE, no las entradas: cada una se lee cuando el agente la necesita, y una que el índice no anuncia es una que el agente no sabe que existe.${p.indice?.recortado ? ` El índice pasa de ${p.indice.cargadas} líneas: lo que sigue no se carga.` : ""}</p>`,
+      { abierta: true, extra: `<small>${p.entradas.length}</small>`, resumen: `${p.conRutasRotas} con rutas que no resuelven` },
+    );
+  }
+  return [alArrancar, selectiva, personal, seccionDecisiones].join("");
+}
+
+const NOMBRE_TIPO = { skill: "skill", subagente: "subagente", comando: "comando" };
+const DISPARADOR = { skill: "el pedido casa con su descripción", subagente: "el agente lo invoca", comando: "el humano escribe /…" };
+
+// «Sin uso ACÁ» y no «peso muerto»: sólo se leen las transcripciones de este repo en esta máquina,
+// y una skill del usuario se usa en otros repos, o una del repo la consume otro cliente (un agente
+// externo por MCP). El panel dice lo que midió, no lo que no puede saber.
+// «Cara» es política del equipo, no del panel: el umbral es `panel.memory.costlyTokens`.
+const usosChip = (n, usos, cuerpo, cara) =>
+  n === null ? '<span class="tenue">sin transcripciones</span>' : n ? chip(`${n} en ${usos.dias} d`, "chip--ok") : chip(cuerpo >= cara ? `sin uso acá en ${usos.dias} d · cara` : `sin uso acá en ${usos.dias} d`, cuerpo >= cara ? "chip--atencion" : "chip--gris");
+
+function seccionSelectiva(sel, rutaRaiz) {
+  if (!sel) return "";
+  const u = sel.usos;
+  const inv = [...sel.invocables].sort((a, b) => (a.origen < b.origen ? -1 : a.origen > b.origen ? 1 : b.cuerpoTokens - a.cuerpoTokens));
+  const filasInv = inv.map((x) => [
+    `${chip(NOMBRE_TIPO[x.tipo], "chip--gris")} <strong data-buscar>${escapar(x.nombre)}</strong>`,
+    `${punto(TONO_QUIEN[x.quien] ?? "neutro")} ${escapar(x.origen === "repo" ? "repo" : "usuario")}`,
+    `≈${abreviar(x.descTokens)}`,
+    `≈${abreviar(x.cuerpoTokens)}`,
+    `<span class="tenue">${escapar(DISPARADOR[x.tipo])}</span>`,
+    usosChip(x.usos, u ?? {}, x.cuerpoTokens, sel.costlyTokens),
+  ]);
+  const filasPrompt = sel.prompt.map((r) => [
+    `<code>${escapar(r.hook)}</code>`,
+    r.medido ? `<strong>${escapar(r.ruta)}</strong> <span class="tenue">${r.patrones} patrón(es)</span>` : '<span class="tenue">el texto lo arma el hook</span>',
+    r.medido ? `≈${abreviar(r.tokens)}` : chip("no medido", "chip--gris"),
+  ]);
+  const filasDocs = sel.docs.map((d) => [
+    d.existe ? `<a href="${escapar(`${rutaRaiz}/${d.ruta}`)}"><code data-buscar>${escapar(d.ruta)}</code></a>` : `<code>${escapar(d.ruta)}</code> ${chip("no existe", "chip--mal")}`,
+    `≈${abreviar(d.tokens)}`,
+    d.lecturas === null ? '<span class="tenue">—</span>' : d.lecturas ? chip(`≈${d.lecturas} en ${u.dias} d`, "chip--ok") : chip("sin lecturas", "chip--gris"),
+  ]);
+  const muertos = inv.filter((x) => x.usos === 0 && x.cuerpoTokens >= sel.costlyTokens);
+  const disponibles = inv.reduce((n, x) => n + x.cuerpoTokens, 0) + sel.docs.reduce((n, d) => n + d.tokens, 0);
+  return seccion(
+    "selectiva",
+    "Selectiva: lo que entra sólo cuando algo lo dispara",
+    `<div class="indicadores indicadores--compactos">
+      ${indicador(`≈${abreviar(disponibles)}`, "tokens disponibles bajo demanda", { tono: "info", detalle: "cuerpos de skills, subagentes, comandos y docs citados" })}
+      ${indicador(String(inv.length), "piezas invocables", { detalle: `${inv.filter((x) => x.origen === "repo").length} del repo · ${inv.filter((x) => x.origen !== "repo").length} del usuario` })}
+      ${indicador(String(muertos.length), "caras y sin uso acá", { tono: muertos.length ? "advertencia" : "verde", detalle: u ? `en ${u.dias} días · ${u.sesiones} sesiones + ${u.subagentes} de subagentes` : "sin transcripciones" })}
+    </div>
+    <h3>Skills, subagentes y comandos <small>la descripción cuesta siempre; el cuerpo, al dispararse</small></h3>
+    ${tabla(["Pieza", "Origen", "Siempre", "Al dispararse", "Disparador", "Uso"], filasInv, "memoria")}
+    ${sel.usadasSinInventario?.length ? `<p>${chip(`${sel.usadasSinInventario.length} skill(s) usadas que no están en el repo ni en el home`, "chip--gris")} ${sel.usadasSinInventario.map((x) => `<code>${escapar(x.nombre)}</code> ×${x.veces}`).join(" · ")} — vienen de un plugin o del cliente: su costo no se ve desde acá.</p>` : ""}
+    <h3>Lo que pueden inyectar los hooks de cada pedido</h3>
+    ${tabla(["Hook", "Ruta", "Al casar"], filasPrompt, "memoria")}
+    <h3>Documentos que la guía cita <small>el agente los lee siguiendo el puntero</small></h3>
+    ${tabla(["Documento", "Tamaño", "Lecturas"], filasDocs, "memoria")}
+    ${sel.subcarpetas.length ? `<h3>Guías de subcarpeta</h3>${tabla(["Guía", "Se carga al tocar", "Tamaño"], sel.subcarpetas.map((g) => [`<code>${escapar(g.ruta)}</code>`, `<code>${escapar(g.carpeta)}/</code>`, `≈${abreviar(g.tokens)}`]))}` : '<p class="tenue">No hay guías de subcarpeta (<code>*/CLAUDE.md</code>): toda la guía del repo es memoria fija.</p>'}
+    <p class="nota">Lo selectivo no cuesta hasta que algo lo dispara, pero su DESCRIPCIÓN sí: por eso figura también en «al arrancar». El uso sale de las transcripciones de este repo en esta máquina (${u ? `${u.sesiones} sesiones en ${u.dias} días` : "no hay"}): una pieza cara que nadie disparó ACÁ merece una revisión —puede servir en otros repos (las del usuario) o a otro cliente (una skill que consume un agente externo)—, y una que se dispara siempre quizás es memoria fija disfrazada. Las lecturas de un documento son una APROXIMACIÓN: se cuentan por la herramienta de lectura y por los comandos de shell que lo nombran. Lo que arma un hook en su código no se mide sin ejecutarlo, y ejecutar un hook de pedido puede cambiar el estado de la sesión: por eso figura «no medido».</p>`,
+    { abierta: true, extra: `<small>${inv.length}</small>`, resumen: `≈${abreviar(disponibles)} bajo demanda · ${muertos.length} caras y sin uso acá` },
+  );
+}
+
+const tokensDe = (chars) => Math.ceil(chars / 4);
+
 // ── Fuentes ─────────────────────────────────────────────────────────────────
 
 function pestanaFuentes(m, rutaRaiz) {
@@ -827,6 +974,9 @@ table.mapa td:first-child{white-space:nowrap;width:160px}
 .g-rejilla{stroke:var(--borde);stroke-width:1}.g-eje{fill:var(--tenue);font-size:11px}
 .leyenda{font-size:12px;color:var(--tenue);display:flex;gap:14px;flex-wrap:wrap}.leyenda span::before{content:"";display:inline-block;width:14px;height:3px;margin-right:6px;vertical-align:middle}
 .l-alcance::before{background:var(--gris)}.l-hecho::before{background:var(--verde)}.l-pend::before{background:var(--acento)}.l-ideal::before{background:var(--ambar)}
+.chip--atencion{border-color:var(--ambar);color:var(--ambar)}
+.avance--ancho{width:160px;max-width:100%}
+table.memoria code{word-break:break-all}.avance__lleno--info{background:var(--info)}
 [hidden]{display:none!important}
 /* En angosto la tira NO envuelve: seis carpetas en dos filas se ven rotas. Se desplaza a lo largo. */
 @media (max-width:720px){:root{--margen:14px}.campo{grid-template-columns:1fr}
@@ -986,6 +1136,8 @@ export function renderizarHtml(modelo, opciones = {}) {
   // La SALUD va primero: el panel es del arnés, y lo primero que tiene que decir es si está vivo.
   const pestanas = [
     { id: "salud", nombre: "Salud", total: alarmas.length, html: pestanaSalud(modelo, rutaRaiz) },
+    // El número de la pestaña son COSAS PARA MIRAR (como en Salud), no piezas: leerlo como alarma es lo que hace cualquiera.
+    { id: "memoria", nombre: "Memoria", total: v?.memoria?.alArrancar ? (v.memoria.personal?.conRutasRotas ?? 0) + (v.memoria.personal?.fueraDelIndice?.length ?? 0) + (v.memoria.alArrancar.excede ? 1 : 0) : 0, html: pestanaMemoria(modelo, rutaRaiz) },
     v ? { id: "ahora", nombre: "Ahora", total: v.repos.length + v.sondas.length, html: pestanaAhora(v, modelo, rutaRaiz) } : null,
     { id: "plan", nombre: "Plan", total: planVisible?.resumen?.pendientes ?? 0, html: pestanaPlan(planVisible) },
     { id: "estado", nombre: "Estado", total: e.senales.length + e.abiertos.items.length + e.bloqueos.length, html: pestanaEstado(modelo, rutaRaiz) },

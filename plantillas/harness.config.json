@@ -267,6 +267,15 @@
     ],
     "reason": "el trabajo entra por pull request, con su revisión y su gate en verde. Un push directo entra sin que nadie lo mire."
   },
+  "panel": {
+    "$comment": "El panel del arnés (docs/panel.md): sale con defaults sin esta clave. `memory.runSessionHooks` queda en false a propósito: el panel EJECUTA los hooks de SessionStart para medir lo que inyectan, y eso se enciende recién cuando el equipo revisó que su hook de sesión no escribe estado. `promptSources` mide lo que inyecta `sdd-router` leyendo sus rutas del config, sin ejecutarlo.",
+    "memory": {
+      "runSessionHooks": false,
+      "promptSources": [
+        { "hook": "sdd-router", "key": "sdd.routes" }
+      ]
+    }
+  },
   "sdd": {
     "$comment": "`phases` son las skills del kit SDD que tienen que estar instaladas (en CI se reporta omitido, nunca «pasó»). Sin kit, dejá `phases: []`: el valor está en `routes`, que pone el criterio delante del agente antes de que edite.",
     "kit": "ninguno",

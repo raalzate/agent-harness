@@ -600,6 +600,14 @@ que no se declara se deduce de claves que ya existen antes que de un literal. Ve
 | `probes` | servicios locales que se sondean con un GET (responde = status < 500) |
 | `tokens` | `false` = no leer las transcripciones locales de Claude Code |
 | `live` | `false` = sólo la memoria (determinista byte a byte) |
+| `memory.runSessionHooks` | `true` = el panel EJECUTA los hooks de `SessionStart` de arranque (sólo `node <script>` del repo) para medir lo que inyectan. Default `false`: es ejecutar código del repo en cada gate, y se enciende cuando alguien revisó que el hook no escribe estado (ADR 0010) |
+| `memory.promptSources` | `[{ hook, key }]`: qué hook de pedido (regex sobre su archivo) lee qué clave del config, una lista de `{ route, patterns, message }`. Con eso lo que inyecta se mide sin ejecutarlo; un hook sin fuente figura «no medido» |
+| `memory.injectBudgetTokens` | tope de ≈tokens de lo que entra al arrancar. Sin él, el número se muestra y no se juzga |
+| `memory.decisionsDir`, `memory.decisionsPattern` | dónde viven los ADR (default `docs/decisions`) y cómo se llaman (default `^\d{3,4}-.*\.md$`) |
+| `memory.statusWords`, `memory.statusTones` | la palabra de la línea de estado de un ADR (default `Estado`, `Status`) y qué palabras del estado se pintan de qué tono (`verde`, `info`, `neutro`) |
+| `memory.costlyTokens` | desde cuántos ≈tokens una pieza selectiva sin uso se marca «cara» (default 1000) |
+| `memory.windowDays` | la ventana de días calendario para contar usos (default 14) |
+| `memory.personal`, `memory.transcripts` | `false` = no leer la memoria automática / las transcripciones de esta máquina |
 | `command` | lo que el panel dice que se corra para regenerarlo |
 
 ---
@@ -747,7 +755,7 @@ sin control se informa como hueco. Ver [guias-y-sensores.md](guias-y-sensores.md
 | `drift` (y `status.file`, `patterns`, `reuse`) | `scripts/drift-check.mjs` (lo invoca `.github/workflows/drift.yml`), self-test (10a) |
 | `reviewerEval` | `scripts/reviewer-eval.mjs` (lo invoca `.github/workflows/drift.yml`), self-test (10b) |
 | `taxonomy` | `scripts/harness-map.mjs`, el panel (pestaña Salud, misma función `construirMapa`), self-test (10c) |
-| `panel` (y `status`, `incidents`, `tracker`, `tests`, `docs.proseRoots`, `install.activators`, toda clave con `runner`) | `scripts/panel/` (lo invoca `scripts/gate.mjs` al final de cada corrida), self-test (11) |
+| `panel` (y `status`, `incidents`, `tracker`, `tests`, `docs.proseRoots`, `install.activators`, toda clave con `runner`; `panel.memory.promptSources` apunta a otras, como `sdd.routes`) | `scripts/panel/` (lo invoca `scripts/gate.mjs` al final de cada corrida), self-test (11) |
 | `gate.registry` | `scripts/gate.mjs` (lo escribe), `scripts/panel/leer-en-vivo.mjs` (lo lee) |
 
 Todo lo que aparece en esta tabla lo verifica `node scripts/harness-selftest.mjs`: una ruta que no

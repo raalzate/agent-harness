@@ -20,6 +20,7 @@ import { parseHookCommand } from "../../.claude/hooks/harness.mjs";
 import { comoLista, comoMapa, construirArnes } from "./leer-arnes.mjs";
 import { leerPlanDelRepo, planSinFuente, specDelPlan } from "./leer-plan.mjs";
 import { gitPorDefecto } from "./leer-en-vivo.mjs";
+import { leerDecisiones, specDeMemoria } from "./leer-memoria.mjs";
 
 // ── El config del panel, con sus defaults ───────────────────────────────────
 
@@ -757,6 +758,10 @@ export function construirModelo(raiz, { config = null, settings = null, git = gi
     citasFuentes: Object.keys(textosCitados),
     arnes: construirArnes(raiz, { config: cfg, settings: set }),
     plan: planDeMemoria(raiz, cfg, spec, git),
+    decisiones: (() => {
+      const m = specDeMemoria(cfg);
+      return leerDecisiones(raiz, m.decisionsDir, m.statusWords, { patron: m.decisionsPattern, tonos: m.statusTones });
+    })(),
     // Lo que la plantilla necesita para no nombrar ningún archivo ni ningún ejecutor de tareas.
     rutas: { status: spec.sources.status, incidents: spec.sources.incidents, guide: spec.sources.guide },
     invocacion,

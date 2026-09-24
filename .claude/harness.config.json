@@ -362,7 +362,15 @@
       "key": "scripts",
       "invocation": "npm run"
     },
-    "tokens": true
+    "tokens": true,
+    "memory": {
+      "$comment": "La pestaña Memoria: la memoria del agente como LLEGA (docs/panel.md, ADR 0010). `runSessionHooks` es opt-in porque el panel EJECUTA los hooks de SessionStart para ver qué inyectan; acá se enciende porque `.claude/hooks/session-start.mjs` sólo lee (git y STATUS). `promptSources` dice qué hook de pedido lee qué clave del config, para medir lo que inyecta sin ejecutarlo.",
+      "decisionsDir": "docs/decisions",
+      "runSessionHooks": true,
+      "promptSources": [
+        { "hook": "sdd-router", "key": "sdd.routes" }
+      ]
+    }
   },
   "status": {
     "file": "STATUS.md",

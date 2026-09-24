@@ -959,12 +959,25 @@ presupuesto.</code></pre>
           —ningún script del arnés conoce una forja—. La serie usa las fechas de los datos, nunca la
           de hoy: con los mismos datos, el mismo gráfico. Sin plan sale <strong>omitido</strong>,
           nunca «0 %».</p>
+        <p><strong>La memoria, como llega al agente.</strong> Las fuentes que el arnés exige no son la
+          memoria: la memoria es lo que el agente lee sin que nadie se lo pida. La pestaña Memoria la
+          ordena por cómo llega —lo que entra en <strong>cada</strong> sesión y cuánto pesa, lo que
+          entra sólo cuando algo lo dispara y cuánto se usó, lo que recuerda esta máquina y si todavía
+          apunta a algo que existe—, y separa lo que ve el equipo de lo que sólo existe en una
+          máquina. En el primer repo donde se midió, 11 de 15 notas de la memoria automática citaban
+          rutas que ya no resuelven.</p>
         <p><strong>El panel se mira, no decide.</strong> El gate lo corre como proceso hijo con
           tiempo límite e ignora su resultado: la primera versión corría adentro del gate, y el
           revisor demostró que un <code>process.exit(0)</code> en el panel volvía verde a un gate
-          rojo. Hoy ese sabotaje es un caso del self-test. Todo en
+          rojo. Hoy ese sabotaje es un caso del self-test. Y para medir lo que inyecta un hook, el
+          panel sólo lo ejecuta si el config lo permite. Todo en
           <a href="https://github.com/raalzate/agent-harness/blob/main/docs/panel.md">panel.md</a>.</p>
       </div>
+
+      <figure class="panel" style="margin-top:1.75rem">
+        <figcaption>memoria — lo que el agente lee al arrancar, en cada sesión</figcaption>
+        <img src="img/panel-memoria.png" alt="Pestaña Memoria del panel: al menos 9,5 mil tokens que agregan el repo y esta máquina en cada sesión, pieza por pieza, con quién ve cada una" width="1192" height="607" loading="lazy" style="display:block;width:100%;height:auto">
+      </figure>
     </div>
   </div>
 </section>
@@ -1478,6 +1491,7 @@ DRY-RUN: 38 archivo(s) a copiar, 0 conservado(s).</code></pre>
             <tr><td><a href="https://github.com/raalzate/agent-harness/blob/main/docs/decisions/0006-banco-en-paralelo.md">0006</a></td><td>El banco corre un proceso hijo por caso y el contrato entre padre e hijo es la salida — el gate de 129s a ~82s.</td></tr>
             <tr><td><a href="https://github.com/raalzate/agent-harness/blob/main/docs/decisions/0007-controles-fuera-del-gate.md">0007</a></td><td>Los controles caros o que dependen del reloj van fuera del gate, con el pipeline que los corre declarado y verificado por el self-test.</td></tr>
             <tr><td><a href="https://github.com/raalzate/agent-harness/blob/main/docs/decisions/0009-panel-del-arnes.md">0009</a></td><td>El gate regenera el panel del arnés en cada corrida, como proceso hijo cuyo exit code se ignora: el panel se mira, no decide.</td></tr>
+            <tr><td><a href="https://github.com/raalzate/agent-harness/blob/main/docs/decisions/0010-memoria-como-llega.md">0010</a></td><td>El panel muestra la memoria como llega al agente —fija, selectiva, personal, versionada— y sólo ejecuta un hook si el config lo permite.</td></tr>
           </tbody>
         </table>
       </div>

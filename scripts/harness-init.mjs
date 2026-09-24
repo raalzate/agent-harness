@@ -215,6 +215,7 @@ const COPIAR = [
   "scripts/panel/leer-arnes.mjs",
   "scripts/panel/leer-en-vivo.mjs",
   "scripts/panel/leer-plan.mjs",
+  "scripts/panel/leer-memoria.mjs",
   "scripts/panel/plantilla.mjs",
   // Documentos AGNÓSTICOS que el arnés instalado cita: sin ellos, el propio arnés arranca
   // apuntando a la nada en el repo destino (P10 violado por el instalador). Lo destapó el
