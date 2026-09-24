@@ -64,11 +64,12 @@ export function resolverSalida(raiz, rel) {
 export async function generarPanel(raiz, { salida = null, enVivo = true, config = null, settings = null, vivo = {}, escribir = true } = {}) {
   const cfg = config ?? leerJson(path.join(raiz, ".claude/harness.config.json")) ?? {};
   const spec = specDelPanel(cfg);
-  const modelo = construirModelo(raiz, { config: cfg, settings: settings ?? leerJson(path.join(raiz, ".claude/settings.json")) ?? {} });
+  const set = settings ?? leerJson(path.join(raiz, ".claude/settings.json")) ?? {};
+  const modelo = construirModelo(raiz, { config: cfg, settings: set });
   if (enVivo && spec.live) {
     // Import perezoso: la capa en vivo trae procesos y red, y quien pide sólo memoria no la carga.
     const { construirEnVivo } = await import("./leer-en-vivo.mjs");
-    modelo.enVivo = await construirEnVivo(raiz, modelo, spec, vivo);
+    modelo.enVivo = await construirEnVivo(raiz, modelo, spec, { settings: set, config: cfg, ...vivo });
   }
   const dir = salida ? path.resolve(salida) : resolverSalida(raiz, spec.out);
   const rutaRaiz = path.relative(dir, raiz).split(path.sep).join("/") || ".";

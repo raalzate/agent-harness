@@ -23,7 +23,8 @@
  *  10. los controles FUERA del gate (deriva, prueba del reviewer, mapa) están vivos y el
  *      pipeline declarado en su `runner` los corre (ADR 0007).
  *  11. el PANEL se genera: determinista sin la capa en vivo, sus alarmas muerden sobre un cebo
- *      y callan sobre el repo real, y el gate lo regenera (con su registro) aunque salga rojo.
+ *      y callan sobre el repo real, y el gate lo regenera (con su registro) aunque salga rojo;
+ *      la memoria del agente se mide como llega, sin ejecutar nada que el config no permita.
  *
  * Agnóstico: no conoce ningún stack. Todo lo que prueba lo deduce del config.
  */
@@ -2662,6 +2663,123 @@ section("11. el panel del arnés");
         else bad("panel: plan omitido", `${JSON.stringify(sinComando).slice(0, 120)} · ${JSON.stringify(sinFuente).slice(0, 120)}`);
       } finally {
         fs.rmSync(vacio, { recursive: true, force: true });
+      }
+    }
+
+    // 11k. La memoria como LLEGA al agente (ADR 0010). Todo con home, git, reloj y ejecutor de
+    //      hooks inyectados, en directorios temporales: nada toca el árbol ni la memoria real.
+    {
+      const M = await import(url("leer-memoria.mjs"));
+      const V = await import(url("leer-en-vivo.mjs"));
+      const t = temporal("harness-panel-memoria-");
+      const w = (rel, s) => escribir(t, rel, s);
+      try {
+        // Guías e imports: relativos al que importa, `~/` al home, en código no, un ciclo no
+        // cuelga, un import faltante sale `existe:false`.
+        w("home/.claude/CLAUDE.md", "global\n");
+        w("repo/CLAUDE.md", "guía @docs/a.md\n`@no-es-import.md`\n```\n@tampoco.md\n```\n@~/extra.md @falta.md\n"); // linkcheck:ignore — ruta ficticia del cebo
+        w("repo/docs/a.md", "a @b.md\n"); // linkcheck:ignore — ruta ficticia del cebo
+        w("repo/docs/b.md", "b @a.md\n"); // linkcheck:ignore — ruta ficticia del cebo
+        w("home/extra.md", "extra\n"); // linkcheck:ignore — ruta ficticia del cebo
+        const guias = M.guiasAlArrancar(path.join(t, "repo"), { home: path.join(t, "home"), claudeDir: path.join(t, "home/.claude") });
+        const nombres = guias.map((g) => `${path.relative(t, g.abs)}:${g.existe}`);
+        const esperado = ["home/.claude/CLAUDE.md:true", "repo/CLAUDE.md:true", "repo/docs/a.md:true", "repo/docs/b.md:true", "home/extra.md:true", "repo/falta.md:false"]; // linkcheck:ignore — ruta ficticia del cebo
+        if (esperado.every((e) => nombres.includes(e)) && !nombres.some((n) => /no-es-import|tampoco/.test(n))) ok("memoria: los @imports se resuelven como Claude Code (relativo al que importa, ~/ al home, en código no, ciclo sin colgar)");
+        else bad("memoria: @imports", nombres.join(" · "));
+
+        // Frontmatter multilínea: una descripción `>` se medía como «>» (un caracter).
+        const fm = [M.frontmatterDe("---\nname: a\ndescription: >-\n  uno\n  dos\nlicense: MIT\n---"), M.frontmatterDe("---\nname: b\nmetadata:\n  type: project\n---")];
+        if (fm[0].description === "uno dos" && fm[0].license === "MIT" && fm[1].type === "project") ok("memoria: descripciones en varias líneas se miden completas, y `type` bajo `metadata:`");
+        else bad("memoria: frontmatter", JSON.stringify(fm));
+
+        // Rutas citadas: cualquier extensión (sin lista de un lenguaje), sin falsos positivos.
+        const rutas = M.rutasDelRepo("`setup.py` `src/app.go` `v1.2` `foo.bar()` `../x.md` `pkg/x.v2`");
+        if (rutas.join(" ") === "pkg/x.v2 setup.py src/app.go") ok("memoria: una ruta citada se reconoce por su forma, no por una lista de extensiones");
+        else bad("memoria: rutas citadas", rutas.join(" "));
+
+        // ADR: el estado es una línea propia (un título que dice «Estado» no engaña), en dos
+        // idiomas por default, y el patrón de archivo es config.
+        w("repo/docs/decisions/0001-a.md", "# ADR 0001 — Estado de la sesión\n\n- **Estado:** aceptado\n"); // linkcheck:ignore — ruta ficticia del cebo
+        w("repo/docs/decisions/0002-b.md", "# ADR 0002 — English\n\nStatus: proposed\n");
+        w("repo/docs/decisions/ADR-003.md", "# ADR 3\n\nEstado: rechazado\n");
+        const d1 = M.leerDecisiones(path.join(t, "repo"), "docs/decisions");
+        const d2 = M.leerDecisiones(path.join(t, "repo"), "docs/decisions", ["Estado"], { patron: "^ADR-\\d+\\.md$" });
+        if (d1.adr.map((a) => `${a.estado}/${a.tono}`).join(",") === "aceptado/verde,proposed/info" && d2.adr.length === 1 && d2.adr[0].tono === "neutro") ok("memoria: el estado de un ADR se lee de su línea, en dos idiomas, con el patrón de archivo del config");
+        else bad("memoria: ADR", `${JSON.stringify(d1.adr.map((a) => a.estado))} · ${JSON.stringify(d2.adr)}`);
+
+        // Memoria personal: una entrada que el índice no anuncia, una ruta que no resuelve (contra
+        // lo versionado) y un índice de más de 200 líneas que se carga recortado.
+        w("mem/MEMORY.md", ["- [A](a.md) — x", ...Array.from({ length: 205 }, (_, i) => `- relleno ${i}`)].join("\n")); // linkcheck:ignore — ruta ficticia del cebo
+        w("mem/a.md", "---\nname: a\ntype: project\n---\nver `docs/a.md` y `src/movido.ts`\n"); // linkcheck:ignore — ruta ficticia del cebo
+        w("mem/b.md", "---\nname: b\n---\nsin rutas\n");
+        const pm = M.leerMemoriaPersonal(path.join(t, "repo"), path.join(t, "mem"), { versionados: new Set(["docs/a.md"]) }); // linkcheck:ignore — ruta ficticia del cebo
+        const a = pm.entradas.find((e) => e.archivo === "a.md"); // linkcheck:ignore — ruta ficticia del cebo
+        if (pm.fueraDelIndice.join() === "b.md" && pm.conRutasRotas === 1 && a.rutas.find((r) => r.ruta === "src/movido.ts")?.existe === false && pm.indice.recortado && pm.indice.cargadas === 200) ok("memoria: la personal marca lo que el índice no anuncia, las rutas que no resuelven y el índice recortado a 200 líneas"); // linkcheck:ignore — ruta ficticia del cebo
+        else bad("memoria: personal", JSON.stringify({ fuera: pm.fueraDelIndice, rotas: pm.conRutasRotas, indice: pm.indice }));
+
+        // Usos: escrituras y `git add` no son lecturas, una subcadena (`.mdx`) tampoco, un tool_use
+        // repetido cuenta una vez, una skill por `/comando` también es uso, y los subagentes se leen.
+        const hoy = new Date().toISOString();
+        const linea = (o) => `${JSON.stringify(o)}\n`;
+        const uso = (id, name, input) => linea({ type: "assistant", timestamp: hoy, message: { content: [{ type: "tool_use", id, name, input }] } });
+        w(
+          "tr/s1.jsonl",
+          uso("a", "Bash", { command: "cat >> docs/x.md <<EOF" }) + uso("b", "Bash", { command: "sed -n 1,20p docs/x.md" }) + uso("c", "Read", { file_path: "/r/docs/x.md" }) + uso("d", "Bash", { command: "git add docs/x.md" }) + uso("e", "Bash", { command: "cat docs/x.mdx" }) + linea({ type: "user", timestamp: hoy, message: { content: "<command-name>/mi-skill</command-name>" } }) + uso("f", "Skill", { skill: "mi-skill" }) + uso("g", "Agent", { subagent_type: "reviewer" }) + uso("g", "Agent", { subagent_type: "reviewer" }) + linea({ type: "assistant", timestamp: "2000-01-01T00:00:00Z", message: { content: [{ type: "tool_use", id: "viejo", name: "Agent", input: { subagent_type: "reviewer" } }] } }), // linkcheck:ignore — ruta ficticia del cebo
+        );
+        w("tr/s1/subagents/a.jsonl", uso("h", "Bash", { command: "head docs/x.md" })); // linkcheck:ignore — ruta ficticia del cebo
+        const u = M.leerUsos(path.join(t, "tr"), { rutas: ["docs/x.md"] }); // linkcheck:ignore — ruta ficticia del cebo
+        if (u.lectura["docs/x.md"] === 3 && u.subagente.reviewer === 1 && u.comando["mi-skill"] === 1 && u.skill["mi-skill"] === 1 && u.subagentes === 1) ok("memoria: los usos cuentan lecturas y no escrituras, sin duplicados, dentro de la ventana y con los subagentes"); // linkcheck:ignore — ruta ficticia del cebo
+        else bad("memoria: usos", JSON.stringify(u));
+
+        // Hooks de sesión: opt-in; con él, sólo los de ARRANQUE (no los de compact) y nunca un
+        // binario; se mide el `additionalContext` si la salida es JSON.
+        const corridos = [];
+        const espia = (f) => {
+          corridos.push(path.basename(f));
+          return { status: 0, stdout: JSON.stringify({ hookSpecificOutput: { additionalContext: "CTX" } }) };
+        };
+        const settingsSesion = { hooks: { SessionStart: [{ hooks: [{ type: "command", command: "node h/a.mjs" }] }, { matcher: "compact", hooks: [{ type: "command", command: "node h/b.mjs" }] }, { hooks: [{ type: "command", command: "binario-externo" }] }] } }; // linkcheck:ignore — hooks ficticios
+        const base = { settings: settingsSesion, config: {}, dirTranscripciones: null, home: path.join(t, "home"), env: {}, git: () => "", ejecutarHook: espia };
+        M.construirMemoriaEnVivo(path.join(t, "repo"), { ...base, spec: M.specDeMemoria({}) });
+        const sinOptIn = corridos.length;
+        const m2 = M.construirMemoriaEnVivo(path.join(t, "repo"), { ...base, spec: M.specDeMemoria({ panel: { memory: { runSessionHooks: true } } }) });
+        if (sinOptIn === 0 && corridos.join() === "a.mjs" && m2.sesion.find((x) => x.corrido)?.texto === "CTX") ok("memoria: los hooks de sesión sólo corren si el config lo pide, sólo los de arranque, nunca un binario");
+        else bad("memoria: hooks de sesión", `sin opt-in: ${sinOptIn}; corridos: ${corridos.join()}`);
+
+        // Hooks de pedido: lo que inyectan se mide desde el config (`promptSources`); sin fuente
+        // declarada, «no medido». Ningún nombre de hook cableado en el código.
+        const sPrompt = { hooks: { UserPromptSubmit: [{ hooks: [{ command: "node .claude/hooks/sdd-router.mjs" }, { command: "node .claude/hooks/otro.mjs" }] }] } }; // linkcheck:ignore — hooks ficticios
+        const cfgRutas = { sdd: { routes: [{ route: "x", patterns: ["a"], message: "12345678" }] } };
+        const conFuente = M.rutasDelPrompt(cfgRutas, sPrompt, [{ hook: "sdd-router", key: "sdd.routes" }]);
+        const sinFuente = M.rutasDelPrompt(cfgRutas, sPrompt, []);
+        if (conFuente[0].medido && conFuente[0].chars === 8 && !conFuente[1].medido && sinFuente.every((r) => !r.medido)) ok("memoria: lo que inyecta un hook de pedido se mide desde `promptSources`, y sin fuente declarada es «no medido»");
+        else bad("memoria: hooks de pedido", `${JSON.stringify(conFuente)} · ${JSON.stringify(sinFuente)}`);
+
+        // Sin doble conteo: lo que ya entra por @import no aparece como documento citado.
+        const citados = M.docsCitados(path.join(t, "repo"), ["ver `docs/a.md` y `docs/c.md`"], new Set(["docs/a.md"])); // linkcheck:ignore — ruta ficticia del cebo
+        if (citados.map((x) => x.ruta).join() === "docs/c.md") ok("memoria: un documento que ya entra por @import no se cuenta dos veces"); // linkcheck:ignore — ruta ficticia del cebo
+        else bad("memoria: doble conteo", citados.map((x) => x.ruta).join());
+
+        // `CLAUDE_CONFIG_DIR`, y un hermano con prefijo no pasa por «adentro del repo».
+        if (M.dirDeClaude("/h", { CLAUDE_CONFIG_DIR: "/otro" }) === "/otro" && M.mostrable("/a/repo-viejo/x", "/a/repo", "/h") === "/a/repo-viejo/x") ok("memoria: respeta CLAUDE_CONFIG_DIR, y un directorio hermano con prefijo no se toma por el repo");
+        else bad("memoria: rutas de máquina", `${M.dirDeClaude("/h", { CLAUDE_CONFIG_DIR: "/otro" })} · ${M.mostrable("/a/repo-viejo/x", "/a/repo", "/h")}`);
+
+        // Falla abierto: la memoria rota no tumba la capa en vivo.
+        const roto = await V.construirEnVivo(path.join(t, "repo"), { reglas: { gate: { marker: null, registry: "x" }, workflow: null }, citas: [], plan: null }, { repos: [], probes: [], tracker: null, tokens: false }, {
+          ejecutarGit: () => "",
+          settings: {
+            get hooks() {
+              throw new Error("settings roto");
+            },
+          },
+          home: path.join(t, "home"),
+        });
+        if (roto.memoria?.error === "settings roto" && Array.isArray(roto.repos)) ok("memoria: si no se puede leer, la pestaña lo dice y el resto del panel sale igual");
+        else bad("memoria: falla abierto", JSON.stringify(roto.memoria));
+      } catch (e) {
+        bad("memoria: casos", e.stack?.split("\n").slice(0, 3).join(" · ") ?? String(e));
+      } finally {
+        fs.rmSync(t, { recursive: true, force: true });
       }
     }
 

@@ -17,6 +17,7 @@ import os from "node:os";
 import path from "node:path";
 import { resolverEjecutable } from "../../.claude/hooks/harness.mjs";
 import { leerPlanDelGestor } from "./leer-plan.mjs";
+import { construirMemoriaEnVivo, dirDeClaude, specDeMemoria } from "./leer-memoria.mjs";
 
 const LINEAS_DE_DIFF = 400;
 const DIAS_DE_TOKENS = 14;
@@ -90,8 +91,8 @@ export function leerRepo(nombre, dir, base, git) {
  * Carpeta donde Claude Code guarda las transcripciones de ESTE repo: `~/.claude/projects/<ruta>`,
  * con todo lo que no es alfanumérico convertido en `-`.
  */
-export function carpetaDeTranscripciones(raiz, home = os.homedir()) {
-  return path.join(home, ".claude", "projects", raiz.replace(/[^A-Za-z0-9]/g, "-"));
+export function carpetaDeTranscripciones(raiz, home = os.homedir(), env = process.env) {
+  return path.join(dirDeClaude(home, env), "projects", raiz.replace(/[^A-Za-z0-9]/g, "-"));
 }
 
 const cero = () => ({ entrada: 0, salida: 0, cacheLeida: 0, cacheEscrita: 0, mensajes: 0 });
@@ -269,9 +270,15 @@ export async function construirEnVivo(raiz, memoria, spec, opciones = {}) {
     ejecutarGit = gitPorDefecto,
     ejecutarComando = comandoPorDefecto,
     sonda = sondaPorDefecto,
-    dirTranscripciones = carpetaDeTranscripciones(raiz),
+    home = os.homedir(),
+    env = process.env,
     ahora = new Date(),
   } = opciones;
+  // Las transcripciones se guardan por la carpeta del repo PRINCIPAL: desde un worktree, la ruta de
+  // este árbol daría una carpeta que no existe y el panel diría «sin transcripciones».
+  const comun = ejecutarGit(raiz, ["rev-parse", "--path-format=absolute", "--git-common-dir"]).trim();
+  const raizPrincipal = comun && path.basename(comun) === ".git" ? path.dirname(comun) : raiz;
+  const dirTranscripciones = opciones.dirTranscripciones ?? carpetaDeTranscripciones(raizPrincipal, home, env);
   const reglas = memoria.reglas;
 
   const repos = [];
@@ -308,5 +315,16 @@ export async function construirEnVivo(raiz, memoria, spec, opciones = {}) {
     gestor,
     plan: memoria.plan?.fuente === "tracker" && memoria.plan.estado === "pendiente" ? leerPlanDelGestor(memoria.plan.spec, gestor) : null,
     tokens: spec.tokens ? leerTokens(dirTranscripciones, { ahora }) : null,
+    // La memoria del agente como LLEGA: lo que lee al arrancar y la memoria automática de esta
+    // máquina. Vive al lado de las transcripciones, en la misma carpeta de Claude Code.
+    // Falla abierto como todo lo de acá: si la memoria no se puede leer, la pestaña lo dice y el
+    // resto del panel sale igual.
+    memoria: (() => {
+      try {
+        return construirMemoriaEnVivo(raiz, { settings: opciones.settings ?? {}, config: opciones.config ?? {}, spec: specDeMemoria(opciones.config ?? {}), dirTranscripciones, home, env, git: ejecutarGit, ahora });
+      } catch (e) {
+        return { error: String(e?.message ?? e) };
+      }
+    })(),
   };
 }

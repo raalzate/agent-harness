@@ -23,6 +23,7 @@ verifica que el panel genere es el self-test (sección 11).
 | Pestaña | De dónde sale | Qué contesta |
 |---|---|---|
 | **Salud** | `taxonomy`, `install.activators`, `.claude/settings.json`, `gate.signals`, toda clave con `runner`, `.claude/agents`, `.claude/commands`, `.claude/skills` | ¿cada pieza instalada está viva? El mapa guía/freno/sensor por etapa (la misma función que `node scripts/harness-map.mjs`), los frenos instalados sin la clave que los enciende («instalado y muerto»), los hooks que no existen, las señales sin `why`, los controles fuera del gate sin nadie que los corra |
+| **Memoria** | las guías (`CLAUDE.md` y sus `@imports`, la del usuario, las de arriba y la local), `.claude/skills` · `agents` · `commands` del repo y del usuario, la memoria automática de esta máquina, las transcripciones, `docs/decisions/` | la memoria del agente como LLEGA: qué lee al arrancar y cuánto pesa, qué entra sólo cuando algo lo dispara y cuánto se usó, qué recuerda esta máquina y si todavía apunta a algo que existe (ver abajo) |
 | **Ahora** | git, `gate.marker`, `gate.registry`, `panel.probes`, `panel.tracker`, las transcripciones locales | lo que corrió EN ESTA MÁQUINA: la última corrida del gate señal por señal (con su último verde y el HEAD sobre el que valió), si hay código editado sin gate, el árbol de cada repo, los servicios locales, qué dice hoy el gestor de los ítems que la memoria cita, cuántos tokens se gastaron |
 | **Plan** | `tracker.artifactsIn` → las casillas del plan en la historia de git, o las fechas de los ítems del gestor | el burn-down: alcance, hecho y pendiente en el tiempo, con la línea ideal si hay fecha objetivo. Sin fuente, OMITIDO (ver abajo) |
 | **Estado** | `status.file` | la prosa verificada, con su fecha: veredicto, señales, bloqueos, deuda |
@@ -89,6 +90,33 @@ cualquier máquina. Se dibuja como SVG dentro del HTML, sin librerías.
 Con `panel.plan.dueDate` se dibuja la línea ideal; sin fecha objetivo no se inventa ritmo. El panel
 dice lo que el número NO afirma: es conteo de ítems y no esfuerzo, hecho no es entregado, y un
 alcance que crece se ve crecer en vez de esconderse como avance que baja.
+
+## La memoria: como llega, no como está escrita
+
+Las fuentes versionadas (STATUS, gotchas, constitución) son lo que el arnés EXIGE. La memoria es
+otra cosa: lo que el agente lee sin que nadie se lo pida. La pestaña la ordena por cómo llega (ADR
+0010):
+
+| Capa | Qué muestra | Sensor |
+|---|---|---|
+| **Al arrancar** | cada pieza que entra en CADA sesión —guías con sus `@imports`, el índice de la memoria automática (sus primeras 200 líneas), las descripciones de skills, subagentes y comandos, lo que imprime el hook de sesión— con quién la ve y ≈tokens | `memory.injectBudgetTokens`: más que eso es ruido que compite con el pedido. El total es un PISO: el prompt del sistema, las herramientas, MCP y los plugins no se ven desde el repo |
+| **Selectiva** | el cuerpo de cada skill, subagente y comando (lo que cuesta al dispararse), lo que pueden inyectar los hooks de pedido, los documentos que la guía cita, las guías de subcarpeta | cuántas veces se usó cada pieza en la ventana, leído de las transcripciones de este repo en esta máquina: una pieza cara sin uso ACÁ merece una revisión |
+| **Personal** | la memoria automática de Claude Code en esta máquina: cada entrada con su tipo, su edad, sus lecturas y las rutas del repo que cita | rutas que no resuelven contra lo que git versiona (¿vencida, abreviada o de otro repo? el panel no afirma cuál), entradas que el índice no anuncia |
+| **Versionada** | los ADR con su estado | un estado que no se lee |
+
+![Pestaña Memoria: lo que el agente lee al arrancar, pieza por pieza, con quién la ve y ≈tokens](https://raw.githubusercontent.com/raalzate/agent-harness/main/docs/img/panel-memoria.png)
+
+![Memoria selectiva: skills, subagentes y comandos con su costo fijo y al dispararse, y cuánto se usaron](https://raw.githubusercontent.com/raalzate/agent-harness/main/docs/img/panel-selectiva.png)
+
+**Qué se ejecuta y qué no.** Para saber qué inyecta el hook de sesión hay que correrlo, y eso es
+ejecutar código del repo en cada gate: es opt-in (`memory.runSessionHooks: true`), sólo los hooks
+de arranque, sólo `node <script>` del repo. Los hooks de PEDIDO no se ejecutan nunca —uno puede
+escribir el marcador de `ask-first`—: lo que inyectan se mide desde el config con
+`memory.promptSources` (`[{ hook, key }]`), y un hook sin fuente declarada figura «no medido».
+
+**Qué es de quién.** Lo versionado lo ve el equipo; lo del home, lo ignorado por git y la memoria
+automática, sólo esta máquina. Si una regla importante vive en la segunda columna, en otra máquina
+no existe. Los tokens son una estimación (caracteres / 4) y así se dicen.
 
 ## El gestor de trabajo, sin conocer ninguna forja
 
