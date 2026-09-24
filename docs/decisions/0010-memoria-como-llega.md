@@ -2,7 +2,7 @@
 
 - **Fecha:** 2026-09-24
 - **Estado:** aceptado
-- **Relacionado:** [0008](0008-foco.md), [0009](0009-panel-del-arnes.md), [panel.md](../panel.md)
+- **Relacionado:** [0009](0009-panel-del-arnes.md), [panel.md](../panel.md)
 
 ## Contexto
 
