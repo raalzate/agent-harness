@@ -10,7 +10,7 @@ un comando que falla, y una regla: **lo que no se puede verificar se declara com
 como freno**.
 
 ```bash
-node scripts/ciclo-check.mjs --rules      # qué modelo está activo y de dónde sale
+node scripts/cycle-check.mjs --rules      # qué modelo está activo y de dónde sale
 ```
 
 ---
@@ -91,9 +91,9 @@ alguien saltea saltándose los hooks (que además está en `bash.deny`).
 
 | Práctica | Qué se verifica | Qué NO | Fuga |
 |---|---|---|---|
-| `testFirst` | el commit que cambia comportamiento trae también un archivo de prueba (`testPattern`) | que la prueba se escribiera **antes**, ni que falle sin el cambio | `sin-test: <motivo>` |
-| `smallBatch` | archivos y líneas del commit bajo el límite del equipo (`maxFiles`, `maxLines`) | que el lote tenga sentido propio | `lote-grande: <motivo>` |
-| `refactorSeparate` | un commit que se declara `refactor:` no cambia pruebas | que el refactor sea de verdad un refactor | `refactor-mixto: <motivo>` |
+| `testFirst` | el commit que cambia comportamiento trae también un archivo de prueba (`testPattern`) | que la prueba se escribiera **antes**, ni que falle sin el cambio | `no-test: <motivo>` |
+| `smallBatch` | archivos y líneas del commit bajo el límite del equipo (`maxFiles`, `maxLines`) | que el lote tenga sentido propio | `big-batch: <motivo>` |
+| `refactorSeparate` | un commit que se declara `refactor:` no cambia pruebas | que el refactor sea de verdad un refactor | `mixed-refactor: <motivo>` |
 | `pairing` | el commit deja rastro de con quién se hizo (`Co-authored-by:`) | que la sesión de a dos haya existido | `solo: <motivo>` |
 
 **Qué queda como juicio, y lo mira el subagente `reviewer`:** diseño simple, propiedad colectiva
@@ -142,7 +142,7 @@ ciclo (XP · test primero): este commit cambia comportamiento y no trae ninguna 
 
 Elegí una, y que quede en el historial:
   1) agregá la prueba que falla sin este cambio;
-  2) declaralo con motivo:  sin-test: <por qué este cambio no lleva prueba>
+  2) declaralo con motivo:  no-test: <por qué este cambio no lleva prueba>
 ```
 
 ---

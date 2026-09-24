@@ -214,11 +214,11 @@ npm run gate
 ```
 
 ```
-──▶ self-test del arnés      ✓
-──▶ link-check de docs       ✓
-──▶ lint de convenciones     ✓
+──▶ harness self-test      ✓
+──▶ docs link-check       ✓
+──▶ convention lint     ✓
 ──▶ tests de la lógica       ✓
-──▶ artefactos en su lugar   ✓
+──▶ artifacts in place   ✓
 
 GATE VERDE — entregable.
 ```
@@ -231,15 +231,15 @@ npm run gate 2>&1 | tail -6
 ```
 
 ```
-──▶ lint de convenciones
+──▶ convention lint
 repo-lint: 1 problema(s)
 
   src/lib/puntaje.mjs:1  [PUREZA]  `src/lib` no importa `node:fs`. `src/lib` decide, el resto
   orquesta: si la lógica lee el disco, testearla exige un archivo de verdad y deja de ser lógica.
 
-    ✗ lint de convenciones
+    ✗ convention lint
 
-GATE ROJO — señales fallidas: lint de convenciones
+GATE ROJO — señales fallidas: convention lint
 ```
 
 Tres cosas para notar:

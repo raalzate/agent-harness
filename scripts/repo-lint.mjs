@@ -24,13 +24,16 @@
  *   PATRON       texto prohibido en un ámbito, con su motivo        config → patterns[]
  *   INCIDENTE    todo gotcha declara su MECANISMO                   config → incidents
  *   PERFIL       un perfil de stack no lleva reglas de otro repo    config → profiles
+ *   COHERENCIA   lo que una guía recomienda, ningún freno lo veda  config → coherence
  */
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 // La lista de extensiones «esto es código» es UNA y vive con los hooks: tener una copia acá
 // es tener dos verdades, y ya divergieron (un `.pyi` ensuciaba el gate y el barrido no lo leía).
-import { codeExtensions, depsMatcher, importSyntax } from "../.claude/hooks/harness.mjs";
+// `firstMatch` es el MISMO evaluador que usa `bash-guard`: COHERENCIA pregunta «¿lo bloquearía
+// el hook?», y contestarlo con otra implementación es la divergencia que la regla quiere evitar.
+import { codeExtensions, depsMatcher, importSyntax, firstMatch } from "../.claude/hooks/harness.mjs";
 
 const REPO_ROOT = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
 
@@ -372,6 +375,103 @@ function checkProfiles(relPathDado = null, contenidoDado = null) {
   }
 }
 
+/**
+ * COHERENCIA — lo que una guía le recomienda al agente, ningún freno se lo prohíbe.
+ *
+ * Una guía (`CLAUDE.md`, un comando, un `reason`) y un freno (`bash.deny`) se escriben en
+ * momentos distintos y nadie los mira juntos. Cuando chocan, el agente queda en un bucle:
+ * hace lo que le dijeron, el hook lo frena, reintenta. Es la pregunta abierta del marco de
+ * guías y sensores —¿cómo se mantienen coherentes cuando el sistema crece?— contestada con
+ * un comando.
+ *
+ * Qué cuenta como «recomendado», sin adivinar intención:
+ *   - en los archivos de `coherence.guides`, cada línea de un bloque de shell (```bash);
+ *   - en el config, cada comando citado entre backticks en `reason`/`message`. Un comando
+ *     que la PROPIA regla de `bash.deny` caza es la ofensa que ese motivo describe, no una
+ *     recomendación; cualquier otro es la salida que se le ofrece al agente, y tiene que pasar.
+ * `commandPattern` decide qué forma tiene un comando en ESTE repo: sin él, la regla no corre.
+ */
+const COHERENCIA = config.coherence ?? null;
+const reComando = COHERENCIA?.commandPattern ? re(COHERENCIA.commandPattern) : null;
+const esGuia = (relPath) =>
+  relPath.endsWith(".md") && (COHERENCIA?.guides ?? []).some((g) => underDir(relPath, g.replace(/\/$/, "")));
+
+function denegar(relPath, line, comando) {
+  const hit = firstMatch(config.bash?.deny, comando);
+  if (!hit) return;
+  fail(
+    relPath,
+    line,
+    "COHERENCIA",
+    `se le recomienda al agente \`${comando}\` y \`bash.deny\` lo bloquea (${hit.reason ?? hit.pattern}). ` +
+      `${COHERENCIA.reason ?? ""} Corregí la guía o la regla: las dos no pueden tener razón.`.trim(),
+  );
+}
+
+function checkCoherenceGuide(relPath, content) {
+  if (!reComando || !esGuia(relPath)) return;
+  const shells = COHERENCIA.shellFences ?? ["bash", "sh", "shell", "console"];
+  let enBloque = false;
+  content.split("\n").forEach((linea, i) => {
+    const valla = /^\s*```\s*([\w-]*)/.exec(linea);
+    if (valla) {
+      enBloque = !enBloque && shells.includes(valla[1].toLowerCase());
+      return;
+    }
+    if (!enBloque) return;
+    // `$ ` de prompt al principio y el comentario de cola no son parte del comando.
+    const comando = linea.replace(/^\s*\$\s+/, "").replace(/\s+#\s.*$/, "").trim();
+    if (comando && !comando.startsWith("#") && reComando.test(comando)) denegar(relPath, i + 1, comando);
+  });
+}
+
+function checkCoherenceConfig(contenidoDado = null) {
+  if (!reComando) return;
+  const raw = contenidoDado ?? fs.readFileSync(CONFIG_PATH, "utf8");
+  let cfg;
+  try {
+    cfg = JSON.parse(raw);
+  } catch {
+    return; // un config que no parsea ya lo reporta el self-test; acá no se inventa otro hallazgo
+  }
+  const claves = new Set(COHERENCIA.configKeys ?? ["reason", "message"]);
+  const origen = contenidoDado === null ? rel(CONFIG_PATH) : ".claude/harness.config.json";
+  const visitar = (nodo) => {
+    if (Array.isArray(nodo)) return nodo.forEach(visitar);
+    if (!nodo || typeof nodo !== "object") return;
+    for (const [k, v] of Object.entries(nodo)) {
+      if (claves.has(k) && typeof v === "string") {
+        for (const [, comando] of v.matchAll(/`([^`]+)`/g)) {
+          if (!reComando.test(comando)) continue;
+          if (nodo.pattern && firstMatch([nodo], comando)) continue; // la ofensa citada por su propia regla
+          const i = raw.indexOf(comando);
+          denegar(origen, i === -1 ? 0 : lineOf(raw, i), comando);
+        }
+      } else visitar(v);
+    }
+  };
+  visitar(cfg);
+}
+
+/** Los archivos de guía, para el barrido del repo entero. */
+function guideFiles() {
+  const out = [];
+  const walk = (relPath) => {
+    const abs = path.join(REPO_ROOT, relPath);
+    let st;
+    try {
+      st = fs.statSync(abs);
+    } catch {
+      fail(".claude/harness.config.json", 0, "COHERENCIA", `\`coherence.guides\` apunta a \`${relPath}\`, que no existe.`);
+      return;
+    }
+    if (st.isDirectory()) for (const e of fs.readdirSync(abs)) walk(`${relPath}/${e}`);
+    else if (relPath.endsWith(".md")) out.push(relPath);
+  };
+  for (const g of COHERENCIA?.guides ?? []) walk(g.replace(/\/$/, ""));
+  return out;
+}
+
 // ── Ejecución ────────────────────────────────────────────────────────────────
 
 if (process.argv.includes("--rules")) {
@@ -384,6 +484,7 @@ if (process.argv.includes("--rules")) {
     ["PATRON", `${(config.patterns ?? []).length} patrón(es)`, (config.patterns ?? []).map((r) => r.id).join(", ")],
     ["INCIDENTE", config.incidents?.file ? "activa" : "inactiva", config.incidents?.file ?? "—"],
     ["PERFIL", config.profiles?.dir ? "activa" : "inactiva", config.profiles?.dir ?? "—"],
+    ["COHERENCIA", reComando ? `${(COHERENCIA.guides ?? []).length} guía(s)` : "inactiva", reComando ? `${(COHERENCIA.guides ?? []).join(", ")} + reason/message del config` : "—"],
   ];
   console.log("Reglas activas (todas salen de .claude/harness.config.json):\n");
   for (const [regla, estado, detalle] of filas) console.log(`  ${regla.padEnd(12)} ${estado.padEnd(16)} ${detalle}`);
@@ -405,13 +506,17 @@ if (single) {
   if (relPath === config.incidents?.file) checkIncidents(contenidoStdin);
   else if (relPath === config.forbiddenDeps?.manifest) checkDeps(contenidoStdin);
   else if (enPerfiles) checkProfiles(relPath, contenidoStdin);
+  else if (relPath === ".claude/harness.config.json" || relPath === rel(CONFIG_PATH)) checkCoherenceConfig(contenidoStdin);
   else checkFile(relPath, contenidoStdin);
+  if (esGuia(relPath)) checkCoherenceGuide(relPath, contenidoStdin ?? (fs.existsSync(path.join(REPO_ROOT, relPath)) ? read(relPath) : ""));
 } else {
   for (const f of sourceFiles()) checkFile(f);
   checkDeps();
   checkInvariants();
   checkIncidents();
   checkProfiles();
+  for (const g of guideFiles()) checkCoherenceGuide(g, read(g));
+  checkCoherenceConfig();
 }
 
 if (problems.length) {

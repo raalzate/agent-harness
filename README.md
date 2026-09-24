@@ -53,12 +53,13 @@ guiado paso a paso en **[docs/portar.md](docs/portar.md)**.
   harness.config.json    ← EL ÚNICO archivo específico de tu repo (lo llena el perfil del stack)
   hooks/                 11 hooks genéricos: leen la config, no tienen nada cableado
   agents/                explorer · reviewer · gate-runner
-  commands/              /gate · /lesson · /harness-audit · /harness-port
-  skills/nuevo-freno/    convierte una regla en prosa en un freno ejecutable
+  commands/              /gate · /lesson · /harness-audit · /architecture · /code-index
+  skills/new-guardrail/  convierte una regla en prosa en un freno ejecutable
 scripts/
   gate.mjs               el gate: ejecuta las señales declaradas en el config (Node: corre en Windows)
   gate.sh                envoltorio de una línea sobre gate.mjs, para quien ya lo invoca
-  repo-lint.mjs          las reglas del repo que ningún compilador ve (8 clases)
+  repo-lint.mjs          las reglas del repo que ningún compilador ve (9 clases)
+  cycle-check.mjs        el modelo de ramas y las prácticas XP, hechos comando
   harness-selftest.mjs   prueba de vida: ¿cada regla tiene un comando que la hace fallar?
   docs-linkcheck.mjs     que la memoria del agente no apunte a la nada
   artifacts-check.mjs    que spec, plan y tareas estén donde el equipo declaró

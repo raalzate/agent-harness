@@ -10,7 +10,7 @@
     "installHooksCommand": "git config core.hooksPath .githooks",
     "signals": [
       {
-        "name": "self-test del arnés",
+        "name": "harness self-test",
         "command": [
           "node",
           "scripts/harness-selftest.mjs"
@@ -18,7 +18,7 @@
         "why": "un hook roto falla en silencio: ninguna otra señal lo ve, y acá el arnés es la única red que hay"
       },
       {
-        "name": "lint de convenciones",
+        "name": "convention lint",
         "command": [
           "node",
           "scripts/repo-lint.mjs"
@@ -43,7 +43,7 @@
         "why": "la cobertura crece por zonas: cada módulo que se toca sale con su primer test. `skipIfMissing` para que el gate no arranque rojo el día uno — un gate rojo desde el principio se aprende a ignorar"
       },
       {
-        "name": "índice del código (codegraph)",
+        "name": "code index (codegraph)",
         "command": [
           "codegraph",
           "status"
@@ -186,7 +186,7 @@
       "fixup! ",
       "squash! "
     ],
-    "escapeLine": "sin-issue:"
+    "escapeLine": "no-issue:"
   },
   "graph": {
     "$comment": "EL ÍNDICE DEL CÓDIGO. Activa el hook `graph-first`, que sin esta clave viaja instalado y muerto, y la señal del gate que corre `statusCommand`. La herramienta por default es codegraph (https://github.com/colbymchenry/codegraph): grafo local en SQLite, agnóstico de lenguaje, auto-sincronizado al guardar. La regla: primero el índice, después abrir archivos. Ver docs/codegraph.md.",

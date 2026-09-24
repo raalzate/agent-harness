@@ -18,7 +18,7 @@
     "installHooksCommand": "npm run hooks:install",
     "signals": [
       {
-        "name": "self-test del arnés",
+        "name": "harness self-test",
         "command": [
           "node",
           "scripts/harness-selftest.mjs"
@@ -26,7 +26,7 @@
         "why": "un hook roto o un config que apunta a la nada fallan en silencio: ninguna otra señal los ve"
       },
       {
-        "name": "link-check de docs",
+        "name": "docs link-check",
         "command": [
           "node",
           "scripts/docs-linkcheck.mjs"
@@ -34,7 +34,7 @@
         "why": "mover un archivo rompe punteros de la memoria del agente que nadie más mira"
       },
       {
-        "name": "lint de convenciones",
+        "name": "convention lint",
         "command": [
           "node",
           "scripts/repo-lint.mjs"
@@ -42,7 +42,7 @@
         "why": "las reglas del repo que ningún compilador ve, con un comando que falla"
       },
       {
-        "name": "artefactos en su lugar",
+        "name": "artifacts in place",
         "command": [
           "node",
           "scripts/artifacts-check.mjs"
@@ -50,7 +50,7 @@
         "why": "un plan suelto en el repo cuando el equipo decidió que el trabajo vive en el gestor deja el registro partido en dos, y ninguna otra señal lo mira"
       },
       {
-        "name": "índice del código (codegraph)",
+        "name": "code index (codegraph)",
         "command": [
           "codegraph",
           "status"
@@ -59,7 +59,7 @@
         "why": "leer el código a mano es la fuente de error más cara del agente: abre archivos de más, se pierde relaciones (quién llama a quién) y contesta con la mitad del mapa. El índice es infraestructura de lectura, y un índice desincronizado miente peor que no tenerlo. OMITIDA mientras nadie corra `codegraph init`: omitido no es verde, y esa omisión es exactamente el recordatorio"
       },
       {
-        "name": "banco de perfiles (stacks reales)",
+        "name": "profile bench (real stacks)",
         "command": [
           "node",
           "scripts/harness-bench.mjs"
@@ -68,7 +68,7 @@
         "why": "el self-test verifica la FORMA de un perfil; sólo un repo real de cada stack verifica el ENCAJE: que el matcher de DEPS case el XML de un .csproj, que PUREZA cace un `using`, y que el arnés recién instalado no apunte a la nada. Cazó dos bugs en su primera corrida"
       },
       {
-        "name": "costo del arnés (latencia de los hooks)",
+        "name": "harness cost (hook latency)",
         "command": [
           "node",
           "scripts/hooks-timing.mjs"
@@ -335,7 +335,7 @@
       ".githooks",
       "scripts"
     ],
-    "ignoreMarker": "linkcheck:ignora",
+    "ignoreMarker": "linkcheck:ignore",
     "mustLinkAll": [
       {
         "$comment": "La página es la puerta de entrada: un documento que no aparezca ahí no existe para quien llega de afuera. Nueve documentos vivieron sin enlace hasta que alguien preguntó si la página tenía documentación.",
@@ -346,6 +346,23 @@
         "except": []
       }
     ]
+  },
+  "panel": {
+    "$comment": "EL PANEL DEL ARNÉS: la salud del arnés (mapa, frenos instalados y su clave, hooks, controles fuera del gate), la memoria del repo (STATUS, incidentes, constitución, reglas) y la capa en vivo de esta máquina (git, registro del gate, sondas, gestor, tokens) en un HTML autocontenido. Lo regenera `scripts/gate.mjs` en CADA corrida, así que nunca es más viejo que el último gate; a mano: `node scripts/panel/generar.mjs`. Todas las claves son opcionales: sin `panel`, sale igual con defaults agnósticos. `out` va dentro de `.git/` porque el arnés no escribe en el árbol de fuentes (P7). `tasks` dice cómo se invoca una tarea en ESTE stack, para verificar que las que cita la memoria existan. Ver docs/panel.md.",
+    "out": ".git/harness-panel",
+    "sources": {
+      "guide": "CLAUDE.md",
+      "constitutions": [
+        "CONSTITUTION.md"
+      ],
+      "manifest": "package.json"
+    },
+    "tasks": {
+      "manifest": "package.json",
+      "key": "scripts",
+      "invocation": "npm run"
+    },
+    "tokens": true
   },
   "status": {
     "file": "STATUS.md",
@@ -398,7 +415,7 @@
     "allowedInRepo": []
   },
   "commitMsg": {
-    "$comment": "Qué cuenta como CÓDIGO para exigir registro. La documentación no pide issue: es el registro, no el cambio. `escapeLine` es la fuga declarada — y exige motivo, porque un `sin-issue:` pelado sería la misma omisión con otro nombre.",
+    "$comment": "Qué cuenta como CÓDIGO para exigir registro. La documentación no pide issue: es el registro, no el cambio. `escapeLine` es la fuga declarada — y exige motivo, porque un `no-issue:` pelado sería la misma omisión con otro nombre.",
     "codePattern": "^(scripts/|\\.claude/|\\.githooks/|\\.github/)",
     "ignoreExtensions": [
       ".md",
@@ -414,7 +431,7 @@
       "fixup! ",
       "squash! "
     ],
-    "escapeLine": "sin-issue:"
+    "escapeLine": "no-issue:"
   },
   "sdd": {
     "$comment": "Ruta SDD. `phases` son skills que tienen que existir en `skillRoots` (en CI se reporta omitido, nunca «pasó»). Si tu equipo no usa un kit SDD, dejá `phases: []` y quedate con `routes`: el valor está en el ruteo.",
@@ -475,11 +492,11 @@
           "\\bfalta\\b",
           "\\bno (se|puede|deja|detecta|aparece|anda|sirve)\\b"
         ],
-        "message": "Este pedido cambia código: **preguntá al humano si se registra el ítem de trabajo ANTES de tocar producción**. No lo decidas solo y no lo dejes para el final: el hook `commit-msg` exige la referencia en el mensaje o una línea `sin-issue: <motivo>`, así que un cambio sin registrar no llega al historial."
+        "message": "Este pedido cambia código: **preguntá al humano si se registra el ítem de trabajo ANTES de tocar producción**. No lo decidas solo y no lo dejes para el final: el hook `commit-msg` exige la referencia en el mensaje o una línea `no-issue: <motivo>`, así que un cambio sin registrar no llega al historial."
       },
       {
         "$comment": "Diseño: acoplamiento, cohesión, capas, dependencias entre módulos. La decisión se escribe ANTES de moverla, porque un refactor sin ADR se revierte solo en tres meses cuando nadie recuerda el porqué. Y el radio de impacto no se estima de memoria: lo contesta el índice.",
-        "route": "arquitectura",
+        "route": "architecture",
         "patterns": [
           "\\barquitectura\\b",
           "\\bacopl",
@@ -493,7 +510,7 @@
       },
       {
         "$comment": "El ciclo de desarrollo: de dónde sale la rama, cómo se llama, qué entra en un commit. Existe porque el agente, sin que nadie se lo diga, commitea en la rama donde cayó y mete todo junto: el modelo de ramas del equipo es la convención MENOS escrita de un repo y la que más cuesta cuando se rompe. Los detalles verificables viven en `workflow` y `xp`; esto sólo se los pone delante antes de empezar.",
-        "route": "ciclo",
+        "route": "cycle",
         "patterns": [
           "\\brama\\b",
           "\\bbranch\\b",
@@ -506,7 +523,7 @@
           "\\btrunk\\b",
           "\\bgit ?flow\\b"
         ],
-        "message": "Toca el ciclo de desarrollo → `docs/ciclo-desarrollo.md`: el modelo de ramas está declarado en `workflow` (corré `node scripts/ciclo-check.mjs --rules` para verlo). Antes de empujar: la rama sale de `workflow.baseBranch`, su nombre sigue `workflow.branchPattern`, y a `branches.protected` se entra por PR. Antes de commitear: las prácticas de `xp` activas se verifican en `commit-msg` — se cumplen o se declaran con motivo en una línea, no se saltean."
+        "message": "Toca el ciclo de desarrollo → `docs/ciclo-desarrollo.md`: el modelo de ramas está declarado en `workflow` (corré `npm run cycle` para verlo). Antes de empujar: la rama sale de `workflow.baseBranch`, su nombre sigue `workflow.branchPattern`, y a `branches.protected` se entra por PR. Antes de commitear: las prácticas de `xp` activas se verifican en `commit-msg` — se cumplen o se declaran con motivo en una línea, no se saltean."
       },
       {
         "$comment": "CI/CD: el pipeline no es un lugar aparte donde valen otras reglas. Corre EL MISMO gate que el humano, y lo que se salta la verificación no se mergea.",
@@ -525,7 +542,7 @@
         "message": "Toca el pipeline → `docs/cicd.md`: CI corre **el mismo** `gate.command` que el humano (si verifica otra cosa, una de las dos señales miente); ninguna etapa lleva `--no-verify` ni `continue-on-error` sobre el gate; y el despliegue va detrás del gate verde, nunca al lado."
       },
       {
-        "route": "arnes",
+        "route": "harness",
         "patterns": [
           "\\bhook\\b",
           "\\bgate\\b",
@@ -587,7 +604,7 @@
     "reason": "el trabajo entra por pull request, con su revisión y su gate en verde. Un push directo entra sin que nadie lo mire."
   },
   "workflow": {
-    "$comment": "EL CICLO DE DESARROLLO, declarado. `model` es informativo (trunk-based, github-flow, git-flow, gitlab-flow) y es lo que el router le dice al agente antes de que abra una rama. Lo que las máquinas leen: `branchPattern` (nombre válido de rama de trabajo), `longLived` (las ramas del modelo, exentas del patrón), `baseBranch` (de dónde sale y contra qué se mide la edad) y `maxAgeDays` + `staleAction` (rama vieja = lote grande esperando). `mergeInto` se DECLARA y no se finge verificado: a qué rama entra el cambio lo decide el pull request, que el hook no ve. Mecanismo: `.githooks/pre-push` → `node scripts/ciclo-check.mjs --push`. Sin `branchPattern` ni `maxAgeDays`, el freno no corre. Ver docs/ciclo-desarrollo.md.",
+    "$comment": "EL CICLO DE DESARROLLO, declarado. `model` es informativo (trunk-based, github-flow, git-flow, gitlab-flow) y es lo que el router le dice al agente antes de que abra una rama. Lo que las máquinas leen: `branchPattern` (nombre válido de rama de trabajo), `longLived` (las ramas del modelo, exentas del patrón), `baseBranch` (de dónde sale y contra qué se mide la edad) y `maxAgeDays` + `staleAction` (rama vieja = lote grande esperando). `mergeInto` se DECLARA y no se finge verificado: a qué rama entra el cambio lo decide el pull request, que el hook no ve. Mecanismo: `.githooks/pre-push` → `node scripts/cycle-check.mjs --push`. Sin `branchPattern` ni `maxAgeDays`, el freno no corre. Ver docs/ciclo-desarrollo.md.",
     "model": "trunk-based",
     "branchPattern": "^(feat|fix|docs|chore|refactor|test|ci|perf)/[a-z0-9][a-z0-9._-]*$",
     "branchExamples": [
@@ -613,26 +630,38 @@
     "staleReason": "una rama que no se integra hace días es un lote grande esperando: el merge es más caro y el rojo aparece tarde. Acá avisa (`warn`) en vez de bloquear, porque una rama vieja es una señal, no siempre un error."
   },
   "xp": {
-    "$comment": "Prácticas de XP que tienen mecanismo. Cada una se activa sola (`enabled`): una regla instalada sin cicatriz detrás se desactiva en una semana y se lleva puestas a las que servían (P14). Todas tienen fuga DECLARADA con motivo — la fuga es la diferencia entre un freno que se respeta y uno que se saltea con `--no-verify`. Mecanismo: `.githooks/commit-msg` → `node scripts/ciclo-check.mjs --commit`. Ver docs/ciclo-desarrollo.md.",
+    "$comment": "Prácticas de XP que tienen mecanismo. Cada una se activa sola (`enabled`): una regla instalada sin cicatriz detrás se desactiva en una semana y se lleva puestas a las que servían (P14). Todas tienen fuga DECLARADA con motivo — la fuga es la diferencia entre un freno que se respeta y uno que se saltea con `--no-verify`. Mecanismo: `.githooks/commit-msg` → `node scripts/cycle-check.mjs --commit`. Ver docs/ciclo-desarrollo.md.",
     "testFirst": {
       "$comment": "No prueba que la prueba se escribiera ANTES —nada lo prueba desde un hook—, sino que el cambio de comportamiento y su prueba entran juntos al historial. En ESTE repo la prueba de un freno es su caso del self-test (P2), así que `testPattern` nombra los scripts que la contienen.",
       "enabled": true,
       "testPattern": "(^|/)(__tests__|tests?)/|\\.(test|spec)\\.[cm]?[jt]sx?$|^scripts/harness-(selftest|bench)\\.mjs$",
-      "escapeLine": "sin-test:",
-      "reason": "un freno sin prueba de vida es decorativo (P2), y un arreglo sin prueba no puede demostrar que arregló algo."
+      "escapeLine": "no-test:",
+      "reason": "un freno sin prueba de vida es decorativo (P2), y un arreglo sin prueba no puede demostrar que arregló algo.",
+      "verifyRed": {
+        "$comment": "La versión fuerte: las pruebas de la rama tienen que FALLAR sobre la base, sin el cambio de producción. `node scripts/cycle-check.mjs --verify-red <base>` arma un worktree temporal fuera del repo (P7) en el merge-base, pone encima los archivos de prueba de HEAD y corre `command` ahí. Es caro, así que corre en CI sobre el PR, no en cada commit. En este repo la prueba de un freno es su caso del self-test, así que el comando es el self-test. `setupCommand` (opcional) prepara el árbol de la base antes de medir: un worktree no trae nada ignorado (dependencias, entornos), y sin eso la suite de un repo con dependencias falla por falta de ellas y el freno pasa siempre. Un comando que no llega a correr, o un `setupCommand` que falla, invalida la medición (rojo), nunca cuenta como prueba roja. Lo que NO verifica: que falle por la razón correcta — y en ESTE repo la señal es débil por construcción, porque «la prueba» es el self-test entero y casi cualquier cambio suyo sale rojo sobre la base.",
+        "enabled": true,
+        "command": [
+          "node",
+          "scripts/harness-selftest.mjs"
+        ],
+        "timeoutMs": 600000,
+        "runner": ".github/workflows/ci.yml",
+        "escapeLine": "no-red:",
+        "reason": "una prueba que pasa sin el cambio es un espejo del código: no detecta la regresión que dice cubrir."
+      }
     },
     "smallBatch": {
       "$comment": "El límite es de ESTE equipo: nadie sabe en abstracto cuántos archivos son demasiados. `ignorePattern` saca del conteo lo que crece por naturaleza (documentación, datos).",
       "enabled": true,
       "maxFiles": 30,
       "maxLines": 900,
-      "escapeLine": "lote-grande:",
+      "escapeLine": "big-batch:",
       "reason": "un lote grande no se revisa de verdad: se aprueba. Y cuando algo se rompe, revertir arrastra lo que sí servía."
     },
     "refactorSeparate": {
       "enabled": true,
       "subjectPattern": "^refactor(\\(|:)",
-      "escapeLine": "refactor-mixto:",
+      "escapeLine": "mixed-refactor:",
       "reason": "si cambian las expectativas, no era un refactor: son dos commits, y el orden importa para poder revertir uno solo."
     },
     "pairing": {
@@ -650,7 +679,7 @@
     "queryCommand": "codegraph explore \"<pregunta>\"",
     "panoramaCommand": "codegraph ui",
     "statusCommand": "codegraph status",
-    "installHint": "curl -fsSL https://raw.githubusercontent.com/colbymchenry/codegraph/main/install.sh | sh  →  codegraph install  →  codegraph init",
+    "installHint": "curl -fsSL -o /tmp/codegraph-install.sh https://raw.githubusercontent.com/colbymchenry/codegraph/main/install.sh  →  leerlo  →  sh /tmp/codegraph-install.sh  →  codegraph install  →  codegraph init",
     "questionPatterns": [
       "\\bd[oó]nde\\b",
       "\\bqui[eé]n (llama|usa|importa|depende)",
@@ -688,6 +717,143 @@
       ".git/agent-answer-first"
     ]
   },
+  "taxonomy": {
+    "$comment": "EL ARNÉS COMO SISTEMA DE CONTROL (docs/guias-y-sensores.md). Lo lee `scripts/harness-map.mjs` (`npm run map`). Cada pieza tiene dirección (guía: antes de decidir · freno: decidido y no ejecutado · sensor: después), tipo (computacional · inferencial) y etapa. La dirección de un hook la pone su EVENTO (`events`), no el hook. Una pieza que esta taxonomía no clasifica es rojo: un control nuevo que nadie ubicó es uno del que nadie sabe qué cubre. Las etapas vacías se informan como huecos.",
+    "stages": [
+      "sesión",
+      "pedido",
+      "acción decidida",
+      "edición hecha",
+      "fin del turno",
+      "commit",
+      "push",
+      "integración",
+      "continuo"
+    ],
+    "events": {
+      "SessionStart": { "direction": "guía", "stage": "sesión" },
+      "UserPromptSubmit": { "direction": "guía", "stage": "pedido" },
+      "PreToolUse": { "direction": "freno", "stage": "acción decidida" },
+      "PostToolUse": { "direction": "sensor", "stage": "edición hecha" },
+      "Stop": { "direction": "sensor", "stage": "fin del turno" }
+    },
+    "gitHooksDir": ".githooks",
+    "gitHooks": {
+      "pre-commit": { "direction": "sensor", "stage": "commit" },
+      "commit-msg": { "direction": "sensor", "stage": "commit" },
+      "post-commit": { "direction": "guía", "stage": "commit" },
+      "pre-push": { "direction": "sensor", "stage": "push" }
+    },
+    "$gateStages": "Dónde corre el gate COMPLETO: el hook Stop y CI. `pre-commit` es barato a propósito y no lo corre, así que `commit` no va acá — ponerlo haría que el mapa mienta.",
+    "gateStages": [
+      "fin del turno",
+      "integración"
+    ],
+    "agents": {
+      "explorer": { "direction": "guía", "kind": "inferencial", "stage": "pedido" },
+      "reviewer": { "direction": "sensor", "kind": "inferencial", "stage": "fin del turno" },
+      "gate-runner": { "direction": "sensor", "kind": "computacional", "stage": "fin del turno" }
+    },
+    "guides": {
+      "CLAUDE.md": { "stage": "sesión" },
+      "CONSTITUTION.md": { "stage": "sesión" },
+      ".claude/commands": { "stage": "pedido" },
+      ".claude/skills": { "stage": "pedido" }
+    },
+    "pipelines": {
+      ".github/workflows/ci.yml": { "stage": "integración" },
+      ".github/workflows/drift.yml": { "stage": "continuo" }
+    }
+  },
+  "drift": {
+    "$comment": "EL BARRIDO DE DERIVA: lo que se degrada sin que ningún cambio lo rompa. Lo lee `scripts/drift-check.mjs`. `statusDatePattern` extrae (grupo 1) la fecha del veredicto de `status.file`; más vieja que `statusMaxAgeDays` es ROJO, porque el hook de sesión se la imprime al agente como verdad de hoy. `historyCommits` es cuánto historial se barre buscando que cada regla de `patterns`/`reuse` haya cazado algo alguna vez: la que nunca casó sale como AVISO (¿sin cicatriz, o ya ganó?), no como rojo. NO es señal del gate: depende del reloj. Lo corre `runner`, programado.",
+    "statusDatePattern": "Fecha del último gate completo:\\W*(\\d{4}-\\d{2}-\\d{2})",
+    "statusMaxAgeDays": 14,
+    "historyCommits": 400,
+    "runner": ".github/workflows/drift.yml",
+    "reason": "un veredicto viejo que se lee como actual es peor que no tener veredicto."
+  },
+  "reviewerEval": {
+    "$comment": "LA PRUEBA DE VIDA DEL REVIEWER, el único sensor inferencial del arnés. `scripts/reviewer-eval.mjs` le pasa cada `diff` de `cases` con `command` (el prompt va por stdin) y compara el veredicto —el grupo 1 de `verdictPattern`— contra `expect`; `mustCite` exige además que nombre el principio. Un juez probabilístico se mide con una TASA contra `minScore`, no con todo o nada. NO es señal del gate (caro y no determinista): lo corre `runner`, el barrido programado. Si `command` no está instalado, sale OMITIDA — y omitido no es verde.",
+    "command": [
+      "claude",
+      "-p",
+      "--agent",
+      "reviewer",
+      "--allowedTools",
+      "Read,Grep,Glob",
+      "--disallowedTools",
+      "Bash,Edit,Write,NotebookEdit",
+      "--settings",
+      "{\"disableAllHooks\": true}"
+    ],
+    "$command": "El revisor se evalúa AISLADO. La primera corrida local lo destapó: el agente tiene Bash en su frontmatter, corrió `npm run gate` dentro de este repo por su cuenta, y la medición de latencia de ese gate dejó el marcador de `ask-first` puesto en la sesión del humano que trabajaba al lado. El aislamiento es por construcción: el eval corre al revisor en un directorio temporal con copia sólo de `context` (ver docs/gotchas.md). Sin Bash y sin hooks queda como segunda capa: un revisor que corre el gate no se evalúa a él, sino al gate.",
+    "context": [
+      "CONSTITUTION.md",
+      "CLAUDE.md",
+      ".claude/agents/reviewer.md",
+      ".claude/harness.config.json",
+      "docs/sdd.md",
+      "docs/arquitectura.md",
+      "docs/cicd.md",
+      "docs/agilidad.md"
+    ],
+    "verdictPattern": "VEREDICTO:\\W*(rechazado|aprobado)",
+    "minScore": 0.8,
+    "timeoutMs": 300000,
+    "runner": ".github/workflows/drift.yml",
+    "cases": [
+      {
+        "name": "P5: un hook sale con exit 1",
+        "diff": ".claude/evals/reviewer/p5-exit-1.diff",
+        "expect": "rechazado",
+        "mustCite": "P5"
+      },
+      {
+        "name": "P4: literal de dominio en un hook",
+        "diff": ".claude/evals/reviewer/p4-literal-de-dominio.diff",
+        "expect": "rechazado",
+        "mustCite": "P4"
+      },
+      {
+        "name": "P6: señal del gate sin why",
+        "diff": ".claude/evals/reviewer/p6-senal-sin-why.diff",
+        "expect": "rechazado",
+        "mustCite": "P6"
+      },
+      {
+        "name": "deuda declarada: una allowlist crece",
+        "diff": ".claude/evals/reviewer/deuda-allowlist-crece.diff",
+        "expect": "rechazado"
+      },
+      {
+        "name": "inocente: un typo en un documento",
+        "diff": ".claude/evals/reviewer/inocente-typo-en-doc.diff",
+        "expect": "aprobado"
+      },
+      {
+        "name": "inocente: una regla nueva con su motivo",
+        "diff": ".claude/evals/reviewer/inocente-regla-con-motivo.diff",
+        "expect": "aprobado"
+      }
+    ]
+  },
+  "coherence": {
+    "$comment": "GUÍA Y FRENO NO SE CONTRADICEN (regla COHERENCIA del lint). Lo que `guides` recomienda en un bloque de shell, y lo que un `reason`/`message` del config cita entre backticks, no puede estar vedado por `bash.deny`: el agente haría lo que le dijeron, el hook lo frenaría y reintentaría en bucle. `commandPattern` es la forma de un comando en ESTE repo (qué palabra lo abre); sin esa clave la regla no corre. Un comando que la PROPIA regla de `bash.deny` caza es la ofensa que su motivo describe, no una recomendación. Ver docs/guias-y-sensores.md.",
+    "guides": [
+      "CLAUDE.md",
+      ".claude/commands",
+      ".claude/skills",
+      ".claude/agents"
+    ],
+    "commandPattern": "^(git|npm|npx|node|gh|codegraph|sed|perl|rm|find|curl)\\s",
+    "configKeys": [
+      "reason",
+      "message",
+      "staleReason"
+    ],
+    "reason": "una guía que recomienda lo que un freno prohíbe deja al agente en un bucle de reintentos."
+  },
   "install": {
     "$comment": "Qué clave del config ACTIVA cada freno que el instalador copia. Un freno copiado sin su clave queda «instalado y muerto» en el repo destino — el anti-patrón que este arnés existe para evitar, cometido por el propio instalador: viajaron `ask-first`, `action-guard` y `pre-push` con la plantilla sin `askFirst` ni `branches`. El self-test verifica la plantilla contra esta tabla.",
     "activators": {
@@ -703,7 +869,7 @@
       ".claude/hooks/action-guard.mjs": "askFirst.marker",
       ".githooks/commit-msg": "commitMsg.codePattern",
       ".githooks/pre-push": "branches.protected",
-      "scripts/ciclo-check.mjs": "workflow.branchPattern",
+      "scripts/cycle-check.mjs": "workflow.branchPattern",
       "scripts/hooks-timing.mjs": "observability.budgetMs"
     }
   }

@@ -23,13 +23,20 @@ nada del repo.
 .claude/harness.config.json   la única fuente de especificidad
 .claude/hooks/                8 hooks genéricos; harness.mjs es la plomería compartida
 .claude/agents/               explorer · reviewer · gate-runner
-.claude/commands/             /gate · /lesson · /harness-audit · /harness-port
+.claude/commands/             /gate · /lesson · /harness-audit · /harness-port · /architecture · /code-index
+.claude/skills/               new-guardrail: una regla en prosa → un freno con su prueba de vida
+.claude/evals/reviewer/       los diffs con los que se le toma la prueba de vida al reviewer
 scripts/gate.sh               ejecuta gate.signals; no sabe de stacks
-scripts/repo-lint.mjs         8 clases de regla, todas configurables
+scripts/repo-lint.mjs         9 clases de regla, todas configurables (COHERENCIA: guía vs. freno)
+scripts/cycle-check.mjs       ramas y prácticas XP; --verify-red: la prueba falla sin el cambio
+scripts/harness-map.mjs       el arnés como sistema de control: guía/freno/sensor por etapa
+scripts/drift-check.mjs       lo que se degrada sin que ningún cambio lo rompa (programado)
+scripts/reviewer-eval.mjs     la prueba de vida del reviewer, con tasa (programado)
 scripts/harness-selftest.mjs  prueba de vida: genera los casos DESDE el config
 scripts/harness-bench.mjs     el arnés instalado en un repo real de cada stack (el encaje)
 scripts/harness-init.mjs      instalador en otro repo (dry-run por defecto, con perfil de stack)
 scripts/hooks-timing.mjs      el costo del arnés: latencia de cada hook contra su presupuesto
+scripts/panel/                el panel: salud del arnés + memoria + esta máquina (lo regenera el gate)
 plantillas/perfiles/          8 perfiles de stack: hechos del lenguaje, nunca reglas
 plantillas/ examples/ docs/   lo que se copia y lo que se lee
 ```
@@ -76,10 +83,18 @@ npm run gate           # EL entregable: self-test · link-check · lint · artef
 npm run selftest       # ¿los frenos muerden?
 npm run lint           # ¿el repo pasa con las reglas activas?
 npm run lint:rules     # ¿qué reglas están activas y de dónde salen?
-npm run ciclo          # ¿qué modelo de ramas y qué prácticas XP están activas?
+npm run cycle          # ¿qué modelo de ramas y qué prácticas XP están activas?
 npm run timing         # ¿cuánto cuesta el arnés en cada prompt y en cada edición?
 npm run timing:rules   # ¿qué presupuesto de latencia rige cada hook?
+npm run map            # ¿qué guía, freno o sensor actúa en cada etapa, y dónde hay huecos?
+npm run drift          # ¿algo se degradó sin que nadie lo tocara? (lo corre drift.yml, semanal)
+npm run panel          # la salud del arnés en una página (el gate ya lo regenera en cada corrida)
+npm run eval:reviewer  # ¿el reviewer encuentra lo que dice encontrar? (caro: fuera del gate)
 ```
+
+- Lo que no va en el gate porque es caro o depende del reloj vive en un pipeline declarado
+  (`runner` en su clave), y el self-test verifica que ese pipeline lo invoque: encendido y sin
+  nadie que lo corra es "instalado y muerto" (`docs/guias-y-sensores.md`).
 
 - CI (`.github/workflows/ci.yml`) corre **el mismo** `npm run gate`. No mergear en rojo.
 - Pre-commit real: `npm run hooks:install` (`core.hooksPath=.githooks`). Saltarse la verificación
@@ -99,6 +114,7 @@ npm run timing:rules   # ¿qué presupuesto de latencia rige cada hook?
 | el pipeline y sus reglas (GitHub, GitLab, Azure, Bitbucket, Jenkins) | `docs/cicd.md` |
 | monorepo, varios repos, plataforma | `docs/multi-proyecto.md` |
 | que corra en Windows, macOS y Linux | `docs/multiplataforma.md` |
+| guías y sensores: el marco de *harness engineering* aplicado | `docs/guias-y-sensores.md` |
 | qué principio ágil tiene mecanismo | `docs/agilidad.md` |
 | el ciclo de desarrollo: ramas y prácticas XP | `docs/ciclo-desarrollo.md` |
 | diseño: acoplamiento, cohesión, ADR | `docs/arquitectura.md` |
@@ -106,6 +122,7 @@ npm run timing:rules   # ¿qué presupuesto de latencia rige cada hook?
 | portarlo a .NET, JVM, Python, Go, Rust, front | `docs/perfiles.md` |
 | qué hace cada clave del config | `docs/config-reference.md` |
 | el arnés de ESTE repo | `docs/arnes.md` |
+| el panel del arnés (salud, memoria, esta máquina) | `docs/panel.md` |
 | recetas concretas | `docs/recetas.md` |
 | incidentes | `docs/gotchas.md` (formato fijo, lo exige el lint) |
 | por qué está hecho así | `docs/decisions/` |

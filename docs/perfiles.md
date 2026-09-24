@@ -8,9 +8,9 @@ Un perfil (`plantillas/perfiles/<stack>.json`) llena exactamente eso. Lo aplica 
 
 ```bash
 node scripts/harness-init.mjs ../mi-repo                      # detecta el stack y avisa
-node scripts/harness-init.mjs ../mi-repo --perfil dotnet       # explícito
-node scripts/harness-init.mjs ../mi-repo --perfil node,dotnet  # monorepo: front + back
-node scripts/harness-init.mjs ../mi-repo --perfil dotnet --apply
+node scripts/harness-init.mjs ../mi-repo --profile dotnet       # explícito
+node scripts/harness-init.mjs ../mi-repo --profile node,dotnet  # monorepo: front + back
+node scripts/harness-init.mjs ../mi-repo --profile dotnet --apply
 ```
 
 Perfiles publicados: `node` · `front` · `dotnet` · `jvm-maven` · `jvm-gradle` · `python` · `go` ·

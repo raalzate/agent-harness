@@ -26,7 +26,7 @@ push / PR
    │                     Falla → no se mergea. Sin excepción por prisa.
    │
    ├─ señales lentas  ← lo que tarda demasiado para el ciclo del desarrollador
-   │                     (acá: el banco con `--con-gate`, ~75s). En el gate local van
+   │                     (acá: el banco con `--with-gate`, ~75s). En el gate local van
    │                     con `fastSkip`, y en CI corren completas.
    │
    └─ despliegue      ← DETRÁS del gate verde, nunca al lado. Un deploy que no depende

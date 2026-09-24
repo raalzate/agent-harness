@@ -73,10 +73,10 @@ Mecanismo: el modo `--stdin` de `scripts/repo-lint.mjs`, y un caso del self-test
 
 ### GOTCHA: los hooks citaban tres documentos que no existían
 
-Síntoma: el hook imprimía «Criterio completo: `docs/harness/sdd.md`» en cada prompt <!-- linkcheck:ignora -->, y ese archivo
+Síntoma: el hook imprimía «Criterio completo: `docs/harness/sdd.md`» en cada prompt <!-- linkcheck:ignore -->, y ese archivo
          no existe en este repo. Otros dos punteros igual de muertos. Gate verde todo el tiempo.
 Causa:   dos capas. Los hooks se copiaron con la prosa de OTRA estructura de carpetas
-         (`docs/harness/`, `docs/architecture/`) <!-- linkcheck:ignora -->, y el link-check sólo recorría `*.md`: lo que un
+         (`docs/harness/`, `docs/architecture/`) <!-- linkcheck:ignore -->, y el link-check sólo recorría `*.md`: lo que un
          hook le IMPRIME al agente es memoria igual que un markdown, pero vive en un `.mjs`.
 Regla:   un hook no cablea rutas de documentación: el documento que cita sale del config
          (`sdd.doc`, `docs.reuseCatalog`) y se cita sólo si existe. Los docs del arnés **no
@@ -87,7 +87,7 @@ Mecanismo: `docs.proseInSource` — el link-check también revisa la prosa de `.
 
 ### GOTCHA: el falso rojo con una ruta que nadie escribió
 
-Síntoma: el link-check reportaba `docs/mi` — un prefijo que no aparece en ningún documento. <!-- linkcheck:ignora -->
+Síntoma: el link-check reportaba `docs/mi` — un prefijo que no aparece en ningún documento. <!-- linkcheck:ignore -->
 Causa:   la ruta real tenía espacios (un PDF exportado de diseño) y el barrido de rutas en prosa la
          cortaba en el primer espacio.
 Regla:   una ruta citada entre backticks se evalúa **completa**, espacios incluidos, y su prefijo
@@ -109,7 +109,7 @@ Mecanismo: paso 1c del self-test, con cinco formas reales de declarar un hook.
 
 Síntoma: `node scripts/harness-init.mjs <repo>` moría con `SyntaxError: missing ) after argument
          list`. El gate estaba verde y el archivo llevaba dos releases publicado así.
-Causa:   un texto entre backticks —\`sin-issue:\`— se agregó DENTRO de un template literal, y
+Causa:   un texto entre backticks —\`no-issue:\`— se agregó DENTRO de un template literal, y
          cerró la cadena a mitad de camino. Y el gate no lo veía por dos motivos que se sumaron:
          el self-test verificaba la sintaxis de los **hooks** pero no la de los **scripts**, y el
          instalador no corre en el gate (lo corre quien porta el arnés, una vez).
@@ -358,3 +358,23 @@ Mecanismo: la derivación del archivo de prueba en `scripts/harness-selftest.mjs
          alternativa, descarta toda muestra con `| < > : " ? * \` y **revalida contra el patrón del
          que salió** antes de usarla; si ninguna candidata sobrevive, el grupo de casos sale
          omitido. Lo cazó la matriz de CI (`windows-latest`), que es la única señal que lo veía.
+
+### GOTCHA: el revisor evaluado corrió el gate y bloqueó la sesión de al lado
+
+Síntoma: en plena sesión de trabajo, una edición legítima muere con `NO ACTÚES SOBRE UNA
+         PREGUNTA … Pedido: «¿cómo está el arnés?»` — un pedido que el humano nunca hizo. El
+         marcador aparece y desaparece solo mientras corre `npm run eval:reviewer` en otra terminal.
+Causa:   el eval lanza `claude -p --agent reviewer` dentro de este repo. El `reviewer` tiene Bash en
+         su frontmatter, y por su cuenta corrió `npm run gate`; la medición de latencia del gate
+         ejecuta `ask-first` con su prompt de prueba y deja el marcador mientras mide. Además la
+         sesión del revisor carga los hooks del repo, que leen y borran los mismos marcadores.
+Regla:   un revisor que se evalúa corre FUERA del repo, en un árbol que se tira. Sin
+         herramientas que ejecuten ni escriban (`--disallowedTools`) y sin hooks (`disableAllHooks`)
+         como segunda capa. Un revisor que corre el gate tampoco se evalúa a él: se evalúa al gate.
+         El primer arreglo —fotografiar los marcadores y restaurarlos— se descartó: no distingue lo
+         que escribió el revisor de lo que escribió el humano en el mismo minuto (dio un falso rojo
+         por un `gate-dirty` legítimo), y restaurar le borraba al humano un gate pendiente.
+Mecanismo: `scripts/reviewer-eval.mjs` corre al revisor en un directorio temporal con copia sólo
+         de `reviewerEval.context`. El self-test lo prueba con un revisor de mentira que sólo
+         contesta si encuentra su contexto donde corre, y escribe algo ahí (sección 10b): el eval
+         tiene que pasar y nada de lo escrito puede aparecer en el repo.

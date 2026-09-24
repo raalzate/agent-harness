@@ -20,7 +20,7 @@ El paso 4 es el que se saltea y el que importa.
 
 ## Agregar una regla del repo
 
-Usá el skill `nuevo-freno`, o a mano:
+Usá el skill `new-guardrail`, o a mano:
 
 | Lo que se puede observar | Clase de regla |
 |---|---|
@@ -128,7 +128,7 @@ existía y no frenó nada, así que hace falta un mecanismo más fuerte, no otra
 Configs completas en [`../examples/`](../examples/README.md), y para arrancar sin escribirlas a
 mano, el perfil de stack del instalador ([perfiles.md](perfiles.md)) llena lo que sí es deducible
 del lenguaje. El patrón general que se repite en
-todos: **formato → estático → tipos → tests → empaquetado**, con el self-test del arnés primero
+todos: **formato → estático → tipos → tests → empaquetado**, con el harness self-test primero
 (un freno roto invalida todo lo que venga después).
 
 ---

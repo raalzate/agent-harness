@@ -18,7 +18,7 @@
     "installHooksCommand": "git config core.hooksPath .githooks",
     "signals": [
       {
-        "name": "self-test del arnés",
+        "name": "harness self-test",
         "command": [
           "node",
           "scripts/harness-selftest.mjs"
@@ -26,7 +26,7 @@
         "why": "un hook roto falla en silencio: ninguna otra señal lo ve"
       },
       {
-        "name": "lint de convenciones",
+        "name": "convention lint",
         "command": [
           "node",
           "scripts/repo-lint.mjs"
@@ -83,7 +83,7 @@
         "why": "el flujo completo que ningún unitario cubre; OMITIDA en un clon parcial, y omitido no es verde"
       },
       {
-        "name": "índice del código (codegraph)",
+        "name": "code index (codegraph)",
         "command": [
           "codegraph",
           "status"
@@ -270,7 +270,7 @@
       "fixup! ",
       "squash! "
     ],
-    "escapeLine": "sin-issue:"
+    "escapeLine": "no-issue:"
   },
   "graph": {
     "$comment": "EL ÍNDICE DEL CÓDIGO. Activa el hook `graph-first` y la señal del gate. Herramienta por default: codegraph (https://github.com/colbymchenry/codegraph). Regla: primero el índice, después abrir archivos. Ver docs/codegraph.md.",

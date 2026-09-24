@@ -4,8 +4,8 @@
  *
  *   node scripts/harness-init.mjs <ruta-del-repo>                     # dry-run: muestra qué haría
  *   node scripts/harness-init.mjs <ruta-del-repo> --apply             # copia de verdad
- *   node scripts/harness-init.mjs <ruta-del-repo> --perfil dotnet     # perfil de stack explícito
- *   node scripts/harness-init.mjs <ruta-del-repo> --perfil node,dotnet  # monorepo
+ *   node scripts/harness-init.mjs <ruta-del-repo> --profile dotnet     # perfil de stack explícito
+ *   node scripts/harness-init.mjs <ruta-del-repo> --profile node,dotnet  # monorepo
  *
  * Copia lo genérico (hooks, scripts, subagentes, comandos, hooks de git, plantillas) y deja
  * un `harness.config.json` DE ARRANQUE, con las señales del gate vacías a propósito: nadie
@@ -31,14 +31,14 @@ const argv = process.argv.slice(2);
 const APLICAR = argv.includes("--apply");
 
 /**
- * `--perfil x,y` o `--perfil=x,y`. Vacío = se intenta detectar.
+ * `--profile x,y` o `--profile=x,y`. Vacío = se intenta detectar.
  *
  * Devuelve también qué índices consume, porque el destino se elige por descarte: sin eso,
- * `--perfil dotnet /ruta` tomaba `dotnet` como DESTINO. Con `--apply` y un directorio
+ * `--profile dotnet /ruta` tomaba `dotnet` como DESTINO. Con `--apply` y un directorio
  * llamado `node/` o `go/` en el cwd, eso escribe 32 archivos donde nadie los pidió (P9).
  */
 const { perfilArg, consumidos } = (() => {
-  const i = argv.findIndex((a) => a === "--perfil" || a.startsWith("--perfil="));
+  const i = argv.findIndex((a) => a === "--profile" || a.startsWith("--profile="));
   if (i === -1) return { perfilArg: null, consumidos: new Set() };
   if (argv[i].includes("=")) {
     return { perfilArg: argv[i].split("=").slice(1).join("="), consumidos: new Set([i]) };
@@ -51,7 +51,7 @@ const { perfilArg, consumidos } = (() => {
 const destinoArg = argv.find((a, i) => !a.startsWith("--") && !consumidos.has(i)) ?? null;
 
 if (!destinoArg) {
-  console.error("uso: node scripts/harness-init.mjs <ruta-del-repo> [--perfil <stack[,stack]>] [--apply]");
+  console.error("uso: node scripts/harness-init.mjs <ruta-del-repo> [--profile <stack[,stack]>] [--apply]");
   console.error(`perfiles disponibles: ${perfilesDisponibles().join(", ") || "(ninguno)"}`);
   process.exit(1);
 }
@@ -155,7 +155,7 @@ if (perfilArg !== null) {
     console.log(`Perfil de stack (detectado): ${detectados[0]}`);
   } else if (detectados.length > 1) {
     console.log(`Varios stacks detectados: ${detectados.join(", ")}`);
-    console.log(`El instalador NO elige por vos. Repetí con: --perfil ${detectados.join(",")}`);
+    console.log(`El instalador NO elige por vos. Repetí con: --profile ${detectados.join(",")}`);
   } else {
     console.log("Sin perfil de stack: la plantilla queda pelada (llenala a mano).");
   }
@@ -191,9 +191,9 @@ const COPIAR = [
   ".claude/commands/gate.md",
   ".claude/commands/lesson.md",
   ".claude/commands/harness-audit.md",
-  ".claude/commands/arquitectura.md",
-  ".claude/commands/indice.md",
-  ".claude/skills/nuevo-freno/SKILL.md",
+  ".claude/commands/architecture.md",
+  ".claude/commands/code-index.md",
+  ".claude/skills/new-guardrail/SKILL.md",
   "scripts/gate.mjs",
   "scripts/gate.sh",
   "scripts/hooks-install.mjs",
@@ -201,8 +201,21 @@ const COPIAR = [
   "scripts/harness-selftest.mjs",
   "scripts/docs-linkcheck.mjs",
   "scripts/artifacts-check.mjs",
-  "scripts/ciclo-check.mjs",
+  "scripts/cycle-check.mjs",
   "scripts/hooks-timing.mjs",
+  // Los que `/harness-audit` pide correr: el mapa (qué guía, freno o sensor actúa en cada etapa)
+  // y la deriva. Genéricos: todo lo que saben sale de `taxonomy` y `drift` en el config.
+  "scripts/harness-map.mjs",
+  "scripts/drift-check.mjs",
+  // El panel: se regenera en cada corrida del gate, así que sin estos archivos el gate del
+  // repo destino dice «Panel: no instalado». Genérico: sin la clave `panel` sale con defaults.
+  "scripts/panel/generar.mjs",
+  "scripts/panel/sincronizar.mjs",
+  "scripts/panel/leer-fuentes.mjs",
+  "scripts/panel/leer-arnes.mjs",
+  "scripts/panel/leer-en-vivo.mjs",
+  "scripts/panel/leer-plan.mjs",
+  "scripts/panel/plantilla.mjs",
   // Documentos AGNÓSTICOS que el arnés instalado cita: sin ellos, el propio arnés arranca
   // apuntando a la nada en el repo destino (P10 violado por el instalador). Lo destapó el
   // banco de perfiles: `docs-linkcheck` del repo portado salía rojo el primer día.
@@ -219,6 +232,8 @@ const COPIAR = [
   "docs/ciclo-desarrollo.md",
   "docs/multi-proyecto.md",
   "docs/multiplataforma.md",
+  // Lo cita el panel (sus scripts y la página que genera).
+  "docs/panel.md",
   ".githooks/pre-commit",
   ".githooks/commit-msg",
   ".githooks/pre-push",
@@ -234,7 +249,7 @@ const PLANTILLAS = [
   ["plantillas/arnes.md", "docs/arnes.md"],
   // Crea `docs/decisions/` —que la guía y trazabilidad citan— y deja la plantilla adentro:
   // el directorio vacío no existe en git, y una decisión sin dónde escribirse no se escribe.
-  ["plantillas/ADR.md", "docs/decisions/PLANTILLA.md"], // linkcheck:ignora — ruta del DESTINO, no de acá
+  ["plantillas/ADR.md", "docs/decisions/PLANTILLA.md"], // linkcheck:ignore — ruta del DESTINO, no de acá
   ["plantillas/ci.yml", ".github/workflows/ci.yml"],
 ];
 
@@ -340,7 +355,7 @@ Falta lo que ninguna herramienta puede adivinar — y es donde está el valor:
   4b. .claude/harness.config.json → tracker
      El patrón de referencia de TU forja (#123, AB#123, PROJ-123…). Copiar el de otro
      equipo hace que el freno nunca encuentre la referencia y todos escriban
-     \`sin-issue:\` como ritual. Ver docs/trazabilidad.md.
+     \`no-issue:\` como ritual. Ver docs/trazabilidad.md.
 
   5. CONSTITUTION.md y STATUS.md: principios que este repo puede hacer cumplir HOY.
      Un principio BLOCKING sin comando que falle es un principio REVIEW mal etiquetado.

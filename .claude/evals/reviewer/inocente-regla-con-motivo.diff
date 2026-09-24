@@ -1,0 +1,14 @@
+diff --git a/.claude/harness.config.json b/.claude/harness.config.json
+--- a/.claude/harness.config.json
++++ b/.claude/harness.config.json
+@@ -120,6 +120,11 @@
+       {
+         "pattern": "\\bfind\\b[^|;&]*-delete",
+         "reason": "`find -delete` borra sin mostrar. Corré el find sin -delete y confirmá la lista."
++      },
++      {
++        "pattern": "\\bgit\\s+stash\\s+(drop|clear)\\b",
++        "reason": "`git stash drop/clear` descarta trabajo guardado sin forma de recuperarlo desde el agente. Mostrá `git stash list` y pedí confirmación."
+       }
+     ]
+   },

@@ -19,7 +19,11 @@
  *   7. el kit SDD declarado está instalado (en CI se reporta OMITIDO, nunca «pasó»);
  *   8. los perfiles de stack son instalables y NO llevan reglas de otro repo, y las configs
  *      de ejemplo que se publican para copiar parsean y compilan;
- *   9. el COSTO del arnés está medido: cada hook entra en su presupuesto de latencia.
+ *   9. el COSTO del arnés está medido: cada hook entra en su presupuesto de latencia;
+ *  10. los controles FUERA del gate (deriva, prueba del reviewer, mapa) están vivos y el
+ *      pipeline declarado en su `runner` los corre (ADR 0007).
+ *  11. el PANEL se genera: determinista sin la capa en vivo, sus alarmas muerden sobre un cebo
+ *      y callan sobre el repo real, y el gate lo regenera (con su registro) aunque salga rojo.
  *
  * Agnóstico: no conoce ningún stack. Todo lo que prueba lo deduce del config.
  */
@@ -27,10 +31,10 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 // El mismo helper que usan el hook y el lint: comparar contra la lista DECLARADA dejaba pasar
 // justo el caso del incidente (el gate declara una extensión que el default agnóstico no tiene).
-import { codeExtensions, depsMatcher, importSyntax, segmentosDeRuta, relativaDesdeRaiz, esUnidadPelada, parseHookCommand } from "../.claude/hooks/harness.mjs";
+import { codeExtensions, depsMatcher, importSyntax, segmentosDeRuta, relativaDesdeRaiz, esUnidadPelada, parseHookCommand, firstMatch } from "../.claude/hooks/harness.mjs";
 
 const REPO_ROOT = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
 const abs = (p) => path.join(REPO_ROOT, p);
@@ -55,6 +59,28 @@ const section = (title) => console.log(`\n${title}`);
 const HAY_BASH = spawnSync("bash", ["-c", "exit 0"], { stdio: "ignore" }).status === 0;
 
 const hookFiles = new Set();
+
+/**
+ * Un control que NO va en el gate (caro, o no determinista) vive sólo en el pipeline que lo
+ * corre. Si el config lo enciende y ese pipeline no lo invoca, está instalado y muerto: la
+ * clave `runner` nombra el archivo, y esto verifica que exista y que lo invoque.
+ */
+function corredorDeclarado(nombre, runner, invocacion) {
+  if (!runner) return bad(`${nombre} tiene quien la corra`, "está encendida y no declara `runner`: nadie la invoca");
+  if (!fs.existsSync(abs(runner))) return bad(`${nombre} tiene quien la corra`, `\`runner\` apunta a \`${runner}\`, que no existe`);
+  // El pipeline puede invocar el script directo o por su nombre de npm: las dos formas cuentan.
+  let scripts = {};
+  try {
+    scripts = JSON.parse(fs.readFileSync(abs("package.json"), "utf8")).scripts ?? {};
+  } catch {
+    scripts = {};
+  }
+  const formas = [invocacion, ...Object.entries(scripts).filter(([, c]) => c.includes(invocacion)).map(([n]) => `npm run ${n}`)];
+  const texto = fs.readFileSync(abs(runner), "utf8");
+  if (!formas.some((f) => texto.includes(f)))
+    return bad(`${nombre} tiene quien la corra`, `\`${runner}\` no invoca \`${invocacion}\`: encendida y muerta`);
+  ok(`${nombre} la corre \`${runner}\``);
+}
 
 /** Ejecuta un hook con un payload por stdin. Devuelve {status, stdout, stderr}. */
 function runHook(hookFile, payload) {
@@ -217,9 +243,9 @@ section("1b. scripts del arnés");
 //     entre comillas (la forma que recomienda la documentación de Claude Code).
 {
   const casos = [
-    ["node .claude/hooks/x.mjs", "script", ".claude/hooks/x.mjs"], // linkcheck:ignora (ficticio)
-    ['node "$CLAUDE_PROJECT_DIR/scripts/ado.mjs" hook edit', "script", "scripts/ado.mjs"], // linkcheck:ignora
-    ["node --experimental-strip-types scripts/x.ts", "script", "scripts/x.ts"], // linkcheck:ignora
+    ["node .claude/hooks/x.mjs", "script", ".claude/hooks/x.mjs"], // linkcheck:ignore (ficticio)
+    ['node "$CLAUDE_PROJECT_DIR/scripts/ado.mjs" hook edit', "script", "scripts/ado.mjs"], // linkcheck:ignore
+    ["node --experimental-strip-types scripts/x.ts", "script", "scripts/x.ts"], // linkcheck:ignore
     ["/usr/local/bin/graphify hook-guard search", "ejecutable", "/usr/local/bin/graphify"],
     ["graphify hook-guard search", "ejecutable", "graphify"],
   ];
@@ -715,7 +741,7 @@ const huerfanasDe = (cfg) => {
   } else {
     const rutaCodigo = sampleFromPattern(cm.codePattern);
     const refIssue = sampleFromPattern(tr.issuePattern);
-    const fuga = cm.escapeLine ?? "sin-issue:";
+    const fuga = cm.escapeLine ?? "no-issue:";
     const extIgnorada = (cm.ignoreExtensions ?? [".md"])[0];
 
     if (!rutaCodigo || !refIssue) {
@@ -771,16 +797,16 @@ const huerfanasDe = (cfg) => {
 }
 
 // 3f-bis. El ciclo de desarrollo: modelo de ramas (`workflow`) y prácticas de XP (`xp`).
-//     El freno entra por `node scripts/ciclo-check.mjs`, así que estos casos NO necesitan
+//     El freno entra por `node scripts/cycle-check.mjs`, así que estos casos NO necesitan
 //     bash: corren igual en Windows, que es donde un freno de sólo-shell no falla sino que
 //     desaparece. Las muestras salen del config: el self-test no sabe qué modelo usa el repo.
 {
-  const script = abs("scripts/ciclo-check.mjs");
+  const script = abs("scripts/cycle-check.mjs");
   const wf = config.workflow ?? {};
   const reglasXp = config.xp ?? {};
 
   if (!fs.existsSync(script)) {
-    skip("ciclo de desarrollo", "el repo no trae scripts/ciclo-check.mjs");
+    skip("ciclo de desarrollo", "el repo no trae scripts/cycle-check.mjs");
   } else {
     // --- modelo de ramas -------------------------------------------------------------
     const rama = (nombre, cfg) =>
@@ -892,11 +918,11 @@ const huerfanasDe = (cfg) => {
         // test primero: la prueba y el cambio entran juntos, o se declara por qué no
         ["XP test primero: código sin prueba no entra", { [archivoCodigo]: "// x\n" }, "fix: algo", conXp("testFirst", {}), 1],
         ["XP test primero: código CON su prueba entra", { [archivoCodigo]: "// x\n", [archivoTest]: "// caso\n" }, "fix: algo", conXp("testFirst", {}), 0],
-        ["XP test primero: la fuga con motivo entra", { [archivoCodigo]: "// x\n" }, `fix: algo\n\n${reglasXp.testFirst?.escapeLine ?? "sin-test:"} typo en un comentario`, conXp("testFirst", {}), 0],
-        ["XP test primero: la fuga SIN motivo no alcanza", { [archivoCodigo]: "// x\n" }, `fix: algo\n\n${reglasXp.testFirst?.escapeLine ?? "sin-test:"}`, conXp("testFirst", {}), 1],
+        ["XP test primero: la fuga con motivo entra", { [archivoCodigo]: "// x\n" }, `fix: algo\n\n${reglasXp.testFirst?.escapeLine ?? "no-test:"} typo en un comentario`, conXp("testFirst", {}), 0],
+        ["XP test primero: la fuga SIN motivo no alcanza", { [archivoCodigo]: "// x\n" }, `fix: algo\n\n${reglasXp.testFirst?.escapeLine ?? "no-test:"}`, conXp("testFirst", {}), 1],
         // lote chico: el límite sale del config, el cebo lo baja a 1 archivo
         ["XP lote chico: un lote sobre el límite no entra", { [archivoCodigo]: "// x\n", [`${prefijo}otro.mjs`]: "// y\n" }, "feat: dos cosas", conXp("smallBatch", { maxFiles: 1, maxLines: 0 }), 1],
-        ["XP lote chico: declarado con motivo, entra", { [archivoCodigo]: "// x\n", [`${prefijo}otro.mjs`]: "// y\n" }, `feat: dos cosas\n\n${reglasXp.smallBatch?.escapeLine ?? "lote-grande:"} movimiento mecánico de un renombre`, conXp("smallBatch", { maxFiles: 1, maxLines: 0 }), 0],
+        ["XP lote chico: declarado con motivo, entra", { [archivoCodigo]: "// x\n", [`${prefijo}otro.mjs`]: "// y\n" }, `feat: dos cosas\n\n${reglasXp.smallBatch?.escapeLine ?? "big-batch:"} movimiento mecánico de un renombre`, conXp("smallBatch", { maxFiles: 1, maxLines: 0 }), 0],
         ["XP lote chico: un lote bajo el límite entra", { [archivoCodigo]: "// x\n" }, "feat: una cosa", conXp("smallBatch", { maxFiles: 5, maxLines: 500 }), 0],
         // refactor separado: un refactor que toca pruebas no es un refactor
         ["XP refactor separado: `refactor:` que cambia pruebas no entra", { [archivoCodigo]: "// x\n", [archivoTest]: "// caso\n" }, "refactor: mover el helper", conXp("refactorSeparate", {}), 1],
@@ -917,6 +943,85 @@ const huerfanasDe = (cfg) => {
       if (apagado.status === 0) ok("ciclo: sin `xp` configurado, el freno no corre");
       else bad("ciclo: sin `xp` configurado", `exit ${apagado.status}: el freno bloquea sin estar encendido`);
     }
+  }
+}
+
+// 3f-ter. La prueba nueva FALLA sin el cambio de producción (`xp.testFirst.verifyRed`). Se prueba
+//     en un repo git temporal con un cebo propio: una rama donde la prueba describe el cambio
+//     (roja sobre la base → pasa), una donde la prueba es un espejo (verde sobre la base →
+//     bloquea), la fuga declarada y la rama sin cambio de producción. El mecanismo es el mismo
+//     en cualquier stack; lo que cambia por repo es `command`, y eso es config.
+{
+  const script = abs("scripts/cycle-check.mjs");
+  if (!fs.existsSync(script)) {
+    skip("ciclo: rojo sin el cambio", "el repo no trae scripts/cycle-check.mjs");
+  } else {
+    const cebo = {
+      commitMsg: { codePattern: "^src/", ignoreExtensions: [".md"] },
+      workflow: { baseBranch: "main" },
+      xp: {
+        testFirst: {
+          enabled: true,
+          testPattern: "^tests/",
+          verifyRed: { enabled: true, command: ["node", "tests/t.mjs"], escapeLine: "no-red:" },
+        },
+      },
+    };
+    const correr = (prueba, { produccion = true, mensaje = "feat: cambio", command = null, setup = null } = {}) => {
+      const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "harness-rojo-cebo-"));
+      const ceboDelCaso = structuredClone(cebo);
+      if (command) ceboDelCaso.xp.testFirst.verifyRed.command = command;
+      if (setup) ceboDelCaso.xp.testFirst.verifyRed.setupCommand = setup;
+      try {
+        const git = (...args) => spawnSync("git", args, { cwd: tmp, encoding: "utf8" });
+        const escribir = (rel, contenido) => {
+          fs.mkdirSync(path.dirname(path.join(tmp, rel)), { recursive: true });
+          fs.writeFileSync(path.join(tmp, rel), contenido);
+        };
+        git("init", "-q", "-b", "main");
+        git("config", "user.email", "selftest@example.com");
+        git("config", "user.name", "selftest");
+        escribir(".claude/harness.config.json", JSON.stringify(ceboDelCaso));
+        escribir("src/f.mjs", "export const v = 1;\n");
+        git("add", ".claude/harness.config.json", "src/f.mjs");
+        git("commit", "-q", "-m", "base");
+        git("switch", "-q", "-c", "feat/cebo");
+        if (produccion) escribir("src/f.mjs", "export const v = 2;\n");
+        escribir("tests/t.mjs", prueba);
+        git("add", "src/f.mjs", "tests/t.mjs");
+        git("commit", "-q", "-m", mensaje);
+        const r = spawnSync("node", [script, "--verify-red", "main"], { cwd: tmp, encoding: "utf8" });
+        const quedoWorktree = git("worktree", "list").stdout.trim().split("\n").length > 1;
+        return { status: r.status, out: `${r.stdout ?? ""}${r.stderr ?? ""}`, quedoWorktree };
+      } finally {
+        fs.rmSync(tmp, { recursive: true, force: true });
+      }
+    };
+    const describe = 'import { v } from "../src/f.mjs";\nprocess.exit(v === 2 ? 0 : 1);\n';
+    const espejo = "process.exit(0);\n";
+    const casos = [
+      ["la prueba que describe el cambio falla sobre la base: pasa", describe, {}, 0],
+      ["la prueba espejo pasa sobre la base: bloquea", espejo, {}, 1],
+      ["la prueba espejo con `no-red: <motivo>` declarado: pasa", espejo, { mensaje: "feat: cambio\n\nno-red: prueba de humo, el cambio es de rendimiento" }, 0],
+      ["sin cambio de producción no hay nada que medir: pasa", espejo, { produccion: false }, 0],
+      // Lo cazó el reviewer: un comando que ni arranca devolvía `status: null`, y `null !== 0`
+      // se leía como «la prueba falla sin el cambio». Un binario ausente certificaba la prueba.
+      ["un comando que no arranca no es «rojo»: bloquea", describe, { command: ["comando-que-no-existe-xyz"] }, 1],
+      // En un repo con dependencias el árbol de la base no las tiene (nada ignorado viaja en un
+      // worktree): `setupCommand` las prepara, y si falla, la medición no vale.
+      ["con `setupCommand` que falla, la medición no vale: bloquea", describe, { setup: ["node", "-e", "process.exit(3)"] }, 1],
+      ["con `setupCommand` que prepara el árbol, mide igual: pasa", describe, { setup: ["node", "-e", "0"] }, 0],
+    ];
+    for (const [nombre, prueba, opciones, esperado] of casos) {
+      const r = correr(prueba, opciones);
+      if (r.status === esperado && !r.quedoWorktree) ok(`ciclo (rojo sin el cambio): ${nombre}`);
+      else if (r.quedoWorktree) bad(`ciclo (rojo sin el cambio): ${nombre}`, "quedó un worktree registrado: la medición ensucia el repo");
+      else bad(`ciclo (rojo sin el cambio): ${nombre}`, `esperaba exit ${esperado}, salió ${r.status}: ${r.out.trim().slice(0, 240)}`);
+    }
+    // Encendido y sin nadie que lo corra es «instalado y muerto»: no va en el gate (es caro),
+    // así que el único lugar donde vive es el pipeline que el config declara en `runner`.
+    const rojo = config.xp?.testFirst?.verifyRed;
+    if (rojo?.enabled) corredorDeclarado("la verificación de rojo sin el cambio", rojo.runner, "--verify-red");
   }
 }
 
@@ -996,8 +1101,8 @@ if ((config.docs?.mentionSignals ?? []).length && (config.gate?.signals ?? []).l
     const cebo = path.join(dir, "puntero-selftest.md");
     try {
       fs.mkdirSync(dir, { recursive: true });
-      // linkcheck:ignora — las rutas son el CEBO: tienen que no existir para que el caso sirva.
-      fs.writeFileSync(cebo, "Ver [esto](../docs/no-existe-en-ningun-lado.md) y `docs/tampoco/`.\n"); // linkcheck:ignora
+      // linkcheck:ignore — las rutas son el CEBO: tienen que no existir para que el caso sirva.
+      fs.writeFileSync(cebo, "Ver [esto](../docs/no-existe-en-ningun-lado.md) y `docs/tampoco/`.\n"); // linkcheck:ignore
       const r = spawnSync("node", [abs("scripts/docs-linkcheck.mjs")], { cwd: REPO_ROOT, encoding: "utf8" });
       if (r.status === 0) ok(`link-check no revisa \`${derivado}/\` (git lo ignora)`);
       else bad("link-check ignora lo que git ignora", `salió rojo por un archivo gitignored: ${(r.stdout ?? "").trim().split("\n")[0]}`);
@@ -1102,6 +1207,58 @@ if (config.incidents?.file) {
   const r = lint(config.incidents.file, cebo);
   if (r.status !== 0 && r.out.includes("INCIDENTE")) ok("lint INCIDENTE exige `Mecanismo:` en cada gotcha");
   else bad("lint INCIDENTE exige `Mecanismo:`", `exit ${r.status}: ${r.out.trim() || "sin salida"}`);
+}
+
+// 4e-bis. COHERENCIA: una guía que recomienda lo que `bash.deny` veda es roja, y la misma guía
+//     con un comando inocente pasa. La muestra sale de la primera regla de `bash.deny` cuyo
+//     ejemplo tiene forma de comando en ESTE repo (`coherence.commandPattern`): el self-test
+//     no lleva una lista de comandos peligrosos cableada.
+{
+  const coh = config.coherence;
+  let reCmd = null;
+  try {
+    reCmd = coh?.commandPattern ? new RegExp(coh.commandPattern) : null;
+  } catch {
+    reCmd = null; // el regex inválido ya lo reporta la sección 2
+  }
+  const guia = (coh?.guides ?? []).map((g) => g.replace(/\/$/, "")).find((g) => g.endsWith(".md")) ??
+    (coh?.guides?.[0] ? `${coh.guides[0].replace(/\/$/, "")}/cebo.md` : null);
+  const vedado = (config.bash?.deny ?? [])
+    .map((r) => sampleFromPattern(r.pattern)?.trim())
+    .find((m) => m && reCmd?.test(m) && firstMatch(config.bash.deny, m));
+  if (!reCmd || !guia) {
+    skip("lint COHERENCIA", "este repo no declara `coherence.commandPattern` ni `coherence.guides`");
+  } else if (!vedado) {
+    skip("lint COHERENCIA", "ninguna regla de `bash.deny` se reduce a un comando con la forma de `commandPattern`; probalo a mano");
+  } else {
+    const valla = (cmd) => `# guía de prueba\n\n\`\`\`bash\n${cmd}\n\`\`\`\n`;
+    const r = lint(guia, valla(vedado));
+    if (r.status !== 0 && r.out.includes("COHERENCIA")) ok(`lint COHERENCIA: una guía que recomienda \`${vedado}\` es roja`);
+    else bad("lint COHERENCIA muerde en una guía", `exit ${r.status} con \`${vedado}\` en \`${guia}\`: ${r.out.trim() || "sin salida"}`);
+
+    const inocente = lint(guia, valla("git status --porcelain"));
+    if (inocente.status === 0) ok("lint COHERENCIA deja pasar una guía que recomienda `git status`");
+    else bad("lint COHERENCIA no muerde de más", `exit ${inocente.status}: ${inocente.out.trim()}`);
+
+    // El config: un `message` que ofrece el comando vedado como salida es rojo; la regla de
+    // `bash.deny` que CITA su propia ofensa en el motivo no lo es (si lo fuera, el config
+    // real ya estaría rojo, y esa es la otra mitad de la prueba).
+    const [cmd, ...args] = config.lint?.command ?? ["node", "scripts/repo-lint.mjs"];
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "harness-coherencia-"));
+    const cebo = path.join(tmp, "config.json");
+    fs.writeFileSync(
+      cebo,
+      JSON.stringify({ ...config, sdd: { ...config.sdd, routes: [{ route: "cebo", patterns: ["x"], message: `Salida: corré \`${vedado}\`.` }] } }),
+    );
+    const rc = spawnSync(cmd, [...args, "--config", cebo, config.lint?.fileFlag ?? "--file", ".claude/harness.config.json", "--stdin"], {
+      input: fs.readFileSync(cebo, "utf8"),
+      cwd: REPO_ROOT,
+      encoding: "utf8",
+    });
+    fs.rmSync(tmp, { recursive: true, force: true });
+    if (rc.status !== 0 && `${rc.stdout}${rc.stderr}`.includes("COHERENCIA")) ok("lint COHERENCIA: un `message` del config que ofrece un comando vedado es rojo");
+    else bad("lint COHERENCIA muerde en el config", `exit ${rc.status}: ${`${rc.stdout}${rc.stderr}`.trim() || "sin salida"}`);
+  }
 }
 
 // 4b-bis. PUREZA con la sintaxis de import DECLARADA: cada plantilla tiene que morder.
@@ -1238,7 +1395,7 @@ if (config.profiles?.dir) {
         return `${res.stdout ?? ""}${res.stderr ?? ""}`;
       };
 
-      const fantasma = conDir("plantillas/perfiles-que-no-existen"); // linkcheck:ignora — es el CEBO: tiene que NO existir
+      const fantasma = conDir("plantillas/perfiles-que-no-existen"); // linkcheck:ignore — es el CEBO: tiene que NO existir
       if (fantasma.includes("PERFIL")) ok("lint PERFIL caza un `profiles.dir` que apunta a la nada");
       else bad("lint PERFIL caza un `profiles.dir` inexistente", `sin hallazgo: ${fantasma.trim().slice(0, 160)}`);
 
@@ -1405,7 +1562,7 @@ for (const dir of [".claude/agents", ".claude/commands"]) {
 // 6b. El banco corre sus casos en procesos hijos, uno por stack. Eso mete tres maneras nuevas
 //     de reportar VERDE sin haber probado nada, y ninguna la ve otra señal:
 //       · un nombre de caso mal escrito → el hijo no prueba nada y el total sale vacío;
-//       · `--solo=` sin valor → se piden uno y corren todos (pedir un caso y probar otra cosa);
+//       · `--only=` sin valor → se piden uno y corren todos (pedir un caso y probar otra cosa);
 //       · un hijo que revienta → sus resultados no llegan y el padre los cuenta como cero.
 //     Los tres son la misma cicatriz que el gate ya tiene («ninguna señal llegó a correr»), y
 //     los tres se prueban acá: el caso más caro corre UN caso del banco (~3s), no los nueve.
@@ -1419,17 +1576,17 @@ for (const dir of [".claude/agents", ".claude/commands"]) {
   if (!fs.existsSync(banco)) {
     skip("el banco es rojo si no probó nada", "este repo no lleva `scripts/harness-bench.mjs` (es del arnés, no de los repos portados)");
   } else {
-    const inexistente = correrBanco("--solo=no-existe-este-caso");
+    const inexistente = correrBanco("--only=no-existe-este-caso");
     if (inexistente.status !== 0 && /no existe el caso/.test(inexistente.salida))
       ok("el banco es ROJO con un caso que no existe (no verde vacío)");
     else
       bad("el banco es ROJO con un caso que no existe", `exit ${inexistente.status}: un nombre mal escrito daría «BANCO VERDE — 0 comprobaciones»`);
 
-    const vacio = correrBanco("--solo=");
+    const vacio = correrBanco("--only=");
     if (vacio.status !== 0 && /sin valor/.test(vacio.salida))
-      ok("el banco es ROJO con `--solo=` sin valor (pedir uno y correr nueve es probar otra cosa)");
+      ok("el banco es ROJO con `--only=` sin valor (pedir uno y correr nueve es probar otra cosa)");
     else
-      bad("el banco es ROJO con `--solo=` sin valor", `exit ${vacio.status}: corrió los nueve casos diciendo que corría uno`);
+      bad("el banco es ROJO con `--only=` sin valor", `exit ${vacio.status}: corrió los nueve casos diciendo que corría uno`);
 
     // El nombre del caso sale de la lista que el propio banco imprime: cablear `dotnet` acá
     // metería un stack en el self-test (que tiene que ser agnóstico) y, peor, haría que
@@ -1445,8 +1602,8 @@ for (const dir of [".claude/agents", ".claude/commands"]) {
       // misma duplicación que se sacó del `quickstart`, más chica y en el camino crítico.
 
       // Lo que el banco NO puede producir solo: un hijo que no entrega. La costura
-      // `--hijo-mudo` existe sólo para esto y sólo puede poner el banco más rojo.
-      const mudo = correrBanco(`--casos=${primero}`, `--hijo-mudo=${primero}`);
+      // `--mute-child` existe sólo para esto y sólo puede poner el banco más rojo.
+      const mudo = correrBanco(`--cases=${primero}`, `--mute-child=${primero}`);
       if (mudo.status !== 0 && new RegExp(`el caso .${primero}. entregó resultados`).test(mudo.salida))
         ok("el banco es ROJO si un hijo no entrega resultados (y nombra el caso)");
       else
@@ -1499,14 +1656,14 @@ section("8. perfiles y ejemplos por stack");
         spawnSync("git", ["init", "-q", tmp], { encoding: "utf8" });
 
         // Dry-run: no escribe nada (P9). Lo que se verifica es justamente eso.
-        const seco = spawnSync("node", [init, tmp, "--perfil", perfil], { encoding: "utf8" });
+        const seco = spawnSync("node", [init, tmp, "--profile", perfil], { encoding: "utf8" });
         const escribio = fs.existsSync(path.join(tmp, ".claude"));
         if (seco.status !== 0 || escribio) {
           bad(`perfil \`${perfil}\` en dry-run`, escribio ? "el dry-run ESCRIBIÓ en el destino" : (seco.stderr || seco.stdout).trim().slice(0, 160));
           continue;
         }
 
-        const res = spawnSync("node", [init, tmp, "--perfil", perfil, "--apply"], { encoding: "utf8" });
+        const res = spawnSync("node", [init, tmp, "--profile", perfil, "--apply"], { encoding: "utf8" });
         if (res.status !== 0) {
           bad(`perfil \`${perfil}\` instalado`, (res.stderr || res.stdout).trim().slice(0, 160));
           continue;
@@ -2018,6 +2175,505 @@ section("9. costo del arnés (hooks-timing)");
   if (!declaraPresupuesto) skip("la medición de latencia es una señal del gate", "este repo no declara `observability`: el script no mide nada");
   else if (enGate) ok("la medición de latencia es una señal del gate (alguien la corre)");
   else bad("la medición de latencia está en el gate", "hay presupuesto declarado y ninguna señal lo corre: métrica que nadie mira");
+}
+
+section("10. controles fuera del gate (deriva y revisor)");
+
+// 10a. La deriva. Un repo git temporal con un cebo propio: un STATUS viejo es rojo, uno de hoy
+//      pasa, uno sin fecha es rojo, y de dos reglas de contenido sólo la que nunca casó en el
+//      historial sale como aviso. Corre con `cwd` en el repo temporal: nada toca este árbol (P7).
+{
+  const script = abs("scripts/drift-check.mjs");
+  if (!fs.existsSync(script)) {
+    skip("deriva", "el repo no trae scripts/drift-check.mjs");
+  } else {
+    const hoy = new Date().toISOString().slice(0, 10);
+    const correr = (status) => {
+      const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "harness-deriva-"));
+      try {
+        const git = (...args) => spawnSync("git", args, { cwd: tmp, encoding: "utf8" });
+        git("init", "-q");
+        git("config", "user.email", "selftest@example.com");
+        git("config", "user.name", "selftest");
+        fs.mkdirSync(path.join(tmp, ".claude"));
+        fs.writeFileSync(
+          path.join(tmp, ".claude/harness.config.json"),
+          JSON.stringify({
+            status: { file: "STATUS.md" },
+            patterns: [
+              { id: "CON_CICATRIZ", pattern: "\\bcicatriz_real\\b", appliesTo: "^src/" },
+              { id: "SIN_CICATRIZ", pattern: "\\bnunca_visto\\b", appliesTo: "^src/" },
+              // Lo cazó el reviewer: una línea quitada `-- comentario` (SQL, Lua, Haskell) sale en
+              // el diff como `--- comentario`, y el parser la tomaba por encabezado de archivo.
+              { id: "CICATRIZ_SQL", pattern: "\\bcicatriz_sql\\b", appliesTo: "^src/" },
+              // Sin `appliesTo` la regla aplica a todo, como en el lint: no puede desaparecer.
+              { id: "SIN_AMBITO", pattern: "\\bcicatriz_global\\b" },
+            ],
+            drift: { statusDatePattern: "Fecha:\\s*(\\d{4}-\\d{2}-\\d{2})", statusMaxAgeDays: 14, historyCommits: 50 },
+          }),
+        );
+        fs.mkdirSync(path.join(tmp, "src"));
+        fs.writeFileSync(path.join(tmp, "src/a.mjs"), "const cicatriz_real = 1;\n");
+        git("add", "src/a.mjs");
+        git("commit", "-q", "-m", "incidente");
+        fs.writeFileSync(path.join(tmp, "src/a.mjs"), "const arreglado = 1;\n");
+        git("add", "src/a.mjs");
+        git("commit", "-q", "-m", "arreglo");
+        fs.writeFileSync(path.join(tmp, "src/q.sql"), "-- viejo\nselect 1;\n");
+        fs.writeFileSync(path.join(tmp, "notas.txt"), "cicatriz_global\n");
+        git("add", "src/q.sql", "notas.txt");
+        git("commit", "-q", "-m", "sql");
+        fs.writeFileSync(path.join(tmp, "src/q.sql"), "select cicatriz_sql;\n");
+        git("add", "src/q.sql");
+        git("commit", "-q", "-m", "sql 2");
+        if (status !== null) fs.writeFileSync(path.join(tmp, "STATUS.md"), status);
+        const r = spawnSync("node", [script], { cwd: tmp, encoding: "utf8" });
+        return { status: r.status, out: `${r.stdout ?? ""}${r.stderr ?? ""}` };
+      } finally {
+        fs.rmSync(tmp, { recursive: true, force: true });
+      }
+    };
+    const vieja = correr("# STATUS\nFecha: 2020-01-01\n");
+    if (vieja.status === 1 && /DERIVA/.test(vieja.out)) ok("deriva: un STATUS con veredicto vencido es rojo");
+    else bad("deriva: un STATUS vencido es rojo", `exit ${vieja.status}: ${vieja.out.trim().slice(0, 200)}`);
+
+    const fresca = correr(`# STATUS\nFecha: ${hoy}\n`);
+    if (fresca.status === 0) ok("deriva: un STATUS de hoy pasa");
+    else bad("deriva: un STATUS de hoy pasa", `exit ${fresca.status}: ${fresca.out.trim().slice(0, 200)}`);
+
+    const sinFecha = correr("# STATUS\nverde\n");
+    if (sinFecha.status === 1) ok("deriva: un STATUS sin fecha es rojo (sin fecha, nadie sabe si sigue siendo cierto)");
+    else bad("deriva: un STATUS sin fecha es rojo", `exit ${sinFecha.status}`);
+
+    if (/SIN_CICATRIZ/.test(fresca.out) && !/CON_CICATRIZ|CICATRIZ_SQL|SIN_AMBITO/.test(fresca.out))
+      ok("deriva: sólo la regla que nunca casó en el historial sale como aviso (y un `-- comentario` quitado no confunde al parser)");
+    else bad("deriva: avisa la regla sin cicatriz y sólo ésa", fresca.out.trim().slice(0, 300));
+  }
+  if (config.drift) corredorDeclarado("el barrido de deriva", config.drift.runner, "scripts/drift-check.mjs");
+}
+
+// 10b. La prueba de vida del revisor, probada ella misma. No se puede llamar a un modelo
+//      desde el self-test (caro, no determinista, sin red en CI), así que se prueba la
+//      MÁQUINA del eval con revisores de mentira: uno que acierta pasa, uno que aprueba todo
+//      queda bajo el umbral, y un comando que no existe sale OMITIDO — nunca verde.
+{
+  const script = abs("scripts/reviewer-eval.mjs");
+  if (!fs.existsSync(script)) {
+    skip("prueba de vida del revisor", "el repo no trae scripts/reviewer-eval.mjs");
+  } else {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "harness-revisor-"));
+    try {
+      fs.writeFileSync(path.join(tmp, "malo.diff"), "+  process.exit(1);\n");
+      fs.writeFileSync(path.join(tmp, "bueno.diff"), "+  // un comentario\n");
+      const atento = path.join(tmp, "atento.cjs");
+      fs.writeFileSync(
+        atento,
+        'const t = require("fs").readFileSync(0, "utf8");\nconsole.log(t.includes("exit(1)") ? "VEREDICTO: rechazado — P5" : "VEREDICTO: aprobado");\n',
+      );
+      const complaciente = path.join(tmp, "complaciente.cjs");
+      fs.writeFileSync(complaciente, 'require("fs").readFileSync(0, "utf8");\nconsole.log("VEREDICTO: aprobado");\n');
+      // El incidente: un revisor que ejecuta cosas en el repo deja marcadores en la sesión del
+      // humano. Este revisor de mentira sólo contesta si encuentra su contexto en el directorio
+      // donde corre, y escribe algo ahí: el eval tiene que haberlo corrido en un árbol aparte,
+      // con el contexto copiado, y nada de lo que escribió puede aparecer en este repo.
+      fs.writeFileSync(path.join(tmp, "contexto.md"), "# la constitución de mentira\n");
+      const toque = "toque-del-revisor";
+      const aislado = path.join(tmp, "aislado.cjs");
+      fs.writeFileSync(
+        aislado,
+        `const fs = require("fs");\nconst t = fs.readFileSync(0, "utf8");\nif (!fs.existsSync("contexto.md")) process.exit(0);\nfs.writeFileSync(${JSON.stringify(toque)}, "x");\n` +
+          'console.log(t.includes("exit(1)") ? "VEREDICTO: rechazado — P5" : "VEREDICTO: aprobado");\n',
+      );
+      const cebo = (comando) => {
+        const ruta = path.join(tmp, `config-${path.basename(comando[comando.length - 1])}.json`);
+        fs.writeFileSync(
+          ruta,
+          JSON.stringify({
+            reviewerEval: {
+              context: ["contexto.md"],
+              command: comando,
+              minScore: 1,
+              cases: [
+                { name: "malo", diff: "malo.diff", expect: "rechazado", mustCite: "P5" },
+                { name: "bueno", diff: "bueno.diff", expect: "aprobado" },
+              ],
+            },
+          }),
+        );
+        const r = spawnSync("node", [script, "--config", ruta], { cwd: REPO_ROOT, encoding: "utf8" });
+        return { status: r.status, out: `${r.stdout ?? ""}${r.stderr ?? ""}` };
+      };
+      const bien = cebo(["node", atento]);
+      if (bien.status === 0 && /REVISOR VERDE/.test(bien.out)) ok("revisor: uno que distingue el diff malo del inocente pasa el eval");
+      else bad("revisor: el eval deja pasar a un revisor que acierta", `exit ${bien.status}: ${bien.out.trim().slice(0, 200)}`);
+
+      const mal = cebo(["node", complaciente]);
+      if (mal.status === 1 && /REVISOR EN ROJO/.test(mal.out)) ok("revisor: uno que aprueba todo queda bajo el umbral (rojo)");
+      else bad("revisor: el eval caza a un revisor complaciente", `exit ${mal.status}: ${mal.out.trim().slice(0, 200)}`);
+
+      const encerrado = cebo(["node", aislado]);
+      const seFiltro = [REPO_ROOT, tmp].filter((d) => fs.existsSync(path.join(d, toque)));
+      if (encerrado.status === 0 && !seFiltro.length)
+        ok("revisor: corre en un árbol aparte con su contexto copiado, y lo que escribe no llega al repo (P7)");
+      else bad("revisor: el eval aísla al revisor", `exit ${encerrado.status}; escribió en: ${seFiltro.join(", ") || "ningún lado"} · ${encerrado.out.trim().slice(0, 160)}`);
+      for (const d of seFiltro) fs.rmSync(path.join(d, toque), { force: true });
+
+      // Lo cazó el reviewer: una CLI que arranca pero falla (sin clave, sin cuota) no contestó
+      // nada, y eso se contaba como un revisor que se equivoca. Roto no es lo mismo que malo.
+      const roto = path.join(tmp, "roto.cjs");
+      fs.writeFileSync(roto, 'require("fs").readFileSync(0, "utf8");\nprocess.stderr.write("401 sin clave\\n");\nprocess.exit(1);\n');
+      const infra = cebo(["node", roto]);
+      if (infra.status === 1 && /EVAL ROTO/.test(infra.out) && !/REVISOR EN ROJO/.test(infra.out))
+        ok("revisor: una CLI que falla sin contestar es EVAL ROTO, no un revisor que se equivoca");
+      else bad("revisor: el eval separa infraestructura de juicio", `exit ${infra.status}: ${infra.out.trim().slice(0, 200)}`);
+
+      const ausente = cebo(["comando-que-no-existe-en-ninguna-maquina"]);
+      if (ausente.status === 0 && /OMITIDA/.test(ausente.out)) ok("revisor: sin la CLI instalada el eval sale OMITIDO, no verde");
+      else bad("revisor: sin CLI el eval se omite", `exit ${ausente.status}: ${ausente.out.trim().slice(0, 200)}`);
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+
+    // Los casos reales tienen que existir: un caso que apunta a la nada es un eval que nunca corre.
+    for (const c of config.reviewerEval?.cases ?? []) {
+      if (fs.existsSync(abs(c.diff))) ok(`revisor: el caso «${c.name}» existe`);
+      else bad(`revisor: el caso «${c.name}» existe`, `\`${c.diff}\` no existe`);
+    }
+    if (config.reviewerEval) corredorDeclarado("la prueba de vida del revisor", config.reviewerEval.runner, "scripts/reviewer-eval.mjs");
+  }
+}
+
+// 10c. El mapa del arnés. Con el config real: completo, y cada hook declarado aparece en él.
+//      Con un cebo de settings que agrega un evento que la taxonomía no conoce: rojo, porque
+//      un control que nadie ubicó en el mapa es uno del que nadie sabe qué cubre.
+{
+  const script = abs("scripts/harness-map.mjs");
+  if (!fs.existsSync(script) || !config.taxonomy) {
+    skip("mapa del arnés", "el repo no trae scripts/harness-map.mjs o no declara `taxonomy`");
+  } else {
+    const real = spawnSync("node", [script], { cwd: REPO_ROOT, encoding: "utf8" });
+    const faltan = [...hookFiles].filter((h) => !(real.stdout ?? "").includes(h));
+    if (real.status === 0 && !faltan.length) ok("mapa del arnés: completo, y cada hook de settings.json tiene dirección, tipo y etapa");
+    else bad("mapa del arnés completo", `exit ${real.status}; sin ubicar: ${faltan.join(", ") || `${real.stderr}`.trim().slice(0, 200)}`);
+
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "harness-mapa-"));
+    try {
+      const evento = "EventoQueNadieClasifico";
+      const cebo = path.join(tmp, "settings.json");
+      const comandoCebo = { type: "command", command: "node .claude/hooks/cebo.mjs" }; // linkcheck:ignore — ruta ficticia del cebo
+      fs.writeFileSync(cebo, JSON.stringify({ hooks: { ...settings.hooks, [evento]: [{ hooks: [comandoCebo] }] } }));
+      const r = spawnSync("node", [script, "--settings", cebo], { cwd: REPO_ROOT, encoding: "utf8" });
+      if (r.status === 1 && (r.stderr ?? "").includes(evento)) ok("mapa del arnés: un hook en un evento sin clasificar es rojo");
+      else bad("mapa del arnés caza lo no clasificado", `exit ${r.status}: ${`${r.stdout}${r.stderr}`.trim().slice(0, 200)}`);
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  }
+}
+
+// ── 11. El panel se genera, y sus alarmas dicen la verdad ───────────────────
+//
+// El panel no es un freno: es el sensor que se mira. Pero un sensor que no se genera, o que pinta
+// verde sobre un arnés con piezas muertas, es peor que no tenerlo — se le cree. Todo corre en
+// directorios temporales FUERA del repo (P7) y la memoria se prueba sin la capa en vivo.
+section("11. el panel del arnés");
+{
+  const dirPanel = abs("scripts/panel");
+  if (!fs.existsSync(path.join(dirPanel, "generar.mjs"))) {
+    skip("panel", "el repo no trae scripts/panel/");
+  } else {
+    // 11a. Parsean. La sección 1b sólo mira el primer nivel de scripts/.
+    let rotos = 0;
+    const modulos = fs.readdirSync(dirPanel).filter((f) => f.endsWith(".mjs"));
+    for (const f of modulos) {
+      const r = spawnSync("node", ["--check", path.join(dirPanel, f)], { encoding: "utf8" });
+      if (r.status !== 0) {
+        rotos += 1;
+        bad(`scripts/panel/${f}`, r.stderr.trim().split("\n").slice(0, 3).join(" · "));
+      }
+    }
+    if (!rotos) ok(`${modulos.length} módulo(s) del panel parsean`);
+
+    const url = (f) => pathToFileURL(path.join(dirPanel, f)).href;
+    const { generarPanel, resolverSalida } = await import(url("generar.mjs"));
+    const { construirModelo, leerCitas } = await import(url("leer-fuentes.mjs"));
+    const { construirArnes } = await import(url("leer-arnes.mjs"));
+    const { leerGestor } = await import(url("leer-en-vivo.mjs"));
+    const temporal = (prefijo) => fs.mkdtempSync(path.join(os.tmpdir(), prefijo));
+    const escribir = (raiz, rel, texto) => {
+      fs.mkdirSync(path.dirname(path.join(raiz, rel)), { recursive: true });
+      fs.writeFileSync(path.join(raiz, rel), texto);
+    };
+
+    // 11b. La memoria es determinista: dos corridas sin la capa en vivo, los mismos bytes. Es lo
+    //      que hace que la versión del panel identifique lo que se está mirando.
+    const t1 = temporal("harness-panel-a-");
+    const t2 = temporal("harness-panel-b-");
+    try {
+      const uno = await generarPanel(REPO_ROOT, { salida: t1, enVivo: false, config, settings });
+      await generarPanel(REPO_ROOT, { salida: t2, enVivo: false, config, settings });
+      const a = fs.readFileSync(path.join(t1, "index.html"), "utf8");
+      const b = fs.readFileSync(path.join(t2, "index.html"), "utf8");
+      if (a === b && a.includes("Panel del arnés") && fs.existsSync(path.join(t1, "modelo.json"))) ok(`panel: la memoria sale byte a byte igual en dos corridas (versión ${uno.modelo.version})`);
+      else bad("panel determinista", a === b ? "falta index.html o modelo.json" : "dos corridas sin capa en vivo dieron HTML distinto: algo con reloj se coló en la memoria");
+
+      // 11b-bis. `--verificar` es el modo señal: arma y renderiza sin escribir nada. Como señal
+      //      del gate no puede pisar el panel que el gate regenera al final (lo destapó el
+      //      portado: durante la corrida el panel quedaba en «sólo memoria»).
+      const t3 = temporal("harness-panel-verificar-");
+      try {
+        const v = await generarPanel(REPO_ROOT, { salida: t3, enVivo: false, config, settings, escribir: false });
+        if (!fs.readdirSync(t3).length && v.bytes > 1000) ok("panel: --verificar renderiza la página y no escribe nada");
+        else bad("panel --verificar no escribe", `escribió ${fs.readdirSync(t3).join(", ")} · ${v.bytes} bytes`);
+      } finally {
+        fs.rmSync(t3, { recursive: true, force: true });
+      }
+
+      // 11c. P3: sobre el repo real no muerde de más. Una alarma acá es un falso rojo que enseña a
+      //      no mirar el panel — o un freno de verdad muerto, y entonces hay que arreglarlo.
+      const alarmas = [...uno.modelo.arnes.alarmas.map((x) => x.que), ...uno.modelo.advertencias.map((x) => x.que)];
+      if (!alarmas.length) ok("panel: el arnés de este repo sale sin alarmas");
+      else bad("panel sin alarmas sobre el repo real", alarmas.slice(0, 3).join(" · "));
+    } catch (e) {
+      bad("panel genera sobre este repo", e.message);
+    } finally {
+      fs.rmSync(t1, { recursive: true, force: true });
+      fs.rmSync(t2, { recursive: true, force: true });
+    }
+
+    // 11d. P2: las advertencias de la memoria muerden. Un incidente sin mecanismo, un mecanismo que
+    //      apunta a la nada y un principio BLOCKING sin comando tienen que salir con nombre.
+    const cebo = temporal("harness-panel-cebo-");
+    try {
+      escribir(cebo, "STATUS.md", "# STATUS\n\n- **Veredicto:** ROJO\n");
+      escribir(cebo, "docs/gotchas.md", "### GOTCHA: sin mecanismo\n\nSíntoma: a\nCausa: b\nRegla: c\n\n### GOTCHA: puntero muerto\n\nSíntoma: a\nCausa: b\nRegla: c\nMecanismo: `scripts/nada.mjs`\n"); // linkcheck:ignore — cebo
+      escribir(cebo, "CONSTITUTION.md", "# C\n\n## P1 — Algo · BLOCKING\n\nSin mecanismo.\n");
+      const cfgCebo = { status: { file: "STATUS.md" }, incidents: { file: "docs/gotchas.md", requiredLines: ["Síntoma:", "Causa:", "Regla:", "Mecanismo:"] }, docs: { proseRoots: ["docs", "scripts"] } };
+      const m = construirModelo(cebo, { config: cfgCebo, settings: {} });
+      const todo = m.advertencias.map((x) => x.que).join("\n");
+      const esperadas = [
+        ["un incidente sin Mecanismo", /gotcha 1 .*sin Mecanismo/],
+        ["un mecanismo que apunta a la nada", /scripts\/nada\.mjs/],
+        ["un principio BLOCKING sin mecanismo", /P1 .*BLOCKING/],
+      ];
+      const faltan = esperadas.filter(([, re]) => !re.test(todo)).map(([n]) => n);
+      // La guía ausente se dice en «Fuentes», no como alarma: ningún comando la pone en rojo.
+      if (!m.faltantes.includes("CLAUDE.md") || /CLAUDE\.md/.test(todo)) faltan.push("la guía ausente como faltante y no como alarma");
+      if (!faltan.length && m.estado.veredicto?.tono === "rojo") ok(`panel: la memoria avisa ${esperadas.map(([n]) => n).join(", ")}`);
+      else bad("panel: advertencias de la memoria", `no avisó: ${faltan.join(", ") || "el veredicto ROJO"} · dijo: ${todo.slice(0, 200)}`);
+
+      // 11e. P2: las alarmas de la salud muerden. Cada una es la versión visible de algo que ya
+      //      pone rojo a otro comando; si el panel no la ve, pinta verde un arnés muerto.
+      escribir(cebo, "scripts/freno.mjs", "export {};\n"); // linkcheck:ignore — cebo
+      const salud = construirArnes(cebo, {
+        config: {
+          install: { activators: { "scripts/freno.mjs": "claveQueNoEsta" } }, // linkcheck:ignore — cebo
+          drift: { runner: ".github/workflows/nadie.yml" }, // linkcheck:ignore — cebo
+          reviewerEval: { command: ["revisor"] },
+          gate: { signals: [{ name: "sin porqué", command: ["node", "-v"] }] },
+        },
+        settings: { hooks: { Stop: [{ hooks: [{ type: "command", command: "node .claude/hooks/no-existe.mjs" }] }] } }, // linkcheck:ignore — cebo
+      });
+      const dicho = salud.alarmas.map((x) => x.que).join("\n");
+      const muerden = [
+        ["un freno instalado sin su clave", /instalado y .*claveQueNoEsta|claveQueNoEsta/],
+        ["un hook declarado que no existe", /no-existe\.mjs/],
+        ["un control fuera del gate sin runner", /nadie\.yml/],
+        ["una señal sin why", /sin porqué/],
+        ["un control encendido sin runner", /reviewerEval.* no declara .runner/],
+      ];
+      const mudas = muerden.filter(([, re]) => !re.test(dicho)).map(([n]) => n);
+      if (!mudas.length) ok(`panel: la salud alarma ${muerden.map(([n]) => n).join(", ")}`);
+      else bad("panel: alarmas de la salud", `no alarmó: ${mudas.join(", ")}`);
+    } catch (e) {
+      bad("panel: cebos", e.message);
+    } finally {
+      fs.rmSync(cebo, { recursive: true, force: true });
+    }
+
+    // 11d-bis. Un config de OTRA versión del arnés no tumba el panel. Lo destapó el portado a un
+    //      repo real: su `purity` era un objeto (formato viejo) y el panel reventaba en vez de
+    //      leerlo como la única regla que es. Formas inesperadas se toleran; una regla, se lee.
+    {
+      const viejo = temporal("harness-panel-viejo-");
+      try {
+        const cfgViejo = {
+          purity: { dir: "src/lib", forbiddenImports: ["react"], except: ["src/lib/x.ts"] }, // linkcheck:ignore — cebo
+          reuse: { pattern: "fetch\\(", see: "src/api.ts" }, // linkcheck:ignore — cebo
+          gate: { signals: "no-es-una-lista" },
+          install: { activators: ["no-es-un-mapa"] },
+          observability: { budgets: null },
+        };
+        const m = construirModelo(viejo, { config: cfgViejo, settings: { hooks: { Stop: "tampoco" } } });
+        if (m.reglas.frenos.purity.length === 1 && m.reglas.frenos.reuse.length === 1 && m.arnes) ok("panel: un config de otra versión (reglas sueltas en vez de listas) se lee sin reventar");
+        else bad("panel tolera un config de otra versión", `purity ${m.reglas.frenos.purity.length} · reuse ${m.reglas.frenos.reuse.length}`);
+      } catch (e) {
+        bad("panel tolera un config de otra versión", e.message);
+      } finally {
+        fs.rmSync(viejo, { recursive: true, force: true });
+      }
+    }
+
+    // 11e-bis. Los defaults de STATUS son los de la plantilla que el instalador deja: copiados a
+    //      mano en el código, se desincronizan en silencio el día que cambie un título.
+    {
+      const plantilla = abs("plantillas/STATUS.md");
+      if (!fs.existsSync(plantilla)) skip("panel lee la plantilla de STATUS", "no hay plantillas/STATUS.md");
+      else {
+        const { leerStatus } = await import(url("leer-fuentes.mjs"));
+        const e = leerStatus(fs.readFileSync(plantilla, "utf8"));
+        if (e.veredicto && e.fechaGate && e.senales.length) ok("panel: con sus defaults lee la plantilla de STATUS (veredicto, fecha y tabla de señales)");
+        else bad("panel lee la plantilla de STATUS", `veredicto ${Boolean(e.veredicto)} · fecha ${e.fechaGate} · señales ${e.senales.length}: los defaults de \`panel.status\` no casan con plantillas/STATUS.md`);
+      }
+    }
+
+    // 11f. «Siempre se genera»: el gate regenera el panel y escribe su registro en CADA corrida,
+    //      también la roja — que es cuando más sirve mirarlo. Un repo git temporal con una señal
+    //      verde y una roja, y el gate y el panel copiados tal cual.
+    const repo = temporal("harness-panel-gate-");
+    try {
+      for (const rel of ["scripts/gate.mjs", ".claude/hooks/harness.mjs", "scripts/harness-map.mjs", ...modulos.map((f) => `scripts/panel/${f}`)]) {
+        escribir(repo, rel, fs.readFileSync(abs(rel), "utf8"));
+      }
+      escribir(
+        repo,
+        ".claude/harness.config.json",
+        JSON.stringify({
+          gate: {
+            signals: [
+              { name: "pasa", command: ["node", "-e", "process.exit(0)"], why: "cebo" },
+              { name: "falla", command: ["node", "-e", "process.exit(3)"], why: "cebo" },
+            ],
+          },
+          panel: { tokens: false },
+        }),
+      );
+      spawnSync("git", ["init", "-q"], { cwd: repo });
+      const r = spawnSync("node", ["scripts/gate.mjs"], { cwd: repo, encoding: "utf8" });
+      let registro = null;
+      try {
+        registro = JSON.parse(fs.readFileSync(path.join(repo, ".git/harness-gate.json"), "utf8"));
+      } catch {
+        registro = null;
+      }
+      const html = path.join(repo, ".git/harness-panel/index.html");
+      const bien = r.status === 1 && registro?.veredicto === "rojo" && registro.senales?.pasa?.estado === "verde" && registro.senales?.falla?.estado === "rojo" && fs.existsSync(html);
+      if (bien) ok("panel: el gate rojo igual escribe su registro por señal y regenera el panel");
+      else bad("panel: el gate lo regenera siempre", `exit ${r.status}; registro ${JSON.stringify(registro?.senales ?? null).slice(0, 160)}; panel ${fs.existsSync(html) ? "sí" : "no"} · ${`${r.stdout}`.trim().split("\n").slice(-3).join(" · ")}`);
+
+      // 11f-bis. P5: el panel NO puede decidir el veredicto. Lo cazó el reviewer: con el panel en el
+      //      mismo proceso, un `process.exit(0)` adentro volvía VERDE a un gate rojo —y borraba el
+      //      marcador—; y un panel colgado colgaba al gate. Dos sabotajes, el mismo gate rojo.
+      const marcador = path.join(repo, ".git/gate-dirty");
+      const cfgSabotaje = JSON.parse(fs.readFileSync(path.join(repo, ".claude/harness.config.json"), "utf8"));
+      cfgSabotaje.gate.marker = ".git/gate-dirty";
+      cfgSabotaje.panel.timeoutMs = 1500;
+      escribir(repo, ".claude/harness.config.json", JSON.stringify(cfgSabotaje));
+      const sabotajes = [
+        ["un panel que sale con exit 0", "scripts/panel/plantilla.mjs", "export const renderizarHtml = () => ''; process.exit(0);\n"],
+        // Se cuelga DE VERDAD: exporta lo que el gate espera y nunca termina. Sin exports, el
+        // import fallaría y el caso pasaría por el motivo equivocado.
+        ["un panel colgado", "scripts/panel/generar.mjs", "export const resumen = () => ({ lineas: [] });\nexport async function generarPanel() { setInterval(() => {}, 1000); return new Promise(() => {}); }\nif (process.argv[1]?.endsWith('generar.mjs')) await generarPanel();\n"],
+      ];
+      for (const [nombre, rel, codigo] of sabotajes) {
+        escribir(repo, rel, codigo);
+        fs.writeFileSync(marcador, "sucio");
+        const t0 = Date.now();
+        const s = spawnSync("node", ["scripts/gate.mjs"], { cwd: repo, encoding: "utf8", timeout: 30000 });
+        const ms = Date.now() - t0;
+        if (s.status === 1 && fs.existsSync(marcador) && ms < 20000) ok(`panel: ${nombre} no cambia el veredicto de un gate rojo (exit 1, marcador intacto, ${ms} ms)`);
+        else bad(`panel: ${nombre} no decide el gate`, `exit ${s.status}${s.error ? ` (${s.error.code})` : ""}; marcador ${fs.existsSync(marcador) ? "intacto" : "BORRADO"}; ${ms} ms`);
+        escribir(repo, rel, fs.readFileSync(abs(rel), "utf8"));
+      }
+    } catch (e) {
+      bad("panel: el gate lo regenera siempre", e.message);
+    } finally {
+      fs.rmSync(repo, { recursive: true, force: true });
+    }
+
+    // 11g. En un worktree `.git` es un archivo: el destino por defecto se resuelve a su gitdir, o
+    //      el panel desaparece justo donde trabajan los agentes en paralelo.
+    const wt = temporal("harness-panel-wt-");
+    try {
+      fs.writeFileSync(path.join(wt, ".git"), "gitdir: ../gitdir-real\n");
+      const destino = resolverSalida(wt, ".git/harness-panel");
+      if (destino === path.join(path.resolve(wt, "../gitdir-real"), "harness-panel")) ok("panel: en un worktree escribe en el gitdir real");
+      else bad("panel en worktree", `resolvió ${destino}`);
+    } finally {
+      fs.rmSync(wt, { recursive: true, force: true });
+    }
+
+    // 11i. El burn-down sale de los DATOS y de nada más. Un repo git temporal con commits de fecha
+    //      fija: la serie tiene que ser exacta, un merge no puede contar dos veces lo que trae, lo
+    //      tildado sin commitear se ve aparte, y dos corridas dan la misma versión (sin reloj).
+    //      Sin fuente del plan: OMITIDO con motivo, nunca «0 %».
+    {
+      const { serieDesdeEventos } = await import(url("leer-plan.mjs"));
+      const planRepo = temporal("harness-panel-plan-");
+      try {
+        const git = (args, fecha) =>
+          spawnSync("git", args, { cwd: planRepo, encoding: "utf8", env: { ...process.env, ...(fecha ? { GIT_AUTHOR_DATE: `${fecha}T12:00:00Z`, GIT_COMMITTER_DATE: `${fecha}T12:00:00Z` } : {}) } });
+        const tareas = "specs/001-x/tasks.md"; // linkcheck:ignore — archivo del repo temporal
+        const commit = (contenido, fecha) => {
+          escribir(planRepo, tareas, contenido);
+          git(["add", tareas]);
+          git(["commit", "-q", "-m", fecha], fecha);
+        };
+        git(["init", "-q", "-b", "main"]);
+        git(["config", "user.email", "selftest@example.com"]);
+        git(["config", "user.name", "selftest"]);
+        commit("- [ ] a\n- [ ] b\n- [ ] c\n", "2026-09-01");
+        commit("- [x] a\n- [ ] b\n- [ ] c\n- [ ] d\n", "2026-09-03");
+        git(["checkout", "-q", "-b", "feat/e"]);
+        commit("- [x] a\n- [ ] b\n- [ ] c\n- [ ] d\n- [ ] e\n", "2026-09-04");
+        git(["checkout", "-q", "main"]);
+        git(["merge", "-q", "--no-ff", "-m", "merge", "feat/e"], "2026-09-05");
+        escribir(planRepo, tareas, "- [x] a\n- [x] b\n- [ ] c\n- [ ] d\n- [ ] e\n");
+        const cfgPlan = { tracker: { artifactsIn: "repo" }, workflow: { baseBranch: "main" } };
+        const uno = construirModelo(planRepo, { config: cfgPlan, settings: {} });
+        const dos = construirModelo(planRepo, { config: cfgPlan, settings: {} });
+        const serie = uno.plan.serie.map((q) => `${q.fecha ?? "árbol"}:${q.hechas}/${q.total}`).join(" ");
+        const esperada = "2026-09-01:0/3 2026-09-03:1/4 2026-09-05:1/5 árbol:2/5";
+        if (serie === esperada && uno.version === dos.version && uno.plan.resumen.alcanceInicial === 3) ok("panel: el burn-down del repo sale exacto de la historia (merge sin doble conteo, lo no commiteado aparte, sin reloj)");
+        else bad("panel: burn-down del repo", `serie «${serie}», esperaba «${esperada}»; versiones ${uno.version} / ${dos.version}`);
+      } catch (e) {
+        bad("panel: burn-down del repo", e.message);
+      } finally {
+        fs.rmSync(planRepo, { recursive: true, force: true });
+      }
+
+      const { serie: ev, sinFecha } = serieDesdeEventos([
+        { createdAt: "2026-09-01T10:00:00Z", closedAt: "2026-09-04T09:00:00Z" },
+        { createdAt: "2026-09-01", closedAt: null },
+        { createdAt: "2026-09-02" },
+        { title: "sin fecha" },
+        { createdAt: "2026-09-01", inPlan: false },
+      ]);
+      const serieEv = ev.map((q) => `${q.fecha}:${q.hechas}/${q.total}`).join(" ");
+      if (serieEv === "2026-09-01:0/2 2026-09-02:0/3 2026-09-04:1/3" && sinFecha === 1) ok("panel: el burn-down del gestor sale de createdAt/closedAt, lo que no trae fecha no se inventa y lo citado fuera del plan no es alcance");
+      else bad("panel: burn-down del gestor", `serie «${serieEv}» · sin fecha ${sinFecha}`);
+
+      const vacio = temporal("harness-panel-sinplan-");
+      try {
+        const sinComando = construirModelo(vacio, { config: { tracker: { artifactsIn: "tracker" } }, settings: {} }).plan;
+        const sinFuente = construirModelo(vacio, { config: {}, settings: {} }).plan;
+        if (sinComando.estado === "omitido" && !sinComando.resumen && /panel\.tracker\.command/.test(sinComando.motivo) && sinFuente.estado === "omitido" && /artifactsIn/.test(sinFuente.motivo)) ok("panel: sin fuente del plan el burn-down sale OMITIDO con su motivo, nunca 0 %");
+        else bad("panel: plan omitido", `${JSON.stringify(sinComando).slice(0, 120)} · ${JSON.stringify(sinFuente).slice(0, 120)}`);
+      } finally {
+        fs.rmSync(vacio, { recursive: true, force: true });
+      }
+    }
+
+    // 11h. El contrato con el gestor, sin ninguna forja: las citas salen de `tracker.issuePattern`
+    //      y un comando que falla es «sin dato» con su error, nunca una lista vacía.
+    const patron = config.tracker?.issuePattern ?? "(^|[^A-Za-z0-9_])#[0-9]+";
+    const citas = leerCitas({ "STATUS.md": "bloqueado por #12 y por #7\n```\n#99 en código no cuenta\n```\n" }, [patron]);
+    const spec = { command: ["gestor"], timeoutMs: 1000, closedStates: ["closed"] };
+    const leido = leerGestor(REPO_ROOT, spec, ["#7"], () => ({ status: 0, stdout: JSON.stringify({ items: [{ id: "#7", title: "x", state: "closed" }] }), stderr: "" }));
+    const caido = leerGestor(REPO_ROOT, spec, [], () => ({ status: 1, stdout: "", stderr: "sin credenciales" }));
+    if (citas.map((c) => c.id).join(",") === "#7,#12" && leido.ok && leido.items[0].cerrado && !caido.ok && /sin credenciales/.test(caido.error)) ok("panel: las citas salen del patrón del gestor y un gestor caído es «sin dato» con su error");
+    else bad("panel: contrato con el gestor", `citas ${citas.map((c) => c.id).join(",")} · leído ${JSON.stringify(leido).slice(0, 120)} · caído ${JSON.stringify(caido).slice(0, 120)}`);
+  }
 }
 
 // ── Veredicto ────────────────────────────────────────────────────────────────

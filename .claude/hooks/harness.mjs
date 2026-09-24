@@ -306,3 +306,23 @@ export function parseHookCommand(comando) {
   // Sin `node`: un ejecutable. De un binario externo sólo se puede afirmar que EXISTE.
   return { file: limpio.split(/\s+/)[0], tipo: "ejecutable", etiqueta: limpio.split(/\s+/)[0] };
 }
+
+/**
+ * Windows no ejecuta `npm`, `npx` ni `gradlew` directamente: son `.cmd`/`.bat`, y Node los
+ * rechaza con EINVAL salvo que se los busque con su extensión real. Fuera de Windows esto
+ * devuelve el nombre tal cual y no cambia nada. Vive acá y no en el gate porque ya son dos los
+ * que lanzan comandos del config —el gate y el panel—, y la alternativa (`shell: true`) es
+ * interpolar datos del config en una línea de comandos.
+ */
+export function resolverEjecutable(cmd) {
+  if (process.platform !== "win32" || path.extname(cmd)) return cmd;
+  const exts = (process.env.PATHEXT ?? ".COM;.EXE;.BAT;.CMD").split(";").filter(Boolean);
+  const dirs = [REPO_ROOT, ...(process.env.PATH ?? "").split(path.delimiter).filter(Boolean)];
+  for (const dir of dirs) {
+    for (const ext of exts) {
+      const cand = path.join(dir, cmd + ext);
+      if (fs.existsSync(cand)) return cand;
+    }
+  }
+  return cmd; // que falle con su propio mensaje: adivinar acá sería peor
+}

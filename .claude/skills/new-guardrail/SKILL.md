@@ -1,5 +1,5 @@
 ---
-name: nuevo-freno
+name: new-guardrail
 description: Convierte una regla escrita en prosa en un freno ejecutable de este arnés (regla de config, hook, señal del gate o test), con su caso de self-test y validado por el gate. Úsalo cuando alguien diga "hay que acordarse de…", "la convención es…" o "no volvamos a hacer X".
 ---
 

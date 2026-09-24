@@ -67,7 +67,7 @@ del equipo. Un repo que estrena arnés arranca con cuatro frenos y crece de a un
 ```bash
 # Desde el repo del arnés, con su instalador (dry-run: muestra qué copiaría).
 for r in ~/code/servicio-a ~/code/servicio-b ~/code/web; do
-  node scripts/harness-init.mjs "$r"   # linkcheck:ignora — ruta del repo del ARNÉS
+  node scripts/harness-init.mjs "$r"   # linkcheck:ignore — ruta del repo del ARNÉS
 done
 ```
 

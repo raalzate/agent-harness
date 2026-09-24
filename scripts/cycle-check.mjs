@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * ciclo-check — el ciclo de desarrollo del equipo, hecho comando.
+ * cycle-check — el ciclo de desarrollo del equipo, hecho comando.
  *
  * Un modelo de ramas (trunk-based, GitHub flow, git flow) y las prácticas de XP viven
  * normalmente en la cabeza del equipo y en un wiki: se explican una vez, se cumplen dos
@@ -13,16 +13,18 @@
  * estar roto.
  *
  * Uso:
- *   node scripts/ciclo-check.mjs --commit <archivo-de-mensaje>   # prácticas XP (commit-msg)
- *   node scripts/ciclo-check.mjs --push                          # modelo de ramas (pre-push, refs por stdin)
- *   node scripts/ciclo-check.mjs --branch <nombre>               # una rama suelta, sin git
- *   node scripts/ciclo-check.mjs --rules                         # qué está activo y de dónde sale
+ *   node scripts/cycle-check.mjs --commit <archivo-de-mensaje>   # prácticas XP (commit-msg)
+ *   node scripts/cycle-check.mjs --push                          # modelo de ramas (pre-push, refs por stdin)
+ *   node scripts/cycle-check.mjs --branch <nombre>               # una rama suelta, sin git
+ *   node scripts/cycle-check.mjs --verify-red [<base>]           # la prueba nueva falla sin el cambio (CI, en el PR)
+ *   node scripts/cycle-check.mjs --rules                         # qué está activo y de dónde sale
  *   [--config <ruta>]                                            # para los cebos del self-test (P7)
  *
  * Exit: 0 = seguir · 1 = bloquear (stderr es lo que se lee). Lo usan hooks de git, que
  * es lo que git entiende; el contrato 0/2 de los hooks del agente vive en harness.mjs.
  */
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 
@@ -146,7 +148,7 @@ function revisarTestPrimero(msg, staged) {
   if (!codigo.length) return;
   if (staged.some((f) => reTest.test(f))) return;
 
-  const fuga = regla.escapeLine ?? "sin-test:";
+  const fuga = regla.escapeLine ?? "no-test:";
   if (declarada(msg, fuga)) return;
 
   bloquear("ciclo (XP · test primero): este commit cambia comportamiento y no trae ninguna prueba.", [
@@ -166,7 +168,7 @@ function revisarTestPrimero(msg, staged) {
 function revisarLote(msg, staged, numstat) {
   const regla = xp.smallBatch;
   if (!regla?.enabled) return;
-  const fuga = regla.escapeLine ?? "lote-grande:";
+  const fuga = regla.escapeLine ?? "big-batch:";
   if (declarada(msg, fuga)) return;
 
   const ignoradas = (regla.ignorePattern && compila(regla.ignorePattern)) || null;
@@ -206,7 +208,7 @@ function revisarRefactor(msg, staged) {
   const tests = staged.filter((f) => reTest.test(f));
   if (!tests.length) return;
 
-  const fuga = regla.escapeLine ?? "refactor-mixto:";
+  const fuga = regla.escapeLine ?? "mixed-refactor:";
   if (declarada(msg, fuga)) return;
 
   bloquear("ciclo (XP · refactor separado): este commit se declara `refactor` y cambia pruebas.", [
@@ -240,6 +242,112 @@ function revisarPairing(msg) {
   ]);
 }
 
+/**
+ * Test primero, versión fuerte: la prueba nueva FALLA sin el cambio de producción.
+ *
+ * `revisarTestPrimero` sólo ve que prueba y cambio entran juntos; una prueba que pasa igual
+ * sin el cambio es un espejo del código y no prueba nada. Es el hueco del «arnés de
+ * comportamiento» del marco de guías y sensores: la respuesta típica es confiar en pruebas que
+ * escribió el mismo agente, y esto convierte esa confianza en un comando.
+ *
+ * Cómo: un worktree temporal FUERA del repo (P7) en el punto donde la rama se separó de la
+ * base, con los archivos de prueba de HEAD encima, y `verifyRed.command` corriendo ahí. Tiene
+ * que fallar. Que falle por la razón CORRECTA no lo ve ningún comando: sigue siendo juicio.
+ * Es caro (corre la suite sobre otro árbol), así que va a la derecha del ciclo: CI, en el PR.
+ */
+function revisarRojo(base) {
+  const regla = xp.testFirst;
+  const rojo = regla?.verifyRed;
+  if (!regla?.enabled || !rojo?.enabled || !(rojo.command ?? []).length) {
+    process.stdout.write("ciclo (XP · rojo sin el cambio): OMITIDO — `xp.testFirst.verifyRed` no está activo.\n");
+    return;
+  }
+  const punto = git("merge-base", base, "HEAD");
+  if (!punto) {
+    process.stdout.write(`ciclo (XP · rojo sin el cambio): OMITIDO — no encuentro \`${base}\` para medir contra él.\n`);
+    return;
+  }
+  const reCodigo = compila(regla.codePattern ?? config.commitMsg?.codePattern ?? "");
+  const reTest = compila(regla.testPattern ?? config.tests?.filePattern ?? "");
+  if (!reCodigo || !reTest) return;
+  const ignoradas = regla.ignoreExtensions ?? config.commitMsg?.ignoreExtensions ?? [".md"];
+  const cambiados = git("diff", "--name-only", "--diff-filter=ACMR", punto, "HEAD").split("\n").filter(Boolean);
+  const pruebas = cambiados.filter((f) => reTest.test(f));
+  const codigo = cambiados.filter((f) => reCodigo.test(f) && !ignoradas.some((e) => f.endsWith(e)) && !reTest.test(f));
+  if (!pruebas.length || !codigo.length) {
+    process.stdout.write("ciclo (XP · rojo sin el cambio): nada que medir — la rama no trae prueba y cambio de producción juntos.\n");
+    return;
+  }
+  const fuga = rojo.escapeLine ?? "no-red:";
+  if (declarada(git("log", "--format=%B", `${punto}..HEAD`), fuga)) {
+    process.stdout.write(`ciclo (XP · rojo sin el cambio): declarado con \`${fuga}\` en el historial de la rama.\n`);
+    return;
+  }
+
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "harness-rojo-"));
+  const arbol = path.join(tmp, "base");
+  // Un comando que no llegó a correr (binario ausente, timeout, señal) no es una prueba roja:
+  // `status` vale null y `null !== 0` certificaba la prueba. Lo cazó el reviewer.
+  const noCorrio = (r) => Boolean(r.error) || r.status === null;
+  const correr = ([cmd, ...cmdArgs]) =>
+    spawnSync(cmd, cmdArgs, { cwd: arbol, encoding: "utf8", timeout: rojo.timeoutMs ?? 600000, shell: process.platform === "win32" });
+  let status = null;
+  let invalida = null;
+  try {
+    if (spawnSync("git", ["worktree", "add", "--detach", arbol, punto], { encoding: "utf8" }).status !== 0) {
+      process.stdout.write("ciclo (XP · rojo sin el cambio): OMITIDO — git no pudo crear el árbol de la base.\n");
+      return;
+    }
+    // Un worktree no trae nada ignorado (dependencias, entornos, compilados): sin preparar el
+    // árbol, la suite de cualquier repo con dependencias falla por falta de ellas y el freno
+    // pasaría siempre. `setupCommand` es lo que las instala; si falla, la medición no vale.
+    if ((rojo.setupCommand ?? []).length) {
+      const s = correr(rojo.setupCommand);
+      if (noCorrio(s) || s.status !== 0)
+        invalida = `\`setupCommand\` (${rojo.setupCommand.join(" ")}) no dejó el árbol de la base listo (exit ${s.status ?? s.error?.code ?? "?"}).`;
+    }
+    if (!invalida) {
+      for (const f of pruebas) {
+        const destino = path.join(arbol, f);
+        fs.mkdirSync(path.dirname(destino), { recursive: true });
+        fs.writeFileSync(destino, spawnSync("git", ["show", `HEAD:${f}`], { encoding: "buffer" }).stdout);
+      }
+      const r = correr(rojo.command);
+      if (noCorrio(r)) invalida = `\`${rojo.command.join(" ")}\` no llegó a correr (${r.error?.code ?? "sin exit code: timeout o señal"}).`;
+      status = r.status;
+    }
+  } finally {
+    spawnSync("git", ["worktree", "remove", "--force", arbol], { encoding: "utf8" });
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+
+  if (invalida) {
+    bloquear("ciclo (XP · rojo sin el cambio): la medición no vale — un comando que no corre no es una prueba roja.", [
+      "",
+      invalida,
+      "Arreglá `xp.testFirst.verifyRed` (`command`, `setupCommand`) o declaralo con motivo:",
+      `  ${rojo.escapeLine ?? "no-red:"} <por qué esta rama no se puede medir>`,
+    ]);
+    return;
+  }
+  if (status !== 0) {
+    process.stdout.write(`ciclo (XP · rojo sin el cambio): las pruebas de la rama fallan sin el cambio de producción (exit ${status}). Prueban algo.\n`);
+    return;
+  }
+  bloquear("ciclo (XP · rojo sin el cambio): las pruebas de la rama PASAN sin el cambio de producción.", [
+    "",
+    "Pruebas que se corrieron sobre la base:",
+    ...pruebas.map((f) => `  - ${f}`),
+    "Cambio de producción que no hizo falta para que pasen:",
+    ...codigo.map((f) => `  - ${f}`),
+    ...(rojo.reason ? ["", `Motivo: ${rojo.reason}`] : []),
+    "",
+    "Elegí una, y que quede en el historial:",
+    "  1) escribí la prueba que falla sin este cambio (la que describe lo que cambió);",
+    `  2) declaralo con motivo en un commit de la rama:  ${fuga} <por qué la prueba no puede fallar antes>`,
+  ]);
+}
+
 // ───────────────────────────────────── modos ─────────────────────────────────────
 
 if (tiene("--rules")) {
@@ -249,6 +357,7 @@ if (tiene("--rules")) {
     ["rama base", workflow.baseBranch ?? "—"],
     ["edad máxima de rama", workflow.maxAgeDays ? `${workflow.maxAgeDays} días (${workflow.staleAction ?? "warn"})` : "—"],
     ["XP · test primero", xp.testFirst?.enabled ? "activo" : "—"],
+    ["XP · rojo sin el cambio", xp.testFirst?.enabled && xp.testFirst?.verifyRed?.enabled ? `activo (${(xp.testFirst.verifyRed.command ?? []).join(" ")})` : "—"],
     ["XP · lote chico", xp.smallBatch?.enabled ? `activo (${xp.smallBatch.maxFiles ?? "∞"} archivos / ${xp.smallBatch.maxLines ?? "∞"} líneas)` : "—"],
     ["XP · refactor separado", xp.refactorSeparate?.enabled ? "activo" : "—"],
     ["XP · de a dos", xp.pairing?.enabled ? "activo" : "—"],
@@ -260,6 +369,10 @@ if (tiene("--rules")) {
 
 if (tiene("--branch")) {
   revisarRama(flag("--branch"));
+} else if (tiene("--verify-red")) {
+  const base = flag("--verify-red");
+  const pedida = base && !base.startsWith("--") ? base : workflow.baseBranch;
+  revisarRojo(pedida && git("rev-parse", "--verify", "--quiet", pedida) ? pedida : `origin/${pedida}`);
 } else if (tiene("--push")) {
   // git pasa por stdin una línea por ref: <ref local> <sha local> <ref remoto> <sha remoto>
   let entrada = "";

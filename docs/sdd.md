@@ -97,7 +97,7 @@ va es `artifacts-check`, que sólo mira el sistema de archivos.
 
 | Regla | Mecanismo |
 |---|---|
-| Un commit de código queda registrado | `.githooks/commit-msg`: referencia del ítem o `sin-issue: <motivo>`. **Es el único freno BLOCKING de esta página** |
+| Un commit de código queda registrado | `.githooks/commit-msg`: referencia del ítem o `no-issue: <motivo>`. **Es el único freno BLOCKING de esta página** |
 | Los artefactos están donde el equipo decidió | `node scripts/artifacts-check.mjs` en el gate, sin red |
 | El pedido de tamaño feature se rutea o se declara | `sdd-router` inyecta el criterio en cada prompt que dispara — **informa, no bloquea**: la intención no es verificable por máquina |
 | El clasificador no se degrada | el self-test prueba una muestra por ruta, y que el router se calle en lo trivial |

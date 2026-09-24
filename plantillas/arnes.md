@@ -13,10 +13,10 @@ comando: el humano, el agente (subagente `gate-runner`) y CI.
 
 | Señal | Comando | Qué error atrapa que ninguna otra ve |
 |---|---|---|
-| self-test del arnés | `node scripts/harness-selftest.mjs` | un hook roto o un config que apunta a la nada: fallan en silencio |
-| link-check de docs | `node scripts/docs-linkcheck.mjs` | un puntero roto manda al agente a leer un archivo que no existe |
-| lint de convenciones | `node scripts/repo-lint.mjs` | las reglas de este repo que ningún compilador ve |
-| artefactos en su lugar | `node scripts/artifacts-check.mjs` | un plan suelto en el repo cuando el trabajo vive en el gestor |
+| harness self-test | `node scripts/harness-selftest.mjs` | un hook roto o un config que apunta a la nada: fallan en silencio |
+| docs link-check | `node scripts/docs-linkcheck.mjs` | un puntero roto manda al agente a leer un archivo que no existe |
+| convention lint | `node scripts/repo-lint.mjs` | las reglas de este repo que ningún compilador ve |
+| artifacts in place | `node scripts/artifacts-check.mjs` | un plan suelto en el repo cuando el trabajo vive en el gestor |
 | `<señal del stack>` | `<comando>` | `<qué atrapa>` |
 
 Una señal **omitida** no es verde, y el modo `fast` tampoco es entregable: omite las señales lentas.

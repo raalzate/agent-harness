@@ -16,7 +16,7 @@
     "installHooksCommand": "node scripts/hooks-install.mjs",
     "signals": [
       {
-        "name": "self-test del arnés",
+        "name": "harness self-test",
         "command": [
           "node",
           "scripts/harness-selftest.mjs"
@@ -24,7 +24,7 @@
         "why": "un hook roto o un config que apunta a la nada fallan en silencio: ninguna otra señal los ve"
       },
       {
-        "name": "link-check de docs",
+        "name": "docs link-check",
         "command": [
           "node",
           "scripts/docs-linkcheck.mjs"
@@ -32,7 +32,7 @@
         "why": "mover un archivo rompe punteros de la memoria del agente que nadie más mira"
       },
       {
-        "name": "lint de convenciones",
+        "name": "convention lint",
         "command": [
           "node",
           "scripts/repo-lint.mjs"
@@ -40,7 +40,7 @@
         "why": "las reglas de este repo que ningún compilador ve, con un comando que falla"
       },
       {
-        "name": "artefactos en su lugar",
+        "name": "artifacts in place",
         "command": [
           "node",
           "scripts/artifacts-check.mjs"
@@ -48,7 +48,7 @@
         "why": "un plan suelto en el repo cuando el trabajo vive en el gestor parte el registro en dos"
       },
       {
-        "name": "índice del código (codegraph)",
+        "name": "code index (codegraph)",
         "command": [
           "codegraph",
           "status"
@@ -57,7 +57,7 @@
         "why": "el agente lee el repo con el índice, no a mano: sin él abre archivos de más y se pierde las relaciones (quién llama a quién, qué se rompe si toco esto). Un índice desincronizado miente peor que no tenerlo, y eso es lo que mira `codegraph status`. Mientras nadie corra `codegraph init` la señal sale OMITIDA — y omitido no es verde"
       },
       {
-        "name": "costo del arnés (latencia de los hooks)",
+        "name": "harness cost (hook latency)",
         "command": [
           "node",
           "scripts/hooks-timing.mjs"
@@ -315,7 +315,7 @@
         "message": "Pedido ambiguo → preguntá UNA sola cosa antes de tocar archivos."
       },
       {
-        "route": "arquitectura",
+        "route": "architecture",
         "patterns": [
           "\\barquitectura\\b",
           "\\bacopl",
@@ -368,13 +368,13 @@
     ]
   },
   "graph": {
-    "$comment": "EL ÍNDICE DEL CÓDIGO. Activa `graph-first.mjs`, que sin esta clave viaja instalado y muerto. La herramienta por default es codegraph (https://github.com/colbymchenry/codegraph): grafo local en SQLite, sin API keys, funciona en cualquier lenguaje. Instalación: `curl -fsSL https://raw.githubusercontent.com/colbymchenry/codegraph/main/install.sh | sh` → `codegraph install` → `codegraph init` en este repo. Si tu equipo usa otro índice (ctags, un LSP, un grafo propio), cambiá `graphFile` y `queryCommand`: el hook no conoce ninguna herramienta. La regla que se hace cumplir es la misma — PRIMERO el índice, DESPUÉS abrir archivos.",
+    "$comment": "EL ÍNDICE DEL CÓDIGO. Activa `graph-first.mjs`, que sin esta clave viaja instalado y muerto. La herramienta por default es codegraph (https://github.com/colbymchenry/codegraph): grafo local en SQLite, sin API keys, funciona en cualquier lenguaje. Instalación: bajar `https://raw.githubusercontent.com/colbymchenry/codegraph/main/install.sh`, leerlo y correrlo con `sh` (nunca `curl | sh`: `bash.deny` lo veda) → `codegraph install` → `codegraph init` en este repo. Si tu equipo usa otro índice (ctags, un LSP, un grafo propio), cambiá `graphFile` y `queryCommand`: el hook no conoce ninguna herramienta. La regla que se hace cumplir es la misma — PRIMERO el índice, DESPUÉS abrir archivos.",
     "tool": "codegraph",
     "graphFile": ".codegraph/codegraph.db",
     "queryCommand": "codegraph explore \"<pregunta>\"",
     "panoramaCommand": "codegraph ui",
     "statusCommand": "codegraph status",
-    "installHint": "curl -fsSL https://raw.githubusercontent.com/colbymchenry/codegraph/main/install.sh | sh  →  codegraph install  →  codegraph init",
+    "installHint": "curl -fsSL -o /tmp/codegraph-install.sh https://raw.githubusercontent.com/colbymchenry/codegraph/main/install.sh  →  leerlo  →  sh /tmp/codegraph-install.sh  →  codegraph install  →  codegraph init",
     "questionPatterns": [
       "\\bd[oó]nde\\b",
       "\\bqui[eé]n (llama|usa|importa|depende)",
@@ -404,7 +404,7 @@
     "$stateFiles": "Opcional: los archivos de estado que un hook escribe al correr y que la medición restaura. Sin declararlos se usan `gate.marker` y `askFirst.marker`."
   },
   "commitMsg": {
-    "$comment": "Qué commits piden registro. La documentación no: ES el registro, no el cambio. `escapeLine` exige motivo — un `sin-issue:` pelado sería la misma omisión con otro nombre.",
+    "$comment": "Qué commits piden registro. La documentación no: ES el registro, no el cambio. `escapeLine` exige motivo — un `no-issue:` pelado sería la misma omisión con otro nombre.",
     "codePattern": "^(src/|lib/|app/|scripts/)",
     "ignoreExtensions": [
       ".md",
@@ -418,10 +418,10 @@
       "fixup! ",
       "squash! "
     ],
-    "escapeLine": "sin-issue:"
+    "escapeLine": "no-issue:"
   },
   "workflow": {
-    "$comment": "EL CICLO DE DESARROLLO. Viaja con el modelo más común (una rama larga + ramas de trabajo cortas); cambialo por el de tu equipo antes de encenderlo. Lo verifica `.githooks/pre-push` → `node scripts/ciclo-check.mjs --push`. Sin `branchPattern` ni `maxAgeDays`, el freno no corre. Los tres modelos en config: docs/ciclo-desarrollo.md · ejemplos: examples/trunk-based.json y examples/git-flow.json.",
+    "$comment": "EL CICLO DE DESARROLLO. Viaja con el modelo más común (una rama larga + ramas de trabajo cortas); cambialo por el de tu equipo antes de encenderlo. Lo verifica `.githooks/pre-push` → `node scripts/cycle-check.mjs --push`. Sin `branchPattern` ni `maxAgeDays`, el freno no corre. Los tres modelos en config: docs/ciclo-desarrollo.md · ejemplos: examples/trunk-based.json y examples/git-flow.json.",
     "model": "trunk-based",
     "branchPattern": "^(feat|fix|docs|chore|refactor|test|ci|perf)/[a-z0-9][a-z0-9._-]*$",
     "branchExamples": [
@@ -446,11 +446,11 @@
     "staleReason": "una rama que no se integra hace días es un lote grande esperando: el merge es más caro y el rojo aparece tarde."
   },
   "xp": {
-    "$comment": "Prácticas de XP con mecanismo. TODAS viajan APAGADAS a propósito: una regla instalada sin cicatriz detrás se desactiva en una semana y se lleva puestas a las que servían (P14). Encendé la que tu equipo ya decidió, empezando por `testFirst`. Las lee `.githooks/commit-msg` → `node scripts/ciclo-check.mjs --commit`. Ver docs/ciclo-desarrollo.md.",
+    "$comment": "Prácticas de XP con mecanismo. TODAS viajan APAGADAS a propósito: una regla instalada sin cicatriz detrás se desactiva en una semana y se lleva puestas a las que servían (P14). Encendé la que tu equipo ya decidió, empezando por `testFirst`. Las lee `.githooks/commit-msg` → `node scripts/cycle-check.mjs --commit`. Ver docs/ciclo-desarrollo.md.",
     "testFirst": {
       "enabled": false,
       "testPattern": "(^|/)(__tests__|tests?)/|\\.(test|spec)\\.[cm]?[jt]sx?$",
-      "escapeLine": "sin-test:",
+      "escapeLine": "no-test:",
       "reason": "un arreglo sin prueba no tiene cómo demostrar que arregló algo."
     },
     "smallBatch": {
@@ -458,13 +458,13 @@
       "maxFiles": 20,
       "maxLines": 600,
       "ignorePattern": "^docs/",
-      "escapeLine": "lote-grande:",
+      "escapeLine": "big-batch:",
       "reason": "un lote grande no se revisa: se aprueba."
     },
     "refactorSeparate": {
       "enabled": false,
       "subjectPattern": "^refactor(\\(|:)",
-      "escapeLine": "refactor-mixto:",
+      "escapeLine": "mixed-refactor:",
       "reason": "si cambian las expectativas, no era un refactor: son dos commits."
     },
     "pairing": {
@@ -474,9 +474,59 @@
       "reason": "el código que escribió una sola persona lo entiende una sola persona."
     }
   },
+  "coherence": {
+    "$comment": "Guía y freno no se contradicen: lo que las guías recomiendan en un bloque de shell, y los comandos que los `reason`/`message` citan, no pueden estar vedados por `bash.deny`. `commandPattern` es qué palabra abre un comando en este repo: agregá la CLI de tu stack (dotnet, mvn, gradle, cargo, go, make…). Agregá `CLAUDE.md` a `guides` cuando exista (el instalador no lo copia). Lo lee la regla COHERENCIA de `scripts/repo-lint.mjs`.",
+    "guides": [
+      ".claude/commands",
+      ".claude/skills",
+      ".claude/agents"
+    ],
+    "commandPattern": "^(git|npm|npx|pnpm|yarn|node|gh|glab|az|make|sed|perl|rm|find|curl)\\s",
+    "reason": "una guía que recomienda lo que un freno prohíbe deja al agente en un bucle de reintentos."
+  },
+  "taxonomy": {
+    "$comment": "El arnés como sistema de control: dirección (guía · freno · sensor), tipo (computacional · inferencial) y etapa de cada pieza. Lo lee `scripts/harness-map.mjs`. La dirección de un hook la pone su evento. Si agregás un subagente, un hook de git o un pipeline, ubicalo acá: una pieza sin clasificar es rojo.",
+    "stages": ["sesión", "pedido", "acción decidida", "edición hecha", "fin del turno", "commit", "push", "integración", "continuo"],
+    "events": {
+      "SessionStart": { "direction": "guía", "stage": "sesión" },
+      "UserPromptSubmit": { "direction": "guía", "stage": "pedido" },
+      "PreToolUse": { "direction": "freno", "stage": "acción decidida" },
+      "PostToolUse": { "direction": "sensor", "stage": "edición hecha" },
+      "Stop": { "direction": "sensor", "stage": "fin del turno" }
+    },
+    "gitHooksDir": ".githooks",
+    "gitHooks": {
+      "pre-commit": { "direction": "sensor", "stage": "commit" },
+      "commit-msg": { "direction": "sensor", "stage": "commit" },
+      "post-commit": { "direction": "guía", "stage": "commit" },
+      "pre-push": { "direction": "sensor", "stage": "push" }
+    },
+    "gateStages": ["fin del turno", "integración"],
+    "agents": {
+      "explorer": { "direction": "guía", "kind": "inferencial", "stage": "pedido" },
+      "reviewer": { "direction": "sensor", "kind": "inferencial", "stage": "fin del turno" },
+      "gate-runner": { "direction": "sensor", "kind": "computacional", "stage": "fin del turno" }
+    },
+    "$guides": "Agregá `CLAUDE.md` (etapa `sesión`) cuando exista: el instalador no lo copia, porque cada repo escribe el suyo.",
+    "guides": {
+      "CONSTITUTION.md": { "stage": "sesión" },
+      ".claude/commands": { "stage": "pedido" }
+    },
+    "pipelines": {
+      ".github/workflows/ci.yml": { "stage": "integración" }
+    }
+  },
+  "drift": {
+    "$comment": "El barrido de deriva: lo que se degrada sin que ningún cambio lo rompa. Lo lee `scripts/drift-check.mjs`. Un STATUS con veredicto más viejo que `statusMaxAgeDays` es rojo; una regla de `patterns`/`reuse` que nunca casó en los últimos `historyCommits` commits sale como aviso. Depende del reloj, así que NO va en el gate: corrélo programado (un cron de tu CI) y declaralo en `runner`.",
+    "statusDatePattern": "Fecha del último gate completo:\\W*(\\d{4}-\\d{2}-\\d{2})",
+    "statusMaxAgeDays": 14,
+    "historyCommits": 400
+  },
   "install": {
     "activators": {
-      "scripts/ciclo-check.mjs": "workflow.branchPattern"
+      "scripts/cycle-check.mjs": "workflow.branchPattern",
+      "scripts/harness-map.mjs": "taxonomy",
+      "scripts/drift-check.mjs": "drift"
     }
   }
 }

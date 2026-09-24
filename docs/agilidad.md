@@ -7,8 +7,8 @@ prisa. Los demás principios ágiles siguen valiendo — pero se declaran como l
 | # | Principio | Cómo se ve cuando falta | Mecanismo | Fuerza |
 |---|---|---|---|---|
 | 1 | **Software funcionando es la medida del avance** | "está listo, sólo falta probarlo" | `gate.command`: el entregable es el gate verde, no la opinión de quien lo escribió. El hook `Stop` no deja cerrar la tarea con el gate sucio | BLOQUEA |
-| 2 | **Lote chico** | un PR de 40 archivos que nadie revisa de verdad | `xp.smallBatch`: archivos y líneas del commit contra el límite de ESTE equipo, con fuga declarada (`lote-grande: <motivo>`) — más `branches.protected` y el gate en cada push | BLOQUEA |
-| 3 | **El trabajo es visible** | "¿esto por qué se cambió?" y el historial no contesta | `.githooks/commit-msg`: un commit que toca código referencia su ítem (`tracker.issuePattern`) o declara `sin-issue: <motivo>` en su línea | BLOQUEA |
+| 2 | **Lote chico** | un PR de 40 archivos que nadie revisa de verdad | `xp.smallBatch`: archivos y líneas del commit contra el límite de ESTE equipo, con fuga declarada (`big-batch: <motivo>`) — más `branches.protected` y el gate en cada push | BLOQUEA |
+| 3 | **El trabajo es visible** | "¿esto por qué se cambió?" y el historial no contesta | `.githooks/commit-msg`: un commit que toca código referencia su ítem (`tracker.issuePattern`) o declara `no-issue: <motivo>` en su línea | BLOQUEA |
 | 4 | **Una sola fuente del trabajo** | la spec en el repo, las tareas en el gestor, ninguna al día | `tracker.artifactsIn` + `node scripts/artifacts-check.mjs` en el gate | BLOQUEA |
 | 5 | **Integración continua de verdad** | la rama que vive tres semanas y se mergea a ciegas | CI corre **el mismo** gate en cada push y cada PR ([cicd.md](cicd.md)) | BLOQUEA |
 | 6 | **Definición de Hecho única** | cada quien tiene la suya | el gate **es** la Definición de Hecho, y está escrita en un archivo: `gate.signals`, cada señal con su `why` | BLOQUEA |
@@ -16,7 +16,7 @@ prisa. Los demás principios ágiles siguen valiendo — pero se declaran como l
 | 8 | **Ritmo sostenible** | el gate tarda quince minutos y la gente empieza a saltearlo | `fastSkip` / `skipIfMissing` y la revisión del `why` de cada señal; si el gate estorba, **se arregla el gate** (saltearlo está en `bash.deny`) | REVIEW |
 | 9 | **Requisitos que cambian, bienvenidos** | el refactor que nadie se anima a hacer | acoplamiento bajo verificado por comando ([arquitectura.md](arquitectura.md)): cambiar es barato cuando el límite está escrito, no recordado |  REVIEW |
 | 9b | **Un ciclo de desarrollo, no quince** | cada quien nombra las ramas como quiere y el agente commitea donde cayó | `workflow`: el modelo declarado (`model`), el nombre de rama verificado en `pre-push` y la edad de la rama medida contra `baseBranch` ([ciclo-desarrollo.md](ciclo-desarrollo.md)) | BLOQUEA |
-| 9c | **El cambio entra con su prueba** | "después le agrego el test" | `xp.testFirst`: el commit que cambia comportamiento trae un archivo de prueba, o declara `sin-test: <motivo>` | BLOQUEA |
+| 9c | **El cambio entra con su prueba** | "después le agrego el test" | `xp.testFirst`: el commit que cambia comportamiento trae un archivo de prueba, o declara `no-test: <motivo>` | BLOQUEA |
 | 10 | **Conversación antes que documento** | el agente adivina y entrega otra cosa | el hook `ask-first` (una pregunta se contesta, no se ejecuta) y la ruta `clarify` del router: ante un pedido ambiguo, **una** pregunta antes de tocar archivos | BLOQUEA a medias |
 
 ## Las tres que la gente se saltea

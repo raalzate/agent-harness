@@ -29,6 +29,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { resolverEjecutable } from "../.claude/hooks/harness.mjs";
 
 const REPO_ROOT = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
 const CONFIG_PATH = path.join(REPO_ROOT, ".claude", "harness.config.json");
@@ -68,6 +69,10 @@ const fallidas = [];
 const duraciones = [];
 const omitidas = [];
 let corridas = 0;
+// Lo que corrió EN ESTA MÁQUINA, por señal: lo escribe `registrar` y lo lee el panel. Sin esto,
+// el panel sólo podía repetir lo que dice STATUS.md, que es prosa con fecha.
+const resultados = {};
+const inicio = new Date();
 
 for (const senal of senales) {
   const argv = senal.command;
@@ -79,12 +84,14 @@ for (const senal of senales) {
   if (MODE === "fast" && senal.fastSkip) {
     console.log(`\n──▶ ${senal.name}\n    – omitida en modo fast`);
     omitidas.push(senal.name);
+    resultados[senal.name] = { estado: "omitida", motivo: "modo fast" };
     continue;
   }
 
   if (senal.skipIfMissing && !fs.existsSync(path.join(REPO_ROOT, senal.skipIfMissing))) {
     console.log(`\n──▶ ${senal.name}\n    – OMITIDA: no existe \`${senal.skipIfMissing}\` (omitido ≠ pasó)`);
     omitidas.push(senal.name);
+    resultados[senal.name] = { estado: "omitida", motivo: `no existe ${senal.skipIfMissing}` };
     continue;
   }
 
@@ -108,11 +115,14 @@ for (const senal of senales) {
   if (r.error?.code === "ENOENT") {
     console.log(`    ✗ ${senal.name} — no encontré el ejecutable \`${argv[0]}\``);
     fallidas.push(senal.name);
+    resultados[senal.name] = { estado: "rojo", ms, motivo: `no existe el ejecutable ${argv[0]}` };
   } else if (r.status === 0) {
     console.log(`    ✓ ${senal.name} (${ms} ms)`);
+    resultados[senal.name] = { estado: "verde", ms };
   } else {
     console.log(`    ✗ ${senal.name} (${ms} ms)`);
     fallidas.push(senal.name);
+    resultados[senal.name] = { estado: "rojo", ms, motivo: `salió con ${r.status}` };
   }
 }
 
@@ -127,6 +137,14 @@ if (duraciones.length) {
 
 // Un gate donde NO corrió ninguna señal no es verde: es un gate que no existe. Pasó una vez
 // (un separador de campos mal elegido omitía todo) y reportó "entregable".
+const veredicto = corridas === 0 || fallidas.length ? "rojo" : MODE === "fast" ? "fast-verde" : "verde";
+if (veredicto === "verde") {
+  const marcador = config.gate?.marker;
+  if (marcador) fs.rmSync(path.join(REPO_ROOT, marcador), { force: true });
+}
+registrar(veredicto);
+regenerarPanel();
+
 if (corridas === 0) {
   console.log("GATE ROJO — ninguna señal llegó a correr: todas quedaron omitidas.");
   console.log("Revisá `gate.signals` en el config (rutas de `skipIfMissing`, `fastSkip` de más).");
@@ -144,24 +162,62 @@ if (MODE === "fast") {
   process.exit(0);
 }
 
-const marcador = config.gate?.marker;
-if (marcador) fs.rmSync(path.join(REPO_ROOT, marcador), { force: true });
 console.log("GATE VERDE — entregable.");
 
 /**
- * Windows no ejecuta `npm`, `npx` ni `gradlew` directamente: son `.cmd`/`.bat`, y Node los
- * rechaza con EINVAL salvo que se los busque con su extensión real. Fuera de Windows esto
- * devuelve el nombre tal cual y no cambia nada.
+ * El registro de la corrida (`gate.registry`, default `.git/harness-gate.json`): por señal, su
+ * último resultado y su último verde. Va en `.git/` porque es de ESTA máquina y no se versiona.
+ * Escribirlo nunca cambia el veredicto: un registro que no se pudo escribir es un panel con menos
+ * datos, no un gate rojo.
  */
-function resolverEjecutable(cmd) {
-  if (process.platform !== "win32" || path.extname(cmd)) return cmd;
-  const exts = (process.env.PATHEXT ?? ".COM;.EXE;.BAT;.CMD").split(";").filter(Boolean);
-  const dirs = [REPO_ROOT, ...(process.env.PATH ?? "").split(path.delimiter).filter(Boolean)];
-  for (const dir of dirs) {
-    for (const ext of exts) {
-      const cand = path.join(dir, cmd + ext);
-      if (fs.existsSync(cand)) return cand;
-    }
+function registrar(veredicto) {
+  const rel = config.gate?.registry ?? ".git/harness-gate.json";
+  const abs = path.join(REPO_ROOT, rel);
+  const git = (...args) => {
+    const r = spawnSync("git", args, { cwd: REPO_ROOT, encoding: "utf8", windowsHide: true });
+    return r.status === 0 ? r.stdout.trim() : null;
+  };
+  let previo = {};
+  try {
+    previo = JSON.parse(fs.readFileSync(abs, "utf8"));
+  } catch {
+    previo = {};
   }
-  return cmd; // que falle con su propio mensaje: adivinar acá sería peor
+  const fecha = new Date().toISOString();
+  const head = git("rev-parse", "--short", "HEAD");
+  const senalesReg = { ...(previo.senales ?? {}) };
+  for (const [nombre, res] of Object.entries(resultados)) {
+    const antes = senalesReg[nombre]?.ultimoVerde ?? null;
+    senalesReg[nombre] = { ...res, fecha, ultimoVerde: res.estado === "verde" ? { fecha, head, ms: res.ms } : antes };
+  }
+  const registro = { fecha, modo: MODE, veredicto, ms: Date.now() - inicio.getTime(), head, rama: git("rev-parse", "--abbrev-ref", "HEAD"), senales: senalesReg };
+  try {
+    fs.mkdirSync(path.dirname(abs), { recursive: true });
+    fs.writeFileSync(abs, JSON.stringify(registro, null, 2) + "\n");
+  } catch (e) {
+    console.log(`  (no pude escribir el registro ${rel}: ${e.message})`);
+  }
+}
+
+/**
+ * El panel se regenera en CADA corrida, verde o roja: un panel que hay que acordarse de
+ * regenerar es un panel viejo, y el gate es el momento en que la salud cambia.
+ *
+ * En un PROCESO HIJO y con tiempo límite, y su exit code se ignora: el panel no puede decidir el
+ * veredicto. Lo cazó el reviewer con el panel importado en este proceso —un `process.exit(0)` ahí
+ * adentro volvía verde a un gate rojo y borraba el marcador, y un panel colgado colgaba al gate—.
+ * Que el panel genere lo verifica el self-test, no el gate (P5: lo roto deja pasar, no decide).
+ */
+function regenerarPanel() {
+  const script = path.join(REPO_ROOT, "scripts/panel/generar.mjs");
+  if (config.panel?.enabled === false) return;
+  if (!fs.existsSync(script)) {
+    console.log("Panel: no instalado (falta scripts/panel/).");
+    return;
+  }
+  const timeout = Number.isFinite(config.panel?.timeoutMs) ? config.panel.timeoutMs : 60000;
+  const r = spawnSync(process.execPath, [script], { cwd: REPO_ROOT, encoding: "utf8", timeout, windowsHide: true });
+  if (r.error?.code === "ETIMEDOUT") console.log(`Panel: no terminó en ${timeout} ms (\`panel.timeoutMs\`). El veredicto del gate no cambia.`);
+  else if (r.status !== 0) console.log(`Panel: no se pudo generar (${`${r.stderr || r.stdout}`.trim().split("\n")[0] || `exit ${r.status}`}). El veredicto del gate no cambia.`);
+  else process.stdout.write(r.stdout);
 }

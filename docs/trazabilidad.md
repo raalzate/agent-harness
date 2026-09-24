@@ -34,7 +34,7 @@ dos claves de `.claude/harness.config.json`:
   "codePattern": "^(src/|lib/|scripts/)",
   "ignoreExtensions": [".md", ".png", ".svg"],
   "skipSubjects": ["Merge ", "Revert ", "fixup! ", "squash! "],
-  "escapeLine": "sin-issue:"
+  "escapeLine": "no-issue:"
 }
 ```
 
@@ -47,7 +47,7 @@ Lo que hace, en orden:
    registro.
 3. **Busca la referencia** con `issuePattern` en cualquier parte del mensaje.
 4. **O acepta la fuga declarada**, en su propia línea y **con motivo**:
-   `sin-issue: renombre interno, sin cambio de comportamiento`. Un `sin-issue:` pelado no alcanza —
+   `no-issue: renombre interno, sin cambio de comportamiento`. Un `no-issue:` pelado no alcanza —
    sería la misma omisión con otro nombre.
 5. Si no hay ninguna de las dos, **el commit no entra** y el mensaje de error dice exactamente qué
    archivos de código lo dispararon y cuáles son las dos salidas.
@@ -150,7 +150,7 @@ que exige la regla `incidents` del lint y lo que viaja con el clon), y el comand
 | Regla | Mecanismo |
 |---|---|
 | Un commit de código queda registrado | `.githooks/commit-msg` — **BLOCKING**, con fuga declarada y firmada |
-| La fuga tiene motivo | el mismo hook: `sin-issue:` sin texto no pasa |
+| La fuga tiene motivo | el mismo hook: `no-issue:` sin texto no pasa |
 | Los artefactos están donde se decidió | `node scripts/artifacts-check.mjs` en el gate, sin red |
 | El freno frena de verdad | 6 casos del self-test en un repo git temporal, derivados del config |
 | El agente pregunta **antes**, no al final | ruta `issue` del `sdd-router` — **informa, no bloquea** |
@@ -164,7 +164,7 @@ deuda en vez de fingir que una máquina lo cubre.
 
 Configurar `tracker` copiando el `issuePattern` de otro equipo. Si tu forja usa `PROJ-123` y quedó
 el `#123` de GitHub, el freno **nunca** va a encontrar la referencia y todo el mundo va a terminar
-escribiendo `sin-issue:` como ritual — que es exactamente el fracaso que este mecanismo evita.
+escribiendo `no-issue:` como ritual — que es exactamente el fracaso que este mecanismo evita.
 Después de configurarlo, probalo en los dos sentidos:
 
 ```bash

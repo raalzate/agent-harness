@@ -14,8 +14,13 @@
     "linkcheck": "node scripts/docs-linkcheck.mjs",
     "hooks:install": "node scripts/hooks-install.mjs",
     "harness:install": "node scripts/harness-init.mjs",
-    "ciclo": "node scripts/ciclo-check.mjs --rules",
+    "cycle": "node scripts/cycle-check.mjs --rules",
     "timing": "node scripts/hooks-timing.mjs",
-    "timing:rules": "node scripts/hooks-timing.mjs --rules"
+    "timing:rules": "node scripts/hooks-timing.mjs --rules",
+    "drift": "node scripts/drift-check.mjs",
+    "eval:reviewer": "node scripts/reviewer-eval.mjs",
+    "map": "node scripts/harness-map.mjs",
+    "panel": "node scripts/panel/generar.mjs",
+    "panel:sync": "node scripts/panel/sincronizar.mjs"
   }
 }
