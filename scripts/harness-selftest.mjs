@@ -22,6 +22,8 @@
  *   9. el COSTO del arnés está medido: cada hook entra en su presupuesto de latencia;
  *  10. los controles FUERA del gate (deriva, prueba del reviewer, mapa) están vivos y el
  *      pipeline declarado en su `runner` los corre (ADR 0007).
+ *  11. el PANEL se genera: determinista sin la capa en vivo, sus alarmas muerden sobre un cebo
+ *      y callan sobre el repo real, y el gate lo regenera (con su registro) aunque salga rojo.
  *
  * Agnóstico: no conoce ningún stack. Todo lo que prueba lo deduce del config.
  */
@@ -29,7 +31,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 // El mismo helper que usan el hook y el lint: comparar contra la lista DECLARADA dejaba pasar
 // justo el caso del incidente (el gate declara una extensión que el default agnóstico no tiene).
 import { codeExtensions, depsMatcher, importSyntax, segmentosDeRuta, relativaDesdeRaiz, esUnidadPelada, parseHookCommand, firstMatch } from "../.claude/hooks/harness.mjs";
@@ -2366,6 +2368,311 @@ section("10. controles fuera del gate (deriva y revisor)");
     } finally {
       fs.rmSync(tmp, { recursive: true, force: true });
     }
+  }
+}
+
+// ── 11. El panel se genera, y sus alarmas dicen la verdad ───────────────────
+//
+// El panel no es un freno: es el sensor que se mira. Pero un sensor que no se genera, o que pinta
+// verde sobre un arnés con piezas muertas, es peor que no tenerlo — se le cree. Todo corre en
+// directorios temporales FUERA del repo (P7) y la memoria se prueba sin la capa en vivo.
+section("11. el panel del arnés");
+{
+  const dirPanel = abs("scripts/panel");
+  if (!fs.existsSync(path.join(dirPanel, "generar.mjs"))) {
+    skip("panel", "el repo no trae scripts/panel/");
+  } else {
+    // 11a. Parsean. La sección 1b sólo mira el primer nivel de scripts/.
+    let rotos = 0;
+    const modulos = fs.readdirSync(dirPanel).filter((f) => f.endsWith(".mjs"));
+    for (const f of modulos) {
+      const r = spawnSync("node", ["--check", path.join(dirPanel, f)], { encoding: "utf8" });
+      if (r.status !== 0) {
+        rotos += 1;
+        bad(`scripts/panel/${f}`, r.stderr.trim().split("\n").slice(0, 3).join(" · "));
+      }
+    }
+    if (!rotos) ok(`${modulos.length} módulo(s) del panel parsean`);
+
+    const url = (f) => pathToFileURL(path.join(dirPanel, f)).href;
+    const { generarPanel, resolverSalida } = await import(url("generar.mjs"));
+    const { construirModelo, leerCitas } = await import(url("leer-fuentes.mjs"));
+    const { construirArnes } = await import(url("leer-arnes.mjs"));
+    const { leerGestor } = await import(url("leer-en-vivo.mjs"));
+    const temporal = (prefijo) => fs.mkdtempSync(path.join(os.tmpdir(), prefijo));
+    const escribir = (raiz, rel, texto) => {
+      fs.mkdirSync(path.dirname(path.join(raiz, rel)), { recursive: true });
+      fs.writeFileSync(path.join(raiz, rel), texto);
+    };
+
+    // 11b. La memoria es determinista: dos corridas sin la capa en vivo, los mismos bytes. Es lo
+    //      que hace que la versión del panel identifique lo que se está mirando.
+    const t1 = temporal("harness-panel-a-");
+    const t2 = temporal("harness-panel-b-");
+    try {
+      const uno = await generarPanel(REPO_ROOT, { salida: t1, enVivo: false, config, settings });
+      await generarPanel(REPO_ROOT, { salida: t2, enVivo: false, config, settings });
+      const a = fs.readFileSync(path.join(t1, "index.html"), "utf8");
+      const b = fs.readFileSync(path.join(t2, "index.html"), "utf8");
+      if (a === b && a.includes("Panel del arnés") && fs.existsSync(path.join(t1, "modelo.json"))) ok(`panel: la memoria sale byte a byte igual en dos corridas (versión ${uno.modelo.version})`);
+      else bad("panel determinista", a === b ? "falta index.html o modelo.json" : "dos corridas sin capa en vivo dieron HTML distinto: algo con reloj se coló en la memoria");
+
+      // 11b-bis. `--verificar` es el modo señal: arma y renderiza sin escribir nada. Como señal
+      //      del gate no puede pisar el panel que el gate regenera al final (lo destapó el
+      //      portado: durante la corrida el panel quedaba en «sólo memoria»).
+      const t3 = temporal("harness-panel-verificar-");
+      try {
+        const v = await generarPanel(REPO_ROOT, { salida: t3, enVivo: false, config, settings, escribir: false });
+        if (!fs.readdirSync(t3).length && v.bytes > 1000) ok("panel: --verificar renderiza la página y no escribe nada");
+        else bad("panel --verificar no escribe", `escribió ${fs.readdirSync(t3).join(", ")} · ${v.bytes} bytes`);
+      } finally {
+        fs.rmSync(t3, { recursive: true, force: true });
+      }
+
+      // 11c. P3: sobre el repo real no muerde de más. Una alarma acá es un falso rojo que enseña a
+      //      no mirar el panel — o un freno de verdad muerto, y entonces hay que arreglarlo.
+      const alarmas = [...uno.modelo.arnes.alarmas.map((x) => x.que), ...uno.modelo.advertencias.map((x) => x.que)];
+      if (!alarmas.length) ok("panel: el arnés de este repo sale sin alarmas");
+      else bad("panel sin alarmas sobre el repo real", alarmas.slice(0, 3).join(" · "));
+    } catch (e) {
+      bad("panel genera sobre este repo", e.message);
+    } finally {
+      fs.rmSync(t1, { recursive: true, force: true });
+      fs.rmSync(t2, { recursive: true, force: true });
+    }
+
+    // 11d. P2: las advertencias de la memoria muerden. Un incidente sin mecanismo, un mecanismo que
+    //      apunta a la nada y un principio BLOCKING sin comando tienen que salir con nombre.
+    const cebo = temporal("harness-panel-cebo-");
+    try {
+      escribir(cebo, "STATUS.md", "# STATUS\n\n- **Veredicto:** ROJO\n");
+      escribir(cebo, "docs/gotchas.md", "### GOTCHA: sin mecanismo\n\nSíntoma: a\nCausa: b\nRegla: c\n\n### GOTCHA: puntero muerto\n\nSíntoma: a\nCausa: b\nRegla: c\nMecanismo: `scripts/nada.mjs`\n"); // linkcheck:ignore — cebo
+      escribir(cebo, "CONSTITUTION.md", "# C\n\n## P1 — Algo · BLOCKING\n\nSin mecanismo.\n");
+      const cfgCebo = { status: { file: "STATUS.md" }, incidents: { file: "docs/gotchas.md", requiredLines: ["Síntoma:", "Causa:", "Regla:", "Mecanismo:"] }, docs: { proseRoots: ["docs", "scripts"] } };
+      const m = construirModelo(cebo, { config: cfgCebo, settings: {} });
+      const todo = m.advertencias.map((x) => x.que).join("\n");
+      const esperadas = [
+        ["un incidente sin Mecanismo", /gotcha 1 .*sin Mecanismo/],
+        ["un mecanismo que apunta a la nada", /scripts\/nada\.mjs/],
+        ["un principio BLOCKING sin mecanismo", /P1 .*BLOCKING/],
+      ];
+      const faltan = esperadas.filter(([, re]) => !re.test(todo)).map(([n]) => n);
+      // La guía ausente se dice en «Fuentes», no como alarma: ningún comando la pone en rojo.
+      if (!m.faltantes.includes("CLAUDE.md") || /CLAUDE\.md/.test(todo)) faltan.push("la guía ausente como faltante y no como alarma");
+      if (!faltan.length && m.estado.veredicto?.tono === "rojo") ok(`panel: la memoria avisa ${esperadas.map(([n]) => n).join(", ")}`);
+      else bad("panel: advertencias de la memoria", `no avisó: ${faltan.join(", ") || "el veredicto ROJO"} · dijo: ${todo.slice(0, 200)}`);
+
+      // 11e. P2: las alarmas de la salud muerden. Cada una es la versión visible de algo que ya
+      //      pone rojo a otro comando; si el panel no la ve, pinta verde un arnés muerto.
+      escribir(cebo, "scripts/freno.mjs", "export {};\n"); // linkcheck:ignore — cebo
+      const salud = construirArnes(cebo, {
+        config: {
+          install: { activators: { "scripts/freno.mjs": "claveQueNoEsta" } }, // linkcheck:ignore — cebo
+          drift: { runner: ".github/workflows/nadie.yml" }, // linkcheck:ignore — cebo
+          reviewerEval: { command: ["revisor"] },
+          gate: { signals: [{ name: "sin porqué", command: ["node", "-v"] }] },
+        },
+        settings: { hooks: { Stop: [{ hooks: [{ type: "command", command: "node .claude/hooks/no-existe.mjs" }] }] } }, // linkcheck:ignore — cebo
+      });
+      const dicho = salud.alarmas.map((x) => x.que).join("\n");
+      const muerden = [
+        ["un freno instalado sin su clave", /instalado y .*claveQueNoEsta|claveQueNoEsta/],
+        ["un hook declarado que no existe", /no-existe\.mjs/],
+        ["un control fuera del gate sin runner", /nadie\.yml/],
+        ["una señal sin why", /sin porqué/],
+        ["un control encendido sin runner", /reviewerEval.* no declara .runner/],
+      ];
+      const mudas = muerden.filter(([, re]) => !re.test(dicho)).map(([n]) => n);
+      if (!mudas.length) ok(`panel: la salud alarma ${muerden.map(([n]) => n).join(", ")}`);
+      else bad("panel: alarmas de la salud", `no alarmó: ${mudas.join(", ")}`);
+    } catch (e) {
+      bad("panel: cebos", e.message);
+    } finally {
+      fs.rmSync(cebo, { recursive: true, force: true });
+    }
+
+    // 11d-bis. Un config de OTRA versión del arnés no tumba el panel. Lo destapó el portado a un
+    //      repo real: su `purity` era un objeto (formato viejo) y el panel reventaba en vez de
+    //      leerlo como la única regla que es. Formas inesperadas se toleran; una regla, se lee.
+    {
+      const viejo = temporal("harness-panel-viejo-");
+      try {
+        const cfgViejo = {
+          purity: { dir: "src/lib", forbiddenImports: ["react"], except: ["src/lib/x.ts"] }, // linkcheck:ignore — cebo
+          reuse: { pattern: "fetch\\(", see: "src/api.ts" }, // linkcheck:ignore — cebo
+          gate: { signals: "no-es-una-lista" },
+          install: { activators: ["no-es-un-mapa"] },
+          observability: { budgets: null },
+        };
+        const m = construirModelo(viejo, { config: cfgViejo, settings: { hooks: { Stop: "tampoco" } } });
+        if (m.reglas.frenos.purity.length === 1 && m.reglas.frenos.reuse.length === 1 && m.arnes) ok("panel: un config de otra versión (reglas sueltas en vez de listas) se lee sin reventar");
+        else bad("panel tolera un config de otra versión", `purity ${m.reglas.frenos.purity.length} · reuse ${m.reglas.frenos.reuse.length}`);
+      } catch (e) {
+        bad("panel tolera un config de otra versión", e.message);
+      } finally {
+        fs.rmSync(viejo, { recursive: true, force: true });
+      }
+    }
+
+    // 11e-bis. Los defaults de STATUS son los de la plantilla que el instalador deja: copiados a
+    //      mano en el código, se desincronizan en silencio el día que cambie un título.
+    {
+      const plantilla = abs("plantillas/STATUS.md");
+      if (!fs.existsSync(plantilla)) skip("panel lee la plantilla de STATUS", "no hay plantillas/STATUS.md");
+      else {
+        const { leerStatus } = await import(url("leer-fuentes.mjs"));
+        const e = leerStatus(fs.readFileSync(plantilla, "utf8"));
+        if (e.veredicto && e.fechaGate && e.senales.length) ok("panel: con sus defaults lee la plantilla de STATUS (veredicto, fecha y tabla de señales)");
+        else bad("panel lee la plantilla de STATUS", `veredicto ${Boolean(e.veredicto)} · fecha ${e.fechaGate} · señales ${e.senales.length}: los defaults de \`panel.status\` no casan con plantillas/STATUS.md`);
+      }
+    }
+
+    // 11f. «Siempre se genera»: el gate regenera el panel y escribe su registro en CADA corrida,
+    //      también la roja — que es cuando más sirve mirarlo. Un repo git temporal con una señal
+    //      verde y una roja, y el gate y el panel copiados tal cual.
+    const repo = temporal("harness-panel-gate-");
+    try {
+      for (const rel of ["scripts/gate.mjs", ".claude/hooks/harness.mjs", "scripts/harness-map.mjs", ...modulos.map((f) => `scripts/panel/${f}`)]) {
+        escribir(repo, rel, fs.readFileSync(abs(rel), "utf8"));
+      }
+      escribir(
+        repo,
+        ".claude/harness.config.json",
+        JSON.stringify({
+          gate: {
+            signals: [
+              { name: "pasa", command: ["node", "-e", "process.exit(0)"], why: "cebo" },
+              { name: "falla", command: ["node", "-e", "process.exit(3)"], why: "cebo" },
+            ],
+          },
+          panel: { tokens: false },
+        }),
+      );
+      spawnSync("git", ["init", "-q"], { cwd: repo });
+      const r = spawnSync("node", ["scripts/gate.mjs"], { cwd: repo, encoding: "utf8" });
+      let registro = null;
+      try {
+        registro = JSON.parse(fs.readFileSync(path.join(repo, ".git/harness-gate.json"), "utf8"));
+      } catch {
+        registro = null;
+      }
+      const html = path.join(repo, ".git/harness-panel/index.html");
+      const bien = r.status === 1 && registro?.veredicto === "rojo" && registro.senales?.pasa?.estado === "verde" && registro.senales?.falla?.estado === "rojo" && fs.existsSync(html);
+      if (bien) ok("panel: el gate rojo igual escribe su registro por señal y regenera el panel");
+      else bad("panel: el gate lo regenera siempre", `exit ${r.status}; registro ${JSON.stringify(registro?.senales ?? null).slice(0, 160)}; panel ${fs.existsSync(html) ? "sí" : "no"} · ${`${r.stdout}`.trim().split("\n").slice(-3).join(" · ")}`);
+
+      // 11f-bis. P5: el panel NO puede decidir el veredicto. Lo cazó el reviewer: con el panel en el
+      //      mismo proceso, un `process.exit(0)` adentro volvía VERDE a un gate rojo —y borraba el
+      //      marcador—; y un panel colgado colgaba al gate. Dos sabotajes, el mismo gate rojo.
+      const marcador = path.join(repo, ".git/gate-dirty");
+      const cfgSabotaje = JSON.parse(fs.readFileSync(path.join(repo, ".claude/harness.config.json"), "utf8"));
+      cfgSabotaje.gate.marker = ".git/gate-dirty";
+      cfgSabotaje.panel.timeoutMs = 1500;
+      escribir(repo, ".claude/harness.config.json", JSON.stringify(cfgSabotaje));
+      const sabotajes = [
+        ["un panel que sale con exit 0", "scripts/panel/plantilla.mjs", "export const renderizarHtml = () => ''; process.exit(0);\n"],
+        // Se cuelga DE VERDAD: exporta lo que el gate espera y nunca termina. Sin exports, el
+        // import fallaría y el caso pasaría por el motivo equivocado.
+        ["un panel colgado", "scripts/panel/generar.mjs", "export const resumen = () => ({ lineas: [] });\nexport async function generarPanel() { setInterval(() => {}, 1000); return new Promise(() => {}); }\nif (process.argv[1]?.endsWith('generar.mjs')) await generarPanel();\n"],
+      ];
+      for (const [nombre, rel, codigo] of sabotajes) {
+        escribir(repo, rel, codigo);
+        fs.writeFileSync(marcador, "sucio");
+        const t0 = Date.now();
+        const s = spawnSync("node", ["scripts/gate.mjs"], { cwd: repo, encoding: "utf8", timeout: 30000 });
+        const ms = Date.now() - t0;
+        if (s.status === 1 && fs.existsSync(marcador) && ms < 20000) ok(`panel: ${nombre} no cambia el veredicto de un gate rojo (exit 1, marcador intacto, ${ms} ms)`);
+        else bad(`panel: ${nombre} no decide el gate`, `exit ${s.status}${s.error ? ` (${s.error.code})` : ""}; marcador ${fs.existsSync(marcador) ? "intacto" : "BORRADO"}; ${ms} ms`);
+        escribir(repo, rel, fs.readFileSync(abs(rel), "utf8"));
+      }
+    } catch (e) {
+      bad("panel: el gate lo regenera siempre", e.message);
+    } finally {
+      fs.rmSync(repo, { recursive: true, force: true });
+    }
+
+    // 11g. En un worktree `.git` es un archivo: el destino por defecto se resuelve a su gitdir, o
+    //      el panel desaparece justo donde trabajan los agentes en paralelo.
+    const wt = temporal("harness-panel-wt-");
+    try {
+      fs.writeFileSync(path.join(wt, ".git"), "gitdir: ../gitdir-real\n");
+      const destino = resolverSalida(wt, ".git/harness-panel");
+      if (destino === path.join(path.resolve(wt, "../gitdir-real"), "harness-panel")) ok("panel: en un worktree escribe en el gitdir real");
+      else bad("panel en worktree", `resolvió ${destino}`);
+    } finally {
+      fs.rmSync(wt, { recursive: true, force: true });
+    }
+
+    // 11i. El burn-down sale de los DATOS y de nada más. Un repo git temporal con commits de fecha
+    //      fija: la serie tiene que ser exacta, un merge no puede contar dos veces lo que trae, lo
+    //      tildado sin commitear se ve aparte, y dos corridas dan la misma versión (sin reloj).
+    //      Sin fuente del plan: OMITIDO con motivo, nunca «0 %».
+    {
+      const { serieDesdeEventos } = await import(url("leer-plan.mjs"));
+      const planRepo = temporal("harness-panel-plan-");
+      try {
+        const git = (args, fecha) =>
+          spawnSync("git", args, { cwd: planRepo, encoding: "utf8", env: { ...process.env, ...(fecha ? { GIT_AUTHOR_DATE: `${fecha}T12:00:00Z`, GIT_COMMITTER_DATE: `${fecha}T12:00:00Z` } : {}) } });
+        const tareas = "specs/001-x/tasks.md"; // linkcheck:ignore — archivo del repo temporal
+        const commit = (contenido, fecha) => {
+          escribir(planRepo, tareas, contenido);
+          git(["add", tareas]);
+          git(["commit", "-q", "-m", fecha], fecha);
+        };
+        git(["init", "-q", "-b", "main"]);
+        git(["config", "user.email", "selftest@example.com"]);
+        git(["config", "user.name", "selftest"]);
+        commit("- [ ] a\n- [ ] b\n- [ ] c\n", "2026-09-01");
+        commit("- [x] a\n- [ ] b\n- [ ] c\n- [ ] d\n", "2026-09-03");
+        git(["checkout", "-q", "-b", "feat/e"]);
+        commit("- [x] a\n- [ ] b\n- [ ] c\n- [ ] d\n- [ ] e\n", "2026-09-04");
+        git(["checkout", "-q", "main"]);
+        git(["merge", "-q", "--no-ff", "-m", "merge", "feat/e"], "2026-09-05");
+        escribir(planRepo, tareas, "- [x] a\n- [x] b\n- [ ] c\n- [ ] d\n- [ ] e\n");
+        const cfgPlan = { tracker: { artifactsIn: "repo" }, workflow: { baseBranch: "main" } };
+        const uno = construirModelo(planRepo, { config: cfgPlan, settings: {} });
+        const dos = construirModelo(planRepo, { config: cfgPlan, settings: {} });
+        const serie = uno.plan.serie.map((q) => `${q.fecha ?? "árbol"}:${q.hechas}/${q.total}`).join(" ");
+        const esperada = "2026-09-01:0/3 2026-09-03:1/4 2026-09-05:1/5 árbol:2/5";
+        if (serie === esperada && uno.version === dos.version && uno.plan.resumen.alcanceInicial === 3) ok("panel: el burn-down del repo sale exacto de la historia (merge sin doble conteo, lo no commiteado aparte, sin reloj)");
+        else bad("panel: burn-down del repo", `serie «${serie}», esperaba «${esperada}»; versiones ${uno.version} / ${dos.version}`);
+      } catch (e) {
+        bad("panel: burn-down del repo", e.message);
+      } finally {
+        fs.rmSync(planRepo, { recursive: true, force: true });
+      }
+
+      const { serie: ev, sinFecha } = serieDesdeEventos([
+        { createdAt: "2026-09-01T10:00:00Z", closedAt: "2026-09-04T09:00:00Z" },
+        { createdAt: "2026-09-01", closedAt: null },
+        { createdAt: "2026-09-02" },
+        { title: "sin fecha" },
+        { createdAt: "2026-09-01", inPlan: false },
+      ]);
+      const serieEv = ev.map((q) => `${q.fecha}:${q.hechas}/${q.total}`).join(" ");
+      if (serieEv === "2026-09-01:0/2 2026-09-02:0/3 2026-09-04:1/3" && sinFecha === 1) ok("panel: el burn-down del gestor sale de createdAt/closedAt, lo que no trae fecha no se inventa y lo citado fuera del plan no es alcance");
+      else bad("panel: burn-down del gestor", `serie «${serieEv}» · sin fecha ${sinFecha}`);
+
+      const vacio = temporal("harness-panel-sinplan-");
+      try {
+        const sinComando = construirModelo(vacio, { config: { tracker: { artifactsIn: "tracker" } }, settings: {} }).plan;
+        const sinFuente = construirModelo(vacio, { config: {}, settings: {} }).plan;
+        if (sinComando.estado === "omitido" && !sinComando.resumen && /panel\.tracker\.command/.test(sinComando.motivo) && sinFuente.estado === "omitido" && /artifactsIn/.test(sinFuente.motivo)) ok("panel: sin fuente del plan el burn-down sale OMITIDO con su motivo, nunca 0 %");
+        else bad("panel: plan omitido", `${JSON.stringify(sinComando).slice(0, 120)} · ${JSON.stringify(sinFuente).slice(0, 120)}`);
+      } finally {
+        fs.rmSync(vacio, { recursive: true, force: true });
+      }
+    }
+
+    // 11h. El contrato con el gestor, sin ninguna forja: las citas salen de `tracker.issuePattern`
+    //      y un comando que falla es «sin dato» con su error, nunca una lista vacía.
+    const patron = config.tracker?.issuePattern ?? "(^|[^A-Za-z0-9_])#[0-9]+";
+    const citas = leerCitas({ "STATUS.md": "bloqueado por #12 y por #7\n```\n#99 en código no cuenta\n```\n" }, [patron]);
+    const spec = { command: ["gestor"], timeoutMs: 1000, closedStates: ["closed"] };
+    const leido = leerGestor(REPO_ROOT, spec, ["#7"], () => ({ status: 0, stdout: JSON.stringify({ items: [{ id: "#7", title: "x", state: "closed" }] }), stderr: "" }));
+    const caido = leerGestor(REPO_ROOT, spec, [], () => ({ status: 1, stdout: "", stderr: "sin credenciales" }));
+    if (citas.map((c) => c.id).join(",") === "#7,#12" && leido.ok && leido.items[0].cerrado && !caido.ok && /sin credenciales/.test(caido.error)) ok("panel: las citas salen del patrón del gestor y un gestor caído es «sin dato» con su error");
+    else bad("panel: contrato con el gestor", `citas ${citas.map((c) => c.id).join(",")} · leído ${JSON.stringify(leido).slice(0, 120)} · caído ${JSON.stringify(caido).slice(0, 120)}`);
   }
 }
 

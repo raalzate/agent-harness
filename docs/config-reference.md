@@ -38,6 +38,7 @@ tocás una clave.
 | `codeGlobs` | qué rutas cuentan como **código**. Editar un `.md` no ensucia el gate; editar `src/` sí |
 | `codeExtensions` | qué **extensiones** cuentan como código. Vacío = el hook usa un superconjunto agnóstico (JS, .NET, JVM, Python, Go, Rust, C/C++). Estaba cableada en `post-edit-check.mjs`: por eso el freno de mayor retorno estaba muerto en todo repo que no fuera JS/TS |
 | `installHooksCommand` | el comando que instala los hooks de git **en este repo**. Lo nombra `session-start` cuando `core.hooksPath` no está puesto: un aviso que cita un comando inexistente se ignora completo |
+| `registry` | dónde escribe `gate.mjs` el resultado de cada corrida, por señal (último resultado y último verde). Default `.git/harness-gate.json`: es de **esta** máquina y no se versiona. Lo lee el panel para mostrar lo que corrió de verdad y no lo que dice la prosa |
 | `signals[].name` | lo que se imprime |
 | `signals[].command` | array argv. Sin shell y sin `eval`: ningún dato del config se interpola en una línea de comandos |
 | `signals[].why` | por qué esta señal no la cubre otra. **Obligatorio** (el self-test lo exige): es lo único que va a defender a la señal cuando tarde y alguien la quiera sacar |
@@ -561,6 +562,48 @@ costo y todavía no tiene comando; está declarado como deuda en `STATUS.md`.
 
 ---
 
+## `panel` — el panel del arnés (opcional)
+
+```json
+{ "out": ".git/harness-panel",
+  "sources": { "guide": "CLAUDE.md", "constitutions": ["CONSTITUTION.md"], "manifest": "package.json" },
+  "tasks": { "manifest": "package.json", "key": "scripts", "invocation": "npm run" },
+  "repos": [{ "name": "api", "path": "../api", "base": "main" }],
+  "probes": [{ "name": "api local", "url": "http://localhost:3000/health" }],
+  "tracker": { "command": ["node", "tools/gestor-a-json.mjs"], "closedStates": ["closed", "done"] },
+  "tokens": true }
+```
+
+Un HTML autocontenido con la salud del arnés, la memoria del repo y el estado de esta máquina.
+Lo regenera `scripts/gate.mjs` en **cada** corrida (verde o roja); a mano,
+`node scripts/panel/generar.mjs`. Todas las claves son opcionales: sin `panel` sale igual, y lo
+que no se declara se deduce de claves que ya existen antes que de un literal. Ver `docs/panel.md`.
+
+| Campo | Qué controla |
+|---|---|
+| `enabled` | `false` apaga el panel, también el que regenera el gate |
+| `timeoutMs` | cuánto espera el gate al panel (default 60000). El gate lo corre como proceso hijo e **ignora** su exit code: el panel no decide el veredicto, y uno colgado no cuelga al gate |
+| `out` | dónde se escribe. Default `.git/harness-panel`: el arnés no escribe en el árbol de fuentes (P7), y `.git/` existe en todo repo sin que ningún `.gitignore` lo nombre. En un worktree se resuelve el `gitdir` real |
+| `sources.guide` | la guía del agente: de su sección «Qué es…» (`project.summaryHeading`) sale la presentación |
+| `sources.constitutions` | los archivos con principios `## P1 — Título · BLOCKING`. El prefijo se lee del encabezado, no se configura |
+| `sources.manifest` | un manifiesto JSON con `name`/`description`. Sin él: el `# título` del README, y si no, la carpeta |
+| `tasks` | cómo se invoca una tarea en este stack (`npm run`, `make`, `just`). Sin esto el panel no extrae tareas de la prosa: adivinar el ejecutor de otro stack es cablear un lenguaje. `manifest` + `key` sólo sirven para un manifiesto JSON; con `make` o `just` se declara sólo `invocation` y las tareas se muestran **sin verificar** |
+| `scopes`, `forms` | `[{ pattern, label }]`: de qué pieza del arnés y de qué forma es cada ruta citada. Las etiquetas de las tarjetas salen de acá. Default: el layout que deja el instalador, más `tests.filePattern` como `test` |
+| `status.sections`, `status.fields` | los títulos de sección y los campos de `status.file` que el panel lee (default: los de `plantillas/STATUS.md`) |
+| `citations` | `{ patterns, sources }`: qué cuenta como cita a un ítem de trabajo y en qué archivos se busca. Default: `tracker.issuePattern` sobre `status.file` |
+| `tracker.command` | argv que devuelve por stdout `{ "items": [{ id, title, state, url?, type?, createdAt?, closedAt? }], "summary"?: { total, closed } }`. Con `createdAt`/`closedAt` (y sin `inPlan: false`), esos ítems alimentan el burn-down cuando el plan vive en el gestor (una sola llamada para las dos cosas). Recibe los ids citados como argumentos. El panel no conoce ninguna forja: el adaptador lo escribe el repo |
+| `plan.source` | de dónde sale el burn-down: `auto` (default: sigue a `tracker.artifactsIn`), `repo`, `tracker` o `none`. Sin fuente sale **OMITIDO** con su motivo, nunca 0 % |
+| `plan.files` | en el repo, los archivos del plan (glob de git). Default: `<tracker.specsDir>/**/tasks.md`. Se recorre la historia de `plan.branch` (default `workflow.baseBranch`) con un solo `git log --first-parent`: un merge no cuenta dos veces |
+| `plan.done`, `plan.pending` | regex de casilla hecha y pendiente. Default `- [x]` / `- [ ]` |
+| `plan.dueDate` | `AAAA-MM-DD`: la fecha objetivo. Con ella se dibuja la línea ideal; sin ella no se inventa ritmo |
+| `repos` | otros árboles de git que se muestran junto a la raíz (monorepo, repos hermanos) |
+| `probes` | servicios locales que se sondean con un GET (responde = status < 500) |
+| `tokens` | `false` = no leer las transcripciones locales de Claude Code |
+| `live` | `false` = sólo la memoria (determinista byte a byte) |
+| `command` | lo que el panel dice que se corra para regenerarlo |
+
+---
+
 ## `install` — qué clave activa cada freno que viaja
 
 ```json
@@ -703,7 +746,9 @@ sin control se informa como hueco. Ver [guias-y-sensores.md](guias-y-sensores.md
 | `coherence` | `scripts/repo-lint.mjs` (regla `COHERENCIA`), self-test (4e-bis) |
 | `drift` (y `status.file`, `patterns`, `reuse`) | `scripts/drift-check.mjs` (lo invoca `.github/workflows/drift.yml`), self-test (10a) |
 | `reviewerEval` | `scripts/reviewer-eval.mjs` (lo invoca `.github/workflows/drift.yml`), self-test (10b) |
-| `taxonomy` | `scripts/harness-map.mjs`, self-test (10c) |
+| `taxonomy` | `scripts/harness-map.mjs`, el panel (pestaña Salud, misma función `construirMapa`), self-test (10c) |
+| `panel` (y `status`, `incidents`, `tracker`, `tests`, `docs.proseRoots`, `install.activators`, toda clave con `runner`) | `scripts/panel/` (lo invoca `scripts/gate.mjs` al final de cada corrida), self-test (11) |
+| `gate.registry` | `scripts/gate.mjs` (lo escribe), `scripts/panel/leer-en-vivo.mjs` (lo lee) |
 
 Todo lo que aparece en esta tabla lo verifica `node scripts/harness-selftest.mjs`: una ruta que no
 existe o un regex que no compila es **gate rojo**, no un misterio de la semana que viene.

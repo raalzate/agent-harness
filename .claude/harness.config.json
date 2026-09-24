@@ -347,6 +347,23 @@
       }
     ]
   },
+  "panel": {
+    "$comment": "EL PANEL DEL ARNÉS: la salud del arnés (mapa, frenos instalados y su clave, hooks, controles fuera del gate), la memoria del repo (STATUS, incidentes, constitución, reglas) y la capa en vivo de esta máquina (git, registro del gate, sondas, gestor, tokens) en un HTML autocontenido. Lo regenera `scripts/gate.mjs` en CADA corrida, así que nunca es más viejo que el último gate; a mano: `node scripts/panel/generar.mjs`. Todas las claves son opcionales: sin `panel`, sale igual con defaults agnósticos. `out` va dentro de `.git/` porque el arnés no escribe en el árbol de fuentes (P7). `tasks` dice cómo se invoca una tarea en ESTE stack, para verificar que las que cita la memoria existan. Ver docs/panel.md.",
+    "out": ".git/harness-panel",
+    "sources": {
+      "guide": "CLAUDE.md",
+      "constitutions": [
+        "CONSTITUTION.md"
+      ],
+      "manifest": "package.json"
+    },
+    "tasks": {
+      "manifest": "package.json",
+      "key": "scripts",
+      "invocation": "npm run"
+    },
+    "tokens": true
+  },
   "status": {
     "file": "STATUS.md",
     "reminder": "Recordá: nada se entrega sin `npm run gate` verde · índice de símbolos (Serena) antes de abrir archivos · lecciones con `/lesson`."

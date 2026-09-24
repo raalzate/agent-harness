@@ -207,6 +207,15 @@ const COPIAR = [
   // y la deriva. Genéricos: todo lo que saben sale de `taxonomy` y `drift` en el config.
   "scripts/harness-map.mjs",
   "scripts/drift-check.mjs",
+  // El panel: se regenera en cada corrida del gate, así que sin estos archivos el gate del
+  // repo destino dice «Panel: no instalado». Genérico: sin la clave `panel` sale con defaults.
+  "scripts/panel/generar.mjs",
+  "scripts/panel/sincronizar.mjs",
+  "scripts/panel/leer-fuentes.mjs",
+  "scripts/panel/leer-arnes.mjs",
+  "scripts/panel/leer-en-vivo.mjs",
+  "scripts/panel/leer-plan.mjs",
+  "scripts/panel/plantilla.mjs",
   // Documentos AGNÓSTICOS que el arnés instalado cita: sin ellos, el propio arnés arranca
   // apuntando a la nada en el repo destino (P10 violado por el instalador). Lo destapó el
   // banco de perfiles: `docs-linkcheck` del repo portado salía rojo el primer día.
@@ -223,6 +232,8 @@ const COPIAR = [
   "docs/ciclo-desarrollo.md",
   "docs/multi-proyecto.md",
   "docs/multiplataforma.md",
+  // Lo cita el panel (sus scripts y la página que genera).
+  "docs/panel.md",
   ".githooks/pre-commit",
   ".githooks/commit-msg",
   ".githooks/pre-push",

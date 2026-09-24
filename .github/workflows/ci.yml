@@ -26,6 +26,17 @@ jobs:
       # Sin `npm ci`: el arnés no tiene dependencias a propósito (sólo node).
       - name: gate
         run: npm run gate
+      # El panel del arnés de ESTA corrida, adjunto como artefacto (docs/panel.md). Corre aunque
+      # el gate salga rojo: es justo cuando más sirve mirarlo. Una sola plataforma basta: es
+      # el mismo repo, y tres copias del mismo HTML no dicen nada nuevo.
+      - name: panel
+        if: always() && matrix.os == 'ubuntu-latest'
+        run: node scripts/panel/generar.mjs --salida "${{ runner.temp }}/panel"
+      - uses: actions/upload-artifact@v4
+        if: always() && matrix.os == 'ubuntu-latest'
+        with:
+          name: panel-del-arnes
+          path: ${{ runner.temp }}/panel
 
   # El banco completo, incluido el gate de cada repo portado: ~75s, así que no va en el gate
   # del desarrollador (ahí corre el modo rápido, sin el gate del destino).

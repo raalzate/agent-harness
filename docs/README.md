@@ -19,6 +19,7 @@ El orden que funciona: **el método** (qué se hace y por qué) → **el caso** 
 | [decisions/0004-contrato-de-hooks.md](decisions/0004-contrato-de-hooks.md) | El contrato de exit codes, y por qué un arnés roto **deja pasar** en vez de bloquear. |
 | [decisions/0005-indice-obligatorio.md](decisions/0005-indice-obligatorio.md) | Por qué el índice del código pasó de recomendación a requisito, y por qué su señal se omite en vez de fallar. |
 | [decisions/0007-controles-fuera-del-gate.md](decisions/0007-controles-fuera-del-gate.md) | Por qué `--verify-red`, la deriva y la prueba del reviewer no van en el gate, y cómo se evita que queden instalados y muertos (`runner`). |
+| [decisions/0009-panel-del-arnes.md](decisions/0009-panel-del-arnes.md) | Por qué el gate regenera el panel en cada corrida, y por qué como proceso hijo cuyo exit code se ignora: el panel se mira, no decide el veredicto. |
 | [guias-y-sensores.md](guias-y-sensores.md) | **El marco de *harness engineering* (Böckeler, martinfowler.com), aplicado.** Guías y sensores, computacional e inferencial, mantenibilidad / arquitectura / comportamiento: qué mecanismo de este arnés cubre cada idea y qué huecos quedan declarados. |
 | [agilidad.md](agilidad.md) | **Qué principio ágil tiene mecanismo y cuál es prosa.** Diez principios con el comando que falla cuando se violan, y la lista explícita de lo que este arnés NO hace cumplir. |
 | [ciclo-desarrollo.md](ciclo-desarrollo.md) | **El modelo de ramas y las prácticas de XP, declarados.** `workflow` (trunk-based, git flow, GitHub flow) y `xp` (test primero, lote chico, refactor separado, de a dos): qué se verifica con un comando, qué se declara y no se finge verificado. |
@@ -37,6 +38,7 @@ El orden que funciona: **el método** (qué se hace y por qué) → **el caso** 
 | [cicd.md](cicd.md) | **El pipeline.** El mismo gate en tres lugares (humano, agente, CI), las cuatro reglas del pipeline y qué hacer cuando el gate tarda. |
 | [multiplataforma.md](multiplataforma.md) | **Windows, macOS y Linux.** Qué corre con qué intérprete, las seis trampas que hacían que un freno no fallara sino que desapareciera, y la matriz de CI que lo demuestra. |
 | [multi-proyecto.md](multi-proyecto.md) | **Varios proyectos.** Monorepo, varios repos o una plataforma entera: dónde va el gate, qué viaja entre repos y qué no, cómo se actualiza el arnés en N proyectos sin quedar desparejo. |
+| [panel.md](panel.md) | **El panel del arnés.** Una página que se regenera en cada gate: la salud del arnés (mapa, frenos instalados y muertos, hooks, controles fuera del gate), la memoria del repo y lo que corrió de verdad en esta máquina. Cómo se configura en cualquier stack y cómo se conecta a tu gestor sin que el arnés conozca ninguna forja. |
 | [recetas.md](recetas.md) | Recetas por situación: cómo se ve el gate en cada stack, cómo se agrega una señal, cómo se mide si el arnés está vivo. |
 
 ## 3. Este repo (el ejemplo trabajando)

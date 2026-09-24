@@ -19,6 +19,8 @@
     "timing:rules": "node scripts/hooks-timing.mjs --rules",
     "drift": "node scripts/drift-check.mjs",
     "eval:reviewer": "node scripts/reviewer-eval.mjs",
-    "map": "node scripts/harness-map.mjs"
+    "map": "node scripts/harness-map.mjs",
+    "panel": "node scripts/panel/generar.mjs",
+    "panel:sync": "node scripts/panel/sincronizar.mjs"
   }
 }

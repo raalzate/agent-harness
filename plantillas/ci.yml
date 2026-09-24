@@ -41,3 +41,14 @@ jobs:
 
       - name: gate
         run: node scripts/gate.mjs
+
+      # El panel del arnés de esta corrida, como artefacto (docs/panel.md). Corre aunque el gate
+      # salga rojo: es justo cuando más sirve mirarlo.
+      - name: panel
+        if: always()
+        run: node scripts/panel/generar.mjs --salida "${{ runner.temp }}/panel"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: panel-del-arnes
+          path: ${{ runner.temp }}/panel

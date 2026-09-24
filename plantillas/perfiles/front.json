@@ -101,5 +101,16 @@
       ".svelte-kit",
       ".angular"
     ]
+  },
+  "panel": {
+    "$tasks": "Cómo se invoca una tarea en este stack: con esto el panel verifica que las tareas que cita la memoria existan en el manifiesto (docs/panel.md).",
+    "tasks": {
+      "manifest": "package.json",
+      "key": "scripts",
+      "invocation": "npm run"
+    },
+    "sources": {
+      "manifest": "package.json"
+    }
   }
 }

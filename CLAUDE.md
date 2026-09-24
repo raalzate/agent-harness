@@ -36,6 +36,7 @@ scripts/harness-selftest.mjs  prueba de vida: genera los casos DESDE el config
 scripts/harness-bench.mjs     el arnés instalado en un repo real de cada stack (el encaje)
 scripts/harness-init.mjs      instalador en otro repo (dry-run por defecto, con perfil de stack)
 scripts/hooks-timing.mjs      el costo del arnés: latencia de cada hook contra su presupuesto
+scripts/panel/                el panel: salud del arnés + memoria + esta máquina (lo regenera el gate)
 plantillas/perfiles/          8 perfiles de stack: hechos del lenguaje, nunca reglas
 plantillas/ examples/ docs/   lo que se copia y lo que se lee
 ```
@@ -87,6 +88,7 @@ npm run timing         # ¿cuánto cuesta el arnés en cada prompt y en cada edi
 npm run timing:rules   # ¿qué presupuesto de latencia rige cada hook?
 npm run map            # ¿qué guía, freno o sensor actúa en cada etapa, y dónde hay huecos?
 npm run drift          # ¿algo se degradó sin que nadie lo tocara? (lo corre drift.yml, semanal)
+npm run panel          # la salud del arnés en una página (el gate ya lo regenera en cada corrida)
 npm run eval:reviewer  # ¿el reviewer encuentra lo que dice encontrar? (caro: fuera del gate)
 ```
 
@@ -120,6 +122,7 @@ npm run eval:reviewer  # ¿el reviewer encuentra lo que dice encontrar? (caro: f
 | portarlo a .NET, JVM, Python, Go, Rust, front | `docs/perfiles.md` |
 | qué hace cada clave del config | `docs/config-reference.md` |
 | el arnés de ESTE repo | `docs/arnes.md` |
+| el panel del arnés (salud, memoria, esta máquina) | `docs/panel.md` |
 | recetas concretas | `docs/recetas.md` |
 | incidentes | `docs/gotchas.md` (formato fijo, lo exige el lint) |
 | por qué está hecho así | `docs/decisions/` |
