@@ -26,6 +26,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
+import { existeEjecutable } from "../.claude/hooks/harness.mjs";
 import { fileURLToPath } from "node:url";
 
 const REPO_ROOT = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
@@ -99,6 +100,12 @@ for (const caso of casos) {
   } catch {
     console.error(`reviewer-eval: el caso \`${caso.name}\` apunta a \`${caso.diff}\`, que no existe.`);
     process.exit(1);
+  }
+  // Antes de lanzarlo: en Windows (shell) una CLI ausente no es ENOENT sino un exit 1, y el eval
+  // salía ROTO en vez de OMITIDO (ver `existeEjecutable`).
+  if (!existeEjecutable(cmd)) {
+    console.log(`reviewer-eval: OMITIDA — \`${cmd}\` no está instalado en esta máquina. Omitido no es verde.`);
+    process.exit(0);
   }
   const aislado = armarContexto();
   const r = spawnSync(cmd, cmdArgs, {

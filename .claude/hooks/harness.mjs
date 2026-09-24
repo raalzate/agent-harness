@@ -326,3 +326,18 @@ export function resolverEjecutable(cmd) {
   }
   return cmd; // que falle con su propio mensaje: adivinar acá sería peor
 }
+
+/**
+ * ¿El ejecutable existe en esta máquina? Se pregunta ANTES de lanzarlo, en vez de deducirlo del
+ * error: en Windows los comandos del config corren a través de `cmd.exe` (Node no lanza un
+ * `.cmd` como `npm` sin shell), y ahí un binario ausente no es `ENOENT` sino un exit 1 con
+ * «no se reconoce como comando». Lo destapó la matriz de CI: `--verify-red` tomaba ese exit 1 por
+ * «las pruebas fallan» (un falso verde) y el eval del revisor por un eval roto en vez de OMITIDO.
+ */
+export function existeEjecutable(cmd, plataforma = process.platform) {
+  if (!cmd) return false;
+  if (cmd.includes("/") || cmd.includes("\\")) return fs.existsSync(path.resolve(REPO_ROOT, cmd));
+  const exts = plataforma === "win32" ? ["", ...(process.env.PATHEXT ?? ".COM;.EXE;.BAT;.CMD").split(";").filter(Boolean)] : [""];
+  const dirs = (process.env.PATH ?? "").split(path.delimiter).filter(Boolean);
+  return dirs.some((dir) => exts.some((ext) => fs.existsSync(path.join(dir, cmd + ext))));
+}
