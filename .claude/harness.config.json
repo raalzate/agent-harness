@@ -104,6 +104,13 @@
       "reason": "guía de fondo: se enmienda a conciencia, en su propio commit, no como efecto colateral de otra tarea."
     }
   ],
+  "writeTools": {
+    "$comment": "Qué herramientas de un servidor MCP ESCRIBEN EN EL REPO y dónde traen la ruta y el contenido. `settings.json` manda TODAS las `mcp__*` a los frenos de escritura; `pattern` separa las que escriben (por el verbo del nombre, no por servidor) y las de lectura salen en la primera línea del hook. Un verbo de escritura cuenta sólo si trae un campo de `pathFields` (se evalúan TODOS: un `move` trae dos) o si `broadPattern` lo declara escritura sobre todo el proyecto; con sólo `content` escribe fuera del árbol (una página, un mensaje). Sin esto, un `replace_symbol_body` editaba `.env` y `protected-paths` no lo veía. Omitir la clave = el default agnóstico de `.claude/hooks/harness.mjs`.",
+    "pattern": "^mcp__.+__(write|edit|create|replace|insert|rename|delete|safe_delete|move|update|apply|patch)",
+    "broadPattern": "_in_files$",
+    "pathFields": ["file_path", "notebook_path", "relative_path", "path", "source", "destination"],
+    "contentFields": ["content", "new_string", "body", "repl", "new_source"]
+  },
   "bash": {
     "deny": [
       {
@@ -149,6 +156,21 @@
       {
         "pattern": "\\bcurl\\b[^|;&]*\\|\\s*(ba)?sh",
         "reason": "`curl | sh` ejecuta código remoto sin revisarlo. Bajá el script, leelo, después corrélo."
+      }
+    ],
+    "ask": [
+      {
+        "$comment": "Lo destructivo que a veces es LO PEDIDO: decide el humano en el pedido de permiso de Claude Code (P9: mostrar, esperar, ejecutar). Un `deny` no se puede confirmar —el humano dice que sí y el hook vuelve a bloquear—, así que lo que es «pedí confirmación» vive acá.",
+        "pattern": "git\\s+push\\s+.*--force-with-lease",
+        "reason": "reescribe historia remota (con red de seguridad, pero la reescribe). ¿La rama es tuya y nadie más empujó?"
+      },
+      {
+        "pattern": "git\\s+branch\\s+(-D|--delete\\s+--force)\\b",
+        "reason": "borra la rama aunque no esté mergeada: los commits que sólo viven ahí quedan huérfanos."
+      },
+      {
+        "pattern": "git\\s+stash\\s+(drop|clear)\\b",
+        "reason": "descarta trabajo guardado en el stash, sin vuelta atrás."
       }
     ]
   },
@@ -725,6 +747,19 @@
       ".git/agent-answer-first"
     ]
   },
+  "subagentOutput": {
+    "$comment": "EL CONTRATO DE SALIDA DE LOS SUBAGENTES SENSORES. Lo lee `.claude/hooks/subagent-contract.mjs` en `SubagentStop`: si el último mensaje del subagente no casa `mustMatch`, el exit 2 le devuelve el turno con `reason`. La clave es el `agent_type` (el `name` del frontmatter). El formato vivía sólo en la prosa de `.claude/agents/*.md`, y un review que cerraba con «se ve bien» llegaba al agente principal como si fuera una aprobación. El patrón del `reviewer` es una COPIA de `reviewerEval.verdictPattern` (los dos se evalúan sin distinguir mayúsculas): si cambia uno, cambia el otro. El contrato es incondicional por `agent_type`: un pedido que no es un review delegado al `reviewer` igual cierra con veredicto.",
+    "contracts": {
+      "reviewer": {
+        "mustMatch": "VEREDICTO:\\W*(rechazado|aprobado)",
+        "reason": "el agente principal decide si entrega con esa línea; sin ella, el review es una opinión."
+      },
+      "gate-runner": {
+        "mustMatch": "VEREDICTO:\\W*(VERDE|ROJO)",
+        "reason": "«nada se entrega sin gate verde» (P1) se decide con esa línea, no con un resumen."
+      }
+    }
+  },
   "taxonomy": {
     "$comment": "EL ARNÉS COMO SISTEMA DE CONTROL (docs/guias-y-sensores.md). Lo lee `scripts/harness-map.mjs` (`npm run map`). Cada pieza tiene dirección (guía: antes de decidir · freno: decidido y no ejecutado · sensor: después), tipo (computacional · inferencial) y etapa. La dirección de un hook la pone su EVENTO (`events`), no el hook. Una pieza que esta taxonomía no clasifica es rojo: un control nuevo que nadie ubicó es uno del que nadie sabe qué cubre. Las etapas vacías se informan como huecos.",
     "stages": [
@@ -743,7 +778,8 @@
       "UserPromptSubmit": { "direction": "guía", "stage": "pedido" },
       "PreToolUse": { "direction": "freno", "stage": "acción decidida" },
       "PostToolUse": { "direction": "sensor", "stage": "edición hecha" },
-      "Stop": { "direction": "sensor", "stage": "fin del turno" }
+      "Stop": { "direction": "sensor", "stage": "fin del turno" },
+      "SubagentStop": { "direction": "sensor", "stage": "fin del turno" }
     },
     "gitHooksDir": ".githooks",
     "gitHooks": {
@@ -870,6 +906,7 @@
       ".claude/hooks/reuse-guard.mjs": "reuse",
       ".claude/hooks/post-edit-check.mjs": "lint.command",
       ".claude/hooks/gate-stop.mjs": "gate.marker",
+      ".claude/hooks/subagent-contract.mjs": "subagentOutput.contracts",
       ".claude/hooks/session-start.mjs": "status.file",
       ".claude/hooks/sdd-router.mjs": "sdd.routes",
       ".claude/hooks/graph-first.mjs": "graph.graphFile",

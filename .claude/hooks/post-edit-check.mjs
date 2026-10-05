@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * PostToolUse Write|Edit|MultiEdit — el freno de mayor retorno.
+ * PostToolUse Write|Edit|MultiEdit|mcp__* — el freno de mayor retorno.
  *
  * Corre el lint del repo SOBRE EL ARCHIVO TOCADO y devuelve el error real al agente
  * (archivo, línea, mensaje), en vez de dejar que se entere en el gate diez ediciones
@@ -9,13 +9,21 @@
  * Además marca `.git/gate-dirty` para que el hook Stop sepa que hay código sin verificar.
  */
 import { spawnSync } from "node:child_process";
-import { readInput, loadConfig, deny, allow, targetPath, markGateDirty, underAny, codeExtensions, REPO_ROOT } from "./harness.mjs";
+import { readInput, loadConfig, deny, allow, targetPath, markGateDirty, escribe, escrituraAmplia, underAny, codeExtensions, REPO_ROOT } from "./harness.mjs";
 
 const input = await readInput();
 const config = loadConfig();
 if (!config) allow();
+if (!escribe(input, config)) allow();
 
-const rel = targetPath(input);
+// Una escritura MCP sin archivo (todo el proyecto, un directorio) no se puede lintear por
+// archivo, pero pudo tocar código: el gate queda pendiente y lo decide el barrido completo.
+if (escrituraAmplia(input, config)) {
+  markGateDirty(config);
+  allow();
+}
+
+const rel = targetPath(input, config);
 if (!rel || rel.startsWith("..")) allow();
 
 // Qué cuenta como código sale del config; el default agnóstico es UNO y vive en `harness.mjs`

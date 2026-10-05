@@ -35,7 +35,7 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 // El mismo helper que usan el hook y el lint: comparar contra la lista DECLARADA dejaba pasar
 // justo el caso del incidente (el gate declara una extensión que el default agnóstico no tiene).
-import { codeExtensions, depsMatcher, importSyntax, segmentosDeRuta, relativaDesdeRaiz, esUnidadPelada, parseHookCommand, firstMatch, existeEjecutable } from "../.claude/hooks/harness.mjs";
+import { codeExtensions, depsMatcher, importSyntax, segmentosDeRuta, relativaDesdeRaiz, esUnidadPelada, parseHookCommand, firstMatch, existeEjecutable, writeTools, escribe } from "../.claude/hooks/harness.mjs";
 
 const REPO_ROOT = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
 const abs = (p) => path.join(REPO_ROOT, p);
@@ -98,6 +98,28 @@ const writeInput = (file, content = "x") => ({
   tool_input: { file_path: abs(file), content },
 });
 
+/**
+ * Nombres de herramienta MCP derivados de `writeTools`: una que escribe con ruta y una que
+ * escribe sobre todo el proyecto. Salen del config, no de un servidor conocido: el caso tiene
+ * que valer en cualquier repo. `null` si el patrón no se reduce a un ejemplo.
+ */
+function nombresMcp() {
+  const wt = writeTools(config);
+  const escritura = (sampleFromPattern(wt.pattern) ?? "").replace(/\s+/g, "x");
+  const amplia = escritura && `${escritura}${(sampleFromPattern(wt.broadPattern) ?? "").replace(/\s+/g, "x")}`;
+  const casa = (p, n) => {
+    try {
+      return Boolean(n) && new RegExp(p).test(n);
+    } catch {
+      return false;
+    }
+  };
+  return {
+    escritura: casa(wt.pattern, escritura) ? escritura : null,
+    amplia: casa(wt.pattern, amplia) && casa(wt.broadPattern, amplia) ? amplia : null,
+  };
+}
+
 /** Un literal (un nombre de paquete, un módulo) puesto DENTRO de un regex, sin que actúe. */
 const escapeRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
@@ -132,6 +154,7 @@ function sampleFromPattern(pattern) {
   s = s.replace(/\[([^\]]*)\]\+?/g, (_m, inner) => inner.replace(/^(.)-.*/, "$1").charAt(0) || "a"); // [ée] → é
 
   s = s.replace(/\\s\+/g, " ").replace(/\\s\*/g, "").replace(/\\s/g, " ");
+  s = s.replace(/\\W\+/g, " ").replace(/\\W\*/g, "").replace(/\\W/g, " "); // `VEREDICTO:\W*…`
   s = s.replace(/\\d\+?/g, "1").replace(/\\w\+?/g, "x");
   s = s.replace(/\\b|\\B/g, "");
   // ` x ` y no `x`: el comodín suele estar entre dos `\b`, y pegar el relleno al literal
@@ -267,6 +290,7 @@ section("2. harness.config.json → rutas y regex");
 const patronesDelConfig = [
   ...(config.protectedPaths ?? []).map((r) => ["protectedPaths", r.pattern]),
   ...(config.bash?.deny ?? []).map((r) => ["bash.deny", r.pattern]),
+  ...(config.bash?.ask ?? []).map((r) => ["bash.ask", r.pattern]),
   ...(config.reuse ?? []).flatMap((r) => [
     ["reuse.pattern", r.pattern],
     ["reuse.appliesTo", r.appliesTo],
@@ -375,6 +399,87 @@ for (const regla of config.protectedPaths ?? []) {
   else bad("protected-paths deja pasar un archivo normal", `exit ${r.status}: el freno bloquea de más`);
 }
 
+// 3b-bis. Las herramientas MCP que escriben pasan por los MISMOS frenos que `Edit`. Antes no:
+//     el matcher era `Write|Edit|…` y un `replace_symbol_body` editaba `.env` sin que nadie lo
+//     viera. El nombre de la herramienta se deriva de `writeTools.pattern`, y se prueba también
+//     que el matcher de settings la deje llegar: un freno al que el evento no llega está muerto.
+{
+  const wt = writeTools(config);
+  const nombreMcp = nombresMcp().escritura ?? "";
+  let reEscribe = null;
+  try {
+    reEscribe = new RegExp(wt.pattern);
+  } catch (e) {
+    bad("writeTools.pattern compila", e.message);
+  }
+  const protegida = (config.protectedPaths ?? []).map((r) => sampleFromPattern(r.pattern)).find(Boolean);
+  if (!reEscribe || !nombreMcp || !reEscribe.test(nombreMcp)) {
+    skip("frenos de escritura vía MCP", "`writeTools.pattern` no se reduce a un nombre de ejemplo; probalo a mano");
+  } else {
+    const campo = wt.pathFields[0];
+    const mcp = (tool, ruta, extra = {}) => ({
+      hook_event_name: "PreToolUse",
+      tool_name: tool,
+      tool_input: { [campo]: ruta, [wt.contentFields[0]]: "x", ...extra },
+    });
+
+    // ¿El evento llega? Claude Code ancla el matcher como regex sobre el nombre completo.
+    for (const hook of ["protected-paths.mjs", "action-guard.mjs"].filter((h) => hookFiles.has(h))) {
+      const grupos = (settings.hooks?.PreToolUse ?? []).filter((g) =>
+        (g.hooks ?? []).some((h) => analizarComando(h.command)?.file?.endsWith(hook)));
+      const llega = grupos.some((g) => {
+        try {
+          return new RegExp(`^(?:${g.matcher ?? ".*"})$`).test(nombreMcp);
+        } catch {
+          return false;
+        }
+      });
+      if (llega) ok(`${hook}: el matcher de settings deja llegar \`${nombreMcp}\``);
+      else bad(`${hook} ve las escrituras MCP`, `ningún matcher de PreToolUse casa \`${nombreMcp}\`: el freno nunca corre para MCP`);
+    }
+
+    if (protegida) {
+      const ruta = protegida.endsWith("/") ? `${protegida}archivo.txt` : protegida;
+      const r = runHook("protected-paths.mjs", mcp(nombreMcp, ruta));
+      if (r.status === 2) ok(`protected-paths bloquea \`${ruta}\` vía \`${nombreMcp}\``);
+      else bad(`protected-paths vía MCP`, `exit ${r.status}: \`${nombreMcp}\` escribió \`${ruta}\``);
+
+      // Una herramienta de LECTURA sobre la misma ruta pasa: el freno protege escrituras.
+      const lectura = "mcp__selftest__find_symbol";
+      if (!reEscribe.test(lectura)) {
+        const l = runHook("protected-paths.mjs", mcp(lectura, ruta));
+        if (l.status === 0) ok("protected-paths deja leer vía MCP");
+        else bad("protected-paths deja leer vía MCP", `exit ${l.status}: el freno bloquea lecturas`);
+      }
+    }
+    const normal = runHook("protected-paths.mjs", mcp(nombreMcp, "archivo-normal-selftest.md"));
+    if (normal.status === 0) ok("protected-paths deja pasar una escritura MCP normal");
+    else bad("protected-paths deja pasar una escritura MCP normal", `exit ${normal.status}: el freno bloquea de más`);
+
+    // Un `move` trae DOS rutas: desde afuera del repo HACIA una protegida tiene que frenar.
+    //     Antes se miraba sólo la primera, y la de afuera dejaba pasar todo.
+    if (protegida && wt.pathFields.length > 1) {
+      const ruta = protegida.endsWith("/") ? `${protegida}archivo.txt` : protegida;
+      const dos = runHook("protected-paths.mjs", {
+        hook_event_name: "PreToolUse",
+        tool_name: nombreMcp,
+        tool_input: { [wt.pathFields[0]]: path.join(os.tmpdir(), "afuera.txt"), [wt.pathFields.at(-1)]: ruta },
+      });
+      if (dos.status === 2) ok(`protected-paths mira TODAS las rutas de la llamada (\`${wt.pathFields.at(-1)}\`)`);
+      else bad("protected-paths con dos rutas", `exit ${dos.status}: la primera ruta (afuera) tapó a \`${ruta}\``);
+    }
+
+    // Un verbo de escritura con CONTENIDO pero sin ruta escribe fuera del árbol (una página de
+    // un gestor de documentos, un mensaje): no es asunto de los frenos del repo, y tratarlo
+    // como edición marcaba el gate pendiente sin un archivo tocado.
+    const externa = { hook_event_name: "PreToolUse", tool_name: nombreMcp, tool_input: { [wt.contentFields[0]]: "x", name: "x" } };
+    const rExterna = runHook("protected-paths.mjs", externa);
+    if (rExterna.status === 0 && !escribe(externa, config))
+      ok("una herramienta MCP con contenido y sin ruta no cuenta como edición del repo");
+    else bad("MCP sin ruta", "se trató como edición del repo: marcaría el gate sin archivos tocados");
+  }
+}
+
 // 3c. Comandos denegados: una muestra por regla.
 if (hookFiles.has("bash-guard.mjs")) {
   for (const regla of config.bash?.deny ?? []) {
@@ -398,6 +503,37 @@ if (hookFiles.has("bash-guard.mjs")) {
   });
   if (inocente.status === 0) ok("bash-guard deja pasar `git status`");
   else bad("bash-guard deja pasar `git status`", `exit ${inocente.status}: el freno bloquea de más`);
+
+  // 3c-bis. `bash.ask`: ni pasa ni bloquea, le pregunta al humano. Exit 0 con el JSON de
+  //     `permissionDecision: "ask"`: un exit 2 acá sería un bloqueo que el sí del humano no
+  //     levanta, que es justo el defecto que este nivel existe para arreglar.
+  for (const regla of config.bash?.ask ?? []) {
+    const muestra = sampleFromPattern(regla.pattern);
+    if (!muestra) {
+      skip(`bash.ask \`${regla.pattern}\``, "el patrón no se puede reducir a un ejemplo; probalo a mano");
+      continue;
+    }
+    const r = runHook("bash-guard.mjs", { hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command: muestra } });
+    let decision = null;
+    try {
+      decision = JSON.parse(r.stdout.trim()).hookSpecificOutput;
+    } catch {
+      decision = null;
+    }
+    const enDeny = firstMatch(config.bash?.deny, muestra);
+    if (enDeny) skip(`bash.ask \`${muestra.trim()}\``, "la muestra también casa `bash.deny`, que gana: la regla de `ask` no se alcanza");
+    else if (r.status === 0 && decision?.permissionDecision === "ask" && decision?.hookEventName === "PreToolUse" && decision?.permissionDecisionReason)
+      ok(`bash-guard le pregunta al humano por \`${muestra.trim()}\``);
+    else bad(`bash-guard pregunta por \`${muestra.trim()}\``, `exit ${r.status}, stdout «${r.stdout.trim().slice(0, 80)}»: no llegó el pedido de confirmación`);
+  }
+  // Sin `hook_event_name` el JSON de «ask» no se reconoce y el comando correría sin preguntar:
+  // hacia el lado seguro, bloquea.
+  const regla = (config.bash?.ask ?? []).map((r) => sampleFromPattern(r.pattern)).find((m) => m && !firstMatch(config.bash?.deny, m));
+  if (regla) {
+    const sinEvento = runHook("bash-guard.mjs", { tool_name: "Bash", tool_input: { command: regla } });
+    if (sinEvento.status === 2) ok("bash-guard bloquea un «ask» que no puede preguntar (sin evento)");
+    else bad("bash-guard sin evento", `exit ${sinEvento.status}: el pedido de confirmación se perdería en silencio`);
+  }
 }
 
 // 3d. Catálogo de reuso: el boilerplate que ya tiene abstracción se frena.
@@ -432,6 +568,58 @@ if (hookFiles.has("gate-stop.mjs") && config.gate?.marker) {
     else bad("gate-stop no entra en loop", `exit ${loop.status} con stop_hook_active: true`);
   } finally {
     if (!existia) fs.rmSync(marker, { force: true });
+  }
+}
+
+// 3e-sub. El contrato de salida de los subagentes. Un sensor que cierra sin su veredicto le
+//     devuelve una opinión al agente principal, que la toma por aprobación. Se prueba en las dos
+//     direcciones con muestras derivadas de `mustMatch`, y que el agente del contrato EXISTA:
+//     un contrato para un agente que no está es un freno que nunca corre.
+if (hookFiles.has("subagent-contract.mjs")) {
+  const contratos = Object.entries(config.subagentOutput?.contracts ?? {});
+  if (!contratos.length) skip("contrato de salida de subagentes", "`subagentOutput.contracts` está vacío");
+  const evento = (agente, mensaje, extra = {}) =>
+    runHook("subagent-contract.mjs", { hook_event_name: "SubagentStop", agent_type: agente, last_assistant_message: mensaje, stop_hook_active: false, ...extra });
+  const agentes = fs.existsSync(abs(".claude/agents"))
+    ? fs.readdirSync(abs(".claude/agents")).map((f) => {
+        const texto = fs.readFileSync(abs(`.claude/agents/${f}`), "utf8");
+        return /^name:\s*(\S+)/m.exec(texto)?.[1] ?? f.replace(/\.md$/, "");
+      })
+    : [];
+  for (const [agente, c] of contratos) {
+    if (!agentes.includes(agente)) bad(`contrato de \`${agente}\``, "no hay un subagente con ese `name` en `.claude/agents/`: el contrato nunca corre");
+    const muestra = sampleFromPattern(c.mustMatch ?? "");
+    if (!muestra) {
+      skip(`contrato de \`${agente}\``, "`mustMatch` no se reduce a un ejemplo; probalo a mano");
+      continue;
+    }
+    const sinVeredicto = evento(agente, "Revisé todo y se ve bien.");
+    if (sinVeredicto.status === 2) ok(`subagent-contract devuelve el turno a \`${agente}\` si cierra sin su veredicto`);
+    else bad(`subagent-contract frena a \`${agente}\` sin veredicto`, `exit ${sinVeredicto.status}: la opinión llega como aprobación`);
+    const conVeredicto = evento(agente, `Hallazgos…\n${muestra}\n`);
+    if (conVeredicto.status === 0) ok(`subagent-contract deja cerrar a \`${agente}\` con \`${muestra.trim()}\``);
+    else bad(`subagent-contract deja cerrar a \`${agente}\``, `exit ${conVeredicto.status}: el freno bloquea de más`);
+  }
+  if (contratos.length) {
+    const [agente] = contratos[0];
+    const loop = evento(agente, "sin veredicto", { stop_hook_active: true });
+    if (loop.status === 0) ok("subagent-contract no entra en loop (stop_hook_active)");
+    else bad("subagent-contract no entra en loop", `exit ${loop.status} con stop_hook_active: true`);
+  }
+  const ajeno = evento("agente-sin-contrato-selftest", "cualquier cosa");
+  if (ajeno.status === 0) ok("subagent-contract deja cerrar a un subagente sin contrato");
+  else bad("subagent-contract con un agente sin contrato", `exit ${ajeno.status}: el freno bloquea de más`);
+
+  // El agente que evalúa `reviewerEval` (su `--agent` en `command`) se mide con `verdictPattern`
+  // y se frena con su contrato: son dos copias de la misma definición de «veredicto». Si
+  // divergen, el eval aprueba un formato que el hook rechaza, o al revés, y ninguno lo dice.
+  const cmdEval = config.reviewerEval?.command ?? [];
+  const evaluado = cmdEval[cmdEval.indexOf("--agent") + 1];
+  const contratoEval = cmdEval.includes("--agent") ? config.subagentOutput?.contracts?.[evaluado] : null;
+  if (contratoEval && config.reviewerEval?.verdictPattern) {
+    if (contratoEval.mustMatch === config.reviewerEval.verdictPattern)
+      ok(`el contrato de \`${evaluado}\` y \`reviewerEval.verdictPattern\` son la misma definición de veredicto`);
+    else bad(`contrato de \`${evaluado}\` vs \`reviewerEval\``, `\`${contratoEval.mustMatch}\` ≠ \`${config.reviewerEval.verdictPattern}\`: el eval y el hook leen veredictos distintos`);
   }
 }
 
@@ -474,6 +662,20 @@ if (config.askFirst?.marker && hookFiles.has("ask-first.mjs") && hookFiles.has("
   });
   if (fuera.status === 0) ok("ask-first: escribir fuera del repo sigue permitido");
   else bad("ask-first: escribir fuera del repo", `exit ${fuera.status}: el freno bloquea de más`);
+
+  // Una escritura MCP sobre TODO el proyecto no trae archivo, pero cae dentro: sin este caso,
+  // «sin ruta» se leía como «fuera del repo» y un reemplazo masivo pasaba sobre una pregunta.
+  const wt = writeTools(config);
+  const nombreMcp = nombresMcp().amplia;
+  if (nombreMcp) {
+    const amplia = runHook("action-guard.mjs", {
+      hook_event_name: "PreToolUse",
+      tool_name: nombreMcp,
+      tool_input: { [wt.contentFields[0]]: "x" },
+    });
+    if (amplia.status === 2) ok("ask-first: una escritura MCP sobre todo el proyecto también frena");
+    else bad("ask-first: escritura MCP amplia", `exit ${amplia.status}: un reemplazo masivo pasó sobre una pregunta`);
+  }
 
   if (respaldo !== null) fs.writeFileSync(marker, respaldo);
   else fs.rmSync(marker, { force: true });
@@ -534,6 +736,21 @@ if (hookFiles.has("post-edit-check.mjs") && config.gate?.marker && (config.gate?
     const ajena = ".txt-no-declarada";
     if (!marca(`${glob}/ejemplo-selftest${ajena}`)) ok("post-edit-check ignora una extensión no declarada");
     else bad("post-edit-check ignora una extensión no declarada", `\`${ajena}\` marcó el gate: el freno muerde de más`);
+
+    // Una escritura MCP sobre todo el proyecto no se puede lintear por archivo, pero pudo tocar
+    // código: si no marca el gate, el reemplazo masivo se entrega sin verificar.
+    const wt = writeTools(config);
+    const nombreMcp = nombresMcp().amplia;
+    if (nombreMcp) {
+      fs.rmSync(marker, { force: true });
+      runHook("post-edit-check.mjs", {
+        hook_event_name: "PostToolUse",
+        tool_name: nombreMcp,
+        tool_input: { [wt.contentFields[0]]: "x" },
+      });
+      if (fs.existsSync(marker)) ok("post-edit-check marca el gate tras una escritura MCP sin archivo");
+      else bad("post-edit-check tras escritura MCP amplia", `no dejó \`${config.gate.marker}\`: el reemplazo se entrega sin gate`);
+    }
   } finally {
     if (respaldo !== null) fs.writeFileSync(marker, respaldo);
     else fs.rmSync(marker, { force: true });
@@ -1749,7 +1966,11 @@ section("8. perfiles y ejemplos por stack");
     const fuenteInit = fs.readFileSync(init, "utf8");
     const plantilla = JSON.parse(fs.readFileSync(abs("plantillas/harness.config.json"), "utf8"));
     const enRuta = (obj, ruta) => ruta.split(".").reduce((o, k) => (o == null ? o : o[k]), obj);
-    const vacio = (v) => v === undefined || v === null || v === "" || (Array.isArray(v) && !v.length);
+    // Un mapa vacío también es vacío: `subagentOutput.contracts: {}` es el primer activador que
+    // apunta a un objeto, y sin esta condición el freno viajaba «activado» y muerto.
+    const vacio = (v) =>
+      v === undefined || v === null || v === "" || (Array.isArray(v) && !v.length) ||
+      (typeof v === "object" && !Array.isArray(v) && !Object.keys(v).length);
 
     let muertos = 0;
     for (const [freno, clave] of Object.entries(activadores)) {
@@ -2136,6 +2357,27 @@ section("9. costo del arnés (hooks-timing)");
       const r = spawnSync("node", [script, "--config", cfg, "--settings", settingsCebo], { cwd: REPO_ROOT, encoding: "utf8" });
       if (r.status === 1 && /MEDICIÓN EN ROJO/.test(r.stderr ?? "")) ok("un hook que no respeta el contrato de exit codes pone la medición en ROJO (barato ≠ roto)");
       else bad("un hook roto no puede medir verde", `esperaba exit 1 y «MEDICIÓN EN ROJO», dio exit ${r.status}`);
+    }
+
+    // Una alternativa del matcher que es un regex (`mcp__.*`) es otro camino por el mismo hook.
+    //     Medir sólo con la primera (`Write`) dejaba sin número a la familia entera, que llega en
+    //     CADA llamada. El cebo es barato con `Write` y caro con cualquier otra herramienta.
+    {
+      const hookCaro = path.join(tmp, "hook-caro-por-familia.mjs");
+      fs.writeFileSync(
+        hookCaro,
+        'let raw = "";\nfor await (const c of process.stdin) raw += c;\n' +
+          'if (JSON.parse(raw).tool_name !== "Write") { const t = Date.now(); while (Date.now() - t < 400); }\nprocess.exit(0);\n',
+      );
+      const settingsCebo = path.join(tmp, "settings-familia.json");
+      fs.writeFileSync(
+        settingsCebo,
+        JSON.stringify({ hooks: { PreToolUse: [{ matcher: "Write|familia__.*", hooks: [{ type: "command", command: `node ${hookCaro}` }] }] } }),
+      );
+      const cfg = escribirCebo("familia.json", { budgetMs: 250, runs: 1, probe });
+      const r = spawnSync("node", [script, "--config", cfg, "--settings", settingsCebo], { cwd: REPO_ROOT, encoding: "utf8" });
+      if (r.status === 1 && /vía familia__\.\*/.test(r.stdout ?? "")) ok("la medición mide aparte cada alternativa regex del matcher (`mcp__.*` tiene su número)");
+      else bad("la medición mide la familia del matcher", `esperaba exit 1 con la fila «vía familia__.*», dio exit ${r.status}: el camino caro no se mide`);
     }
 
     fs.rmSync(tmp, { recursive: true, force: true });

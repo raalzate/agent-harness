@@ -21,7 +21,7 @@ nada del repo.
 
 ```
 .claude/harness.config.json   la única fuente de especificidad
-.claude/hooks/                8 hooks genéricos; harness.mjs es la plomería compartida
+.claude/hooks/                hooks genéricos (también frenan escrituras MCP); harness.mjs es la plomería
 .claude/agents/               explorer · reviewer · gate-runner
 .claude/commands/             /gate · /lesson · /harness-audit · /harness-port · /architecture · /code-index
 .claude/skills/               new-guardrail: una regla en prosa → un freno con su prueba de vida

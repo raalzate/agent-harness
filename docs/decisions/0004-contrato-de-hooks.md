@@ -72,3 +72,18 @@ compila: el hook **deja pasar** en silencio. Tres razones:
   o correrlo a mano con un payload (que es, justamente, lo que hace el self-test). Se acepta porque
   la confusión inversa —creer que se está depurando cuando en realidad se le está hablando al
   agente— es peor.
+
+## Enmienda (2026-10-05) — una tercera decisión: preguntarle al humano
+
+`deny` y `allow` no alcanzaban para P9 ("mostrar, esperar confirmación, ejecutar"). Una regla de
+`bash.deny` cuyo motivo decía "pedí confirmación" no tenía salida: el humano decía que sí y el
+`exit 2` volvía a bloquear. La plomería suma `ask(motivo, input)`, que sale con `exit 0` y el JSON
+`hookSpecificOutput.permissionDecision: "ask"` de `PreToolUse`. Así Claude Code le muestra el
+motivo al humano en el pedido de permiso, y el comando corre sólo si lo aprueba. El contrato de
+arriba no cambia: no hay `exit 1`, y el evento sale del payload, no se cablea (P4).
+
+Hay una excepción al "falla abierto", y es deliberada: si el payload no trae
+`hook_event_name`, Claude Code no reconocería la decisión y el comando correría sin preguntar.
+En ese caso `ask` bloquea con el mismo motivo. No es el arnés roto (el config está sano): es una
+pregunta que no se puede hacer, y una pregunta perdida en silencio es un freno que desaparece.
+Lo prueba el self-test (3c-bis).

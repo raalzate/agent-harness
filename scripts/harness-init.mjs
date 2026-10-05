@@ -179,6 +179,7 @@ const COPIAR = [
   ".claude/hooks/reuse-guard.mjs",
   ".claude/hooks/post-edit-check.mjs",
   ".claude/hooks/gate-stop.mjs",
+  ".claude/hooks/subagent-contract.mjs",
   ".claude/hooks/session-start.mjs",
   ".claude/hooks/sdd-router.mjs",
   ".claude/hooks/ask-first.mjs",

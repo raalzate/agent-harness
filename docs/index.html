@@ -215,6 +215,9 @@ ol.leyes b { color: var(--ink); font-weight: 600; }
 .stat .why { font-size: var(--step--1); color: var(--ink-soft); line-height: 1.55; }
 
 /* ── Par config → bloqueo ──────────────────────────────────────────────── */
+/* Las figuras del par no llevan el margen por defecto del navegador (40px a los lados):
+   quedaban angostas y desalineadas con el texto de la columna. */
+.pair > figure { margin: 0; }
 .pair { display: grid; gap: 1rem; grid-template-columns: minmax(0, 1fr); margin-top: 1.75rem; align-items: stretch; }
 @media (min-width: 54rem) { .pair { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
 /* Con espacio, la prosa de apertura y su par de figuras van LADO A LADO: con la prosa en su
@@ -372,6 +375,79 @@ footer { border-top: 4px solid var(--ink); }
   .scrim { position: fixed; inset: var(--topbar-h) 0 0; background: rgba(8,12,17,.42); z-index: 37; }
 }
 @media (prefers-reduced-motion: reduce) { .sidenav { transition: none; } }
+
+/* ── Arquitectura: el arnés sobre Claude Code (diagrama por capas) ─────── */
+.arq-leyenda { display: flex; flex-wrap: wrap; gap: .4rem .5rem; align-items: center; margin-top: 1.5rem; font-family: var(--f-mono); font-size: var(--step--1); }
+.arq-filtro { appearance: none; cursor: pointer; display: inline-flex; align-items: center; gap: .4rem; background: var(--surface); color: var(--ink-soft); border: 1px solid var(--rule); border-radius: 999px; padding: .28rem .7rem; font: inherit; }
+.arq-filtro[aria-pressed="true"] { border-color: var(--ink); color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
+.arq-filtro i { width: .62rem; height: .62rem; border-radius: 50%; background: var(--c); display: inline-block; }
+.arq-ayuda-btn { appearance: none; cursor: pointer; margin-left: auto; width: 1.9rem; height: 1.9rem; border-radius: 50%; border: 1px solid var(--rule); background: var(--surface); color: var(--accent-ink); font: 700 .95rem var(--f-display); }
+.arq-ayuda-btn[aria-expanded="true"] { background: var(--accent); color: var(--surface); border-color: var(--accent); }
+.arq-ayuda { margin-top: .9rem; background: var(--surface); border: 1px solid var(--rule); border-left: 3px solid var(--accent); border-radius: 3px; padding: 1rem 1.15rem; display: grid; gap: .6rem; font-size: var(--step--1); color: var(--ink-soft); }
+.arq-ayuda[hidden] { display: none; }
+.arq-ayuda b { color: var(--ink); }
+.arq { display: grid; gap: .9rem; grid-template-columns: minmax(0, 1fr); margin-top: 1rem;
+  grid-template-areas: "buc" "ent" "con" "int" "eje" "obs" "mul"; }
+@container (min-width: 50rem) {
+  .arq { grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-areas: "ent con int" "ent buc eje" "obs mul mul"; }
+}
+.arq-capa { border: 1.5px dashed var(--rule); border-radius: 10px; padding: .8rem .75rem .85rem; display: flex; flex-direction: column; gap: .55rem; background: color-mix(in srgb, var(--surface) 45%, transparent); min-width: 0; }
+.arq-capa > header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: .2rem .6rem; }
+.arq-capa h3 { font-size: .82rem; letter-spacing: .08em; text-transform: uppercase; }
+.arq-flujo { font-family: var(--f-mono); font-size: .72rem; color: var(--ink-faint); font-style: italic; }
+.arq-cartas { display: grid; gap: .5rem; grid-template-columns: repeat(auto-fill, minmax(10.5rem, 1fr)); }
+.arq-card { appearance: none; cursor: pointer; text-align: left; font: inherit; color: var(--ink); background: var(--surface); border: 1px solid var(--rule); border-left: 4px solid var(--c); border-radius: 7px; padding: .6rem .65rem .65rem; display: grid; grid-template-columns: 1.9rem minmax(0, 1fr); column-gap: .55rem; row-gap: .1rem; align-items: start; position: relative; transition: transform .12s ease, box-shadow .12s ease, opacity .15s ease; box-shadow: 0 1px 0 var(--rule-soft); }
+.arq-card:hover { transform: translateY(-1px); box-shadow: 0 8px 18px -12px rgba(9,14,20,.45); }
+.arq-card[aria-pressed="true"] { outline: 2px solid var(--c); outline-offset: 1px; }
+.arq-card svg { grid-row: span 3; width: 1.9rem; height: 1.9rem; color: var(--c); }
+.arq-card b { font-family: var(--f-display); font-size: .92rem; line-height: 1.2; }
+.arq-card .sub { font-family: var(--f-mono); font-size: .7rem; color: var(--ink-soft); line-height: 1.35; }
+.arq-card .tag { font-family: var(--f-mono); font-size: .66rem; color: var(--ink-faint); line-height: 1.35; overflow-wrap: anywhere; }
+.arq-card.atenuada { opacity: .28; }
+.arq-capa[data-capa="buc"] { border-color: var(--accent); border-style: solid; background: var(--surface); justify-content: center; }
+.arq-capa[data-capa="buc"] .arq-card { grid-template-columns: minmax(0, 1fr); justify-items: center; text-align: center; padding: 1rem .8rem; border-left-width: 1px; border-width: 2px; }
+.arq-capa[data-capa="buc"] .arq-card svg { width: 3.2rem; height: 3.2rem; grid-row: auto; }
+.arq-capa[data-capa="buc"] .arq-card b { font-size: 1.15rem; }
+.arq-capa[data-capa="buc"] .arq-flechas { display: flex; justify-content: center; gap: .4rem; flex-wrap: wrap; font-family: var(--f-mono); font-size: .68rem; color: var(--ink-faint); }
+.arq-fuera { margin-top: .9rem; font-size: var(--step--1); color: var(--ink-faint); }
+.arq, .arq-leyenda, .arq-modal { --guia: var(--accent); --freno: var(--rojo); --sensor: var(--verde); --runtime: var(--ink-faint); }
+@media (prefers-reduced-motion: reduce) { .arq-card { transition: none; } .arq-card:hover { transform: none; } }
+.arq-eventos { list-style: none; margin: .2rem 0 0; padding: 0 0 0 .2rem; display: grid; gap: .3rem; counter-reset: ev; position: relative; }
+.arq-eventos::before { content: ""; position: absolute; left: .62rem; top: .5rem; bottom: .5rem; border-left: 2px dotted var(--rule); }
+.arq-eventos li { position: relative; padding-left: 1.45rem; line-height: 1.5; font-size: .72rem; color: var(--ink-faint); font-family: var(--f-mono); }
+.arq-eventos li::before { counter-increment: ev; content: counter(ev); position: absolute; left: 0; top: .05rem; width: 1.25rem; height: 1.25rem; border-radius: 50%; background: var(--c); color: var(--surface); font-size: .62rem; font-weight: 700; display: grid; place-items: center; }
+.arq-eventos code { font-size: .74rem; color: var(--ink); font-weight: 600; margin-right: .5rem; }
+.arq-pista { margin-top: .9rem; font-family: var(--f-mono); font-size: var(--step--1); color: var(--ink-faint); }
+.arq-card::after { content: "＋"; position: absolute; right: .45rem; bottom: .3rem; font-size: .7rem; color: var(--ink-faint); opacity: 0; transition: opacity .12s ease; }
+.arq-card:hover::after, .arq-card:focus-visible::after { opacity: 1; }
+.arq-modal { width: min(46rem, calc(100vw - 2rem)); max-height: calc(100vh - 2rem); padding: 0; border: 1px solid var(--rule); border-top: 4px solid var(--c, var(--accent)); border-radius: 8px; background: var(--surface); color: var(--ink); box-shadow: 0 30px 80px -30px rgba(9,14,20,.6); overflow: hidden; }
+.arq-modal[open] { display: flex; flex-direction: column; }
+.arq-modal::backdrop { background: rgba(8,12,17,.55); backdrop-filter: blur(2px); }
+.arq-modal-cab { display: grid; grid-template-columns: 2.6rem minmax(0, 1fr) auto; gap: .8rem; align-items: center; padding: 1rem 1.15rem .85rem; border-bottom: 1px solid var(--rule-soft); }
+.arq-modal-cab svg { width: 2.6rem; height: 2.6rem; color: var(--c, var(--accent)); }
+.arq-modal-cab h3 { font-size: var(--step-1); }
+.arq-modal-cab .dir { display: block; font-family: var(--f-mono); font-size: .72rem; letter-spacing: .08em; text-transform: uppercase; color: var(--c, var(--ink-faint)); margin-top: .2rem; }
+.arq-modal-cerrar { appearance: none; cursor: pointer; width: 2.1rem; height: 2.1rem; border-radius: 50%; border: 1px solid var(--rule); background: var(--surface-2); color: var(--ink); font-size: 1.1rem; line-height: 1; }
+/* `max-content`: con la altura limitada, una fila `auto` con `overflow: hidden` se encogía hasta
+   desaparecer (el ejemplo, en móvil). El cuerpo hace scroll; las filas no se aplastan. */
+.arq-modal-cuerpo { padding: 1rem 1.15rem 1.15rem; overflow-y: auto; display: grid; gap: 1rem; grid-auto-rows: max-content; flex: 1 1 auto; min-height: 0; }
+.arq-modal-cuerpo dl { margin: 0; display: grid; gap: .65rem 1.1rem; grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 40rem) { .arq-modal-cuerpo dl { grid-template-columns: 10rem minmax(0, 1fr); } }
+.arq-modal-cuerpo dt { font-family: var(--f-mono); font-size: var(--step--1); color: var(--ink-faint); text-transform: uppercase; letter-spacing: .06em; padding-top: .15rem; }
+.arq-modal-cuerpo dd { margin: 0; }
+.arq-modal-ej { background: var(--term-bg); color: var(--term-ink); border-radius: 4px; overflow: hidden; }
+.arq-modal-ej p { font-family: var(--f-mono); font-size: .7rem; letter-spacing: .08em; text-transform: uppercase; color: var(--term-faint); padding: .55rem .9rem; border-bottom: 1px solid var(--term-rule); }
+.arq-modal-ej pre { margin: 0; padding: .8rem .9rem 1rem; overflow-x: auto; font-size: .78rem; line-height: 1.55; }
+.arq-modal-pie { display: flex; flex-wrap: wrap; gap: .6rem; align-items: center; justify-content: space-between; padding: .75rem 1.15rem; border-top: 1px solid var(--rule-soft); background: var(--surface-2); font-family: var(--f-mono); font-size: var(--step--1); }
+.arq-modal-pie button { appearance: none; cursor: pointer; font: inherit; color: var(--ink); background: var(--surface); border: 1px solid var(--rule); border-radius: 3px; padding: .35rem .7rem; }
+.arq-modal-pie .pos { color: var(--ink-faint); }
+.arq-modal-doc { font-family: var(--f-mono); font-size: var(--step--1); }
+@media (prefers-reduced-motion: reduce) { .arq-card::after { transition: none; } }
+[data-dir="guia"]    { --c: var(--accent); }
+[data-dir="freno"]   { --c: var(--rojo); }
+[data-dir="sensor"]  { --c: var(--verde); }
+[data-dir="runtime"] { --c: var(--ink-faint); }
 </style>
 </head>
 <body>
@@ -412,10 +488,10 @@ footer { border-top: 4px solid var(--ink); }
           <span class="chip">node + bash</span>
           <span class="chip">cero dependencias</span>
           <span class="chip">8 stacks</span>
-          <span class="chip">10 hooks</span>
+          <span class="chip">11 hooks</span>
           <span class="chip">8 clases de regla</span>
           <span class="chip">7 señales del gate</span>
-          <span class="chip">276 ms por turno</span>
+          <span class="chip">280 ms por turno</span>
           <span class="chip">Apache-2.0</span>
         </p>
       </div>
@@ -447,6 +523,7 @@ footer { border-top: 4px solid var(--ink); }
 
     <p class="grupo" data-grupo="metodo">Método</p>
     <a href="#leyes" data-grupo="metodo" data-k="leyes principios constitucion once">Once leyes</a>
+    <a href="#arquitectura" data-grupo="metodo" data-k="arquitectura capas claude code mcp subagentes eventos diagrama permisos ask">Dónde se engancha</a>
     <a href="#piezas" data-grupo="metodo" data-k="piezas hooks gate self-test lint">Las cinco piezas</a>
     <a href="#freno" data-grupo="metodo" data-k="freno regla json bloqueo config">Anatomía de un freno</a>
     <a href="#costo" data-grupo="metodo" data-k="costo latencia milisegundos presupuesto observability hooks-timing medir performance">Lo que cuesta el arnés</a>
@@ -723,6 +800,159 @@ repo-lint: 1 problema(s)
   </div>
 </section>
 
+<section id="arquitectura">
+  <div class="wrap sec-inner">
+    <p class="rail"><b>6</b>eventos de Claude Code donde el arnés se engancha</p>
+    <div>
+      <div class="col stack">
+        <p class="eyebrow">Dónde se engancha</p>
+        <h2 style="font-size:var(--step-2)">El arnés no reemplaza a Claude Code: se cuelga de sus eventos</h2>
+        <p>Claude Code ya trae el bucle del agente, el despacho de herramientas, los permisos, los
+          subagentes y los servidores MCP. El arnés no reimplementa nada de eso. Engancha en cada capa
+          una <strong>guía</strong> (antes de decidir), un <strong>freno</strong> (decidido y todavía
+          no ejecutado) o un <strong>sensor</strong> (después), y toda la especificidad sale del
+          mismo JSON. Las piezas grises son del runtime; las de color, del arnés.</p>
+        <p>Tocá cualquier pieza para ver qué es, qué le agrega el arnés, dónde vive y qué falla evita.
+          El botón <b>?</b> explica cómo leer el diagrama.</p>
+      </div>
+
+      <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+        <defs>
+          <symbol id="i-term" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M7 9l3 3-3 3M12.5 15H17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+          <symbol id="i-rama" viewBox="0 0 24 24"><path d="M6 4v16M6 12c0-4 12-2 12-8M18 4v3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="6" cy="20" r="1.8" fill="currentColor"/><circle cx="18" cy="4" r="1.8" fill="currentColor"/></symbol>
+          <symbol id="i-msg" viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M12 8.2a1.8 1.8 0 1 1 1.6 2.6c-.9.3-1.6.8-1.6 1.6M12 14v.3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
+          <symbol id="i-escudo" viewBox="0 0 24 24"><path d="M12 3l7 3v5.5c0 4.5-3 8-7 9.5-4-1.5-7-5-7-9.5V6z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M9 12l2.2 2.2L15.5 10" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+          <symbol id="i-libro" viewBox="0 0 24 24"><path d="M4 5.5C6.5 4 9.5 4 12 6c2.5-2 5.5-2 8-.5V19c-2.5-1.5-5.5-1.5-8 .5-2.5-2-5.5-2-8-.5z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M12 6v13.5" stroke="currentColor" stroke-width="1.8"/></symbol>
+          <symbol id="i-chispa" viewBox="0 0 24 24"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M18.4 5.6l-2.8 2.8M8.4 15.6l-2.8 2.8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+          <symbol id="i-memoria" viewBox="0 0 24 24"><ellipse cx="12" cy="6" rx="7" ry="2.6" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M5 6v6c0 1.4 3.1 2.6 7 2.6s7-1.2 7-2.6V6M5 12v6c0 1.4 3.1 2.6 7 2.6s7-1.2 7-2.6v-6" fill="none" stroke="currentColor" stroke-width="1.8"/></symbol>
+          <symbol id="i-grafo" viewBox="0 0 24 24"><circle cx="6" cy="6" r="2.3" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="18" cy="7" r="2.3" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="18" r="2.3" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M8.2 6.4l7.5.4M7.2 8l3.7 7.9M16.9 9l-3.8 7" stroke="currentColor" stroke-width="1.6"/></symbol>
+          <symbol id="i-pieza" viewBox="0 0 24 24"><path d="M5 9h3a2 2 0 1 1 4 0h3v3a2 2 0 1 1 0 4v3H5v-3a2 2 0 1 0 0-4z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M15 5h4v4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+          <symbol id="i-reloj" viewBox="0 0 24 24"><circle cx="12" cy="13" r="7.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 9v4l2.8 1.8M9.5 3h5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+          <symbol id="i-ciclo" viewBox="0 0 24 24"><path d="M19 12a7 7 0 0 1-12 4.9M5 12a7 7 0 0 1 12-4.9" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M17 3.5v3.6h-3.6M7 20.5v-3.6h3.6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+          <symbol id="i-herram" viewBox="0 0 24 24"><rect x="3" y="10" width="18" height="10" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M9 10V7.5a3 3 0 0 1 6 0V10M3 14h18" fill="none" stroke="currentColor" stroke-width="1.8"/></symbol>
+          <symbol id="i-ok" viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M9 13.5l2.2 2.2L16 11" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+          <symbol id="i-git" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M3 12h6M15 12h6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+          <symbol id="i-antena" viewBox="0 0 24 24"><circle cx="12" cy="10" r="1.8" fill="currentColor"/><path d="M8.5 6.5a5 5 0 0 0 0 7M15.5 6.5a5 5 0 0 1 0 7M5.7 3.8a9 9 0 0 0 0 12.4M18.3 3.8a9 9 0 0 1 0 12.4M12 12l-3 9M12 12l3 9" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
+          <symbol id="i-panel" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M7 16v-3M11 16V9M15 16v-5M19 8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+          <symbol id="i-agente" viewBox="0 0 24 24"><circle cx="10" cy="8" r="3.4" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M3.5 20c.6-4 3.3-6 6.5-6s5.9 2 6.5 6M18 7v6M15 10h6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+          <symbol id="i-contrato" viewBox="0 0 24 24"><rect x="5" y="3.5" width="14" height="17" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M8.5 8h7M8.5 11.5h7M8.5 15l1.6 1.6L13 13.7" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+        </defs>
+      </svg>
+
+      <div class="arq-leyenda" role="group" aria-label="Filtrar por tipo de pieza">
+        <button type="button" class="arq-filtro" data-filtro="guia" data-dir="guia" aria-pressed="false"><i></i>guía · antes de decidir</button>
+        <button type="button" class="arq-filtro" data-filtro="freno" data-dir="freno" aria-pressed="false"><i></i>freno · antes de ejecutar</button>
+        <button type="button" class="arq-filtro" data-filtro="sensor" data-dir="sensor" aria-pressed="false"><i></i>sensor · después</button>
+        <button type="button" class="arq-filtro" data-filtro="runtime" data-dir="runtime" aria-pressed="false"><i></i>runtime de Claude Code</button>
+        <button type="button" class="arq-ayuda-btn" id="arq-ayuda-btn" aria-expanded="false" aria-controls="arq-ayuda" aria-label="Cómo leer este diagrama">?</button>
+      </div>
+      <div class="arq-ayuda" id="arq-ayuda" hidden>
+        <p><b>Cómo leer el diagrama.</b> Cada caja punteada es una capa de Claude Code: por dónde entra
+          el trabajo, qué sabe el agente, con qué se integra, dónde ejecuta, qué observa y cómo delega.
+          Adentro, cada pieza es <b>del runtime</b> (gris: Claude Code ya la trae) o <b>del arnés</b>
+          (color: la agrega este repo, configurada en <code>.claude/harness.config.json</code>).</p>
+        <p><b>El color es la dirección del control.</b> Una <b>guía</b> (verde azulado) pone criterio
+          antes de que el agente decida. Un <b>freno</b> (rojo) actúa cuando ya decidió y todavía no
+          ejecutó: puede bloquear con el motivo (exit 2) o preguntarle al humano. Un <b>sensor</b>
+          (verde) mira después y devuelve el error real o se niega a dar por terminado.</p>
+        <p><b>Los filtros</b> de arriba atenúan todo lo que no sea del tipo elegido; tocá otra vez
+          para quitar el filtro.</p>
+      </div>
+
+      <div class="arq" id="arq">
+        <div class="arq-capa" data-capa="ent" style="grid-area: ent">
+          <header><h3>Entrada</h3><span class="arq-flujo">→ antes del modelo</span></header>
+          <div class="arq-cartas">
+            <button type="button" class="arq-card" data-k="ui" data-dir="sensor"><svg aria-hidden="true"><use href="#i-term"/></svg><b>Interfaz</b><span class="sub">CLI · IDE · CI</span><span class="tag">ci.yml → npm run gate</span></button>
+            <button type="button" class="arq-card" data-k="sesion" data-dir="guia"><svg aria-hidden="true"><use href="#i-rama"/></svg><b>Sesión</b><span class="sub">abrir · retomar · compactar</span><span class="tag">session-start.mjs</span></button>
+            <button type="button" class="arq-card" data-k="pedido" data-dir="guia"><svg aria-hidden="true"><use href="#i-msg"/></svg><b>Pedido</b><span class="sub">¿pregunta o acción? ¿qué tamaño?</span><span class="tag">ask-first · sdd-router · graph-first</span></button>
+            <button type="button" class="arq-card" data-k="permisos" data-dir="freno"><svg aria-hidden="true"><use href="#i-escudo"/></svg><b>Permisos</b><span class="sub">deny · allow · ask</span><span class="tag">bash-guard · protected-paths · action-guard · reuse-guard</span></button>
+          </div>
+        </div>
+
+        <div class="arq-capa" data-capa="con" style="grid-area: con">
+          <header><h3>Conocimiento</h3><span class="arq-flujo">↓ alimenta el bucle</span></header>
+          <div class="arq-cartas">
+            <button type="button" class="arq-card" data-k="guias" data-dir="guia"><svg aria-hidden="true"><use href="#i-libro"/></svg><b>Guías</b><span class="sub">CLAUDE.md · CONSTITUTION.md</span><span class="tag">BLOCKING nombra su comando</span></button>
+            <button type="button" class="arq-card" data-k="skills" data-dir="guia"><svg aria-hidden="true"><use href="#i-chispa"/></svg><b>Skills y comandos</b><span class="sub">a pedido</span><span class="tag">/gate · /lesson · new-guardrail</span></button>
+            <button type="button" class="arq-card" data-k="memoria" data-dir="guia"><svg aria-hidden="true"><use href="#i-memoria"/></svg><b>Memoria verificada</b><span class="sub">entre sesiones</span><span class="tag">STATUS.md · gotchas.md</span></button>
+            <button type="button" class="arq-card" data-k="indice" data-dir="guia"><svg aria-hidden="true"><use href="#i-grafo"/></svg><b>Índice del código</b><span class="sub">símbolos · radio de impacto</span><span class="tag">codegraph</span></button>
+          </div>
+        </div>
+
+        <div class="arq-capa" data-capa="int" style="grid-area: int">
+          <header><h3>Integración</h3><span class="arq-flujo">← registra herramientas</span></header>
+          <div class="arq-cartas">
+            <button type="button" class="arq-card" data-k="mcp" data-dir="freno"><svg aria-hidden="true"><use href="#i-pieza"/></svg><b>Escrituras MCP</b><span class="sub">mcp__servidor__herramienta</span><span class="tag">writeTools</span></button>
+            <button type="button" class="arq-card" data-k="mcpcosto" data-dir="sensor"><svg aria-hidden="true"><use href="#i-reloj"/></svg><b>Costo de MCP</b><span class="sub">≈280 ms por llamada</span><span class="tag">hooks-timing vía mcp__.*</span></button>
+          </div>
+        </div>
+
+        <div class="arq-capa" data-capa="buc" style="grid-area: buc">
+          <button type="button" class="arq-card" data-k="bucle" data-dir="runtime"><svg aria-hidden="true"><use href="#i-ciclo"/></svg><b>Bucle del agente</b><span class="sub">percibir → actuar → observar</span><span class="tag">el arnés habla por exit 0 · 2 · ask</span></button>
+          <p class="arq-flechas"><span>observa todo ↑</span><span>delega ↓</span><span>ejecuta →</span></p>
+          <ol class="arq-eventos" aria-label="Los eventos del ciclo, en orden">
+            <li data-dir="guia"><code>SessionStart</code><span>estado verificado</span></li>
+            <li data-dir="guia"><code>UserPromptSubmit</code><span>criterio del pedido</span></li>
+            <li data-dir="freno"><code>PreToolUse</code><span>deny · ask</span></li>
+            <li data-dir="sensor"><code>PostToolUse</code><span>lint del archivo</span></li>
+            <li data-dir="sensor"><code>Stop</code><span>gate verde</span></li>
+            <li data-dir="sensor"><code>SubagentStop</code><span>veredicto</span></li>
+          </ol>
+        </div>
+
+        <div class="arq-capa" data-capa="eje" style="grid-area: eje">
+          <header><h3>Ejecución y salida</h3><span class="arq-flujo">→ resultado verificado</span></header>
+          <div class="arq-cartas">
+            <button type="button" class="arq-card" data-k="herram" data-dir="sensor"><svg aria-hidden="true"><use href="#i-herram"/></svg><b>Herramientas</b><span class="sub">Bash · Edit · Write · mcp__*</span><span class="tag">post-edit-check.mjs</span></button>
+            <button type="button" class="arq-card" data-k="fin" data-dir="sensor"><svg aria-hidden="true"><use href="#i-ok"/></svg><b>Fin del turno</b><span class="sub">gate verde o no hay entrega</span><span class="tag">gate-stop.mjs · scripts/gate.mjs</span></button>
+            <button type="button" class="arq-card" data-k="git" data-dir="sensor"><svg aria-hidden="true"><use href="#i-git"/></svg><b>Commit y push</b><span class="sub">fuera del agente, también del humano</span><span class="tag">pre-commit · commit-msg · pre-push</span></button>
+          </div>
+        </div>
+
+        <div class="arq-capa" data-capa="obs" style="grid-area: obs">
+          <header><h3>Observabilidad</h3><span class="arq-flujo">↗ observa todo</span></header>
+          <div class="arq-cartas">
+            <button type="button" class="arq-card" data-k="eventos" data-dir="runtime"><svg aria-hidden="true"><use href="#i-antena"/></svg><b>Eventos</b><span class="sub">11 hooks · 6 eventos</span><span class="tag">.claude/settings.json</span></button>
+            <button type="button" class="arq-card" data-k="latencia" data-dir="sensor"><svg aria-hidden="true"><use href="#i-reloj"/></svg><b>Latencia</b><span class="sub">cada hook contra su presupuesto</span><span class="tag">npm run timing</span></button>
+            <button type="button" class="arq-card" data-k="panel" data-dir="sensor"><svg aria-hidden="true"><use href="#i-panel"/></svg><b>Panel y deriva</b><span class="sub">cada gate · semanal</span><span class="tag">panel · drift.yml · eval:reviewer</span></button>
+          </div>
+        </div>
+
+        <div class="arq-capa" data-capa="mul" style="grid-area: mul">
+          <header><h3>Multi-agente</h3><span class="arq-flujo">↑ devuelve al bucle</span></header>
+          <div class="arq-cartas">
+            <button type="button" class="arq-card" data-k="subagentes" data-dir="sensor"><svg aria-hidden="true"><use href="#i-agente"/></svg><b>Subagentes</b><span class="sub">contexto aislado</span><span class="tag">explorer · reviewer · gate-runner</span></button>
+            <button type="button" class="arq-card" data-k="contrato" data-dir="sensor"><svg aria-hidden="true"><use href="#i-contrato"/></svg><b>Contrato de salida</b><span class="sub">sin veredicto no cierra</span><span class="tag">subagent-contract.mjs · SubagentStop</span></button>
+            <button type="button" class="arq-card" data-k="worktree" data-dir="sensor"><svg aria-hidden="true"><use href="#i-rama"/></svg><b>Worktrees</b><span class="sub">medir sin ensuciar el repo</span><span class="tag">cycle-check --verify-red</span></button>
+          </div>
+        </div>
+      </div>
+
+      <p class="arq-pista">Tocá una pieza para abrir su ficha: qué es, qué le agrega el arnés, dónde vive,
+        qué falla evita y cómo se ve cuando actúa. Con <kbd>←</kbd> <kbd>→</kbd> se recorren todas.</p>
+
+      <dialog class="arq-modal" id="arq-modal" aria-labelledby="arq-modal-titulo">
+        <header class="arq-modal-cab">
+          <svg aria-hidden="true"><use href="#i-ciclo"/></svg>
+          <div><h3 id="arq-modal-titulo">Pieza</h3><span class="dir"></span></div>
+          <button type="button" class="arq-modal-cerrar" aria-label="Cerrar la ficha">×</button>
+        </header>
+        <div class="arq-modal-cuerpo"></div>
+        <footer class="arq-modal-pie">
+          <button type="button" data-paso="-1">← anterior</button>
+          <span class="pos"></span>
+          <button type="button" data-paso="1">siguiente →</button>
+        </footer>
+      </dialog>
+
+      <p class="arq-fuera">Fuera del alcance a propósito: el streaming, la caché de prompts, los
+        buzones entre agentes y el tablero autónomo. Son del runtime, o no tienen un incidente detrás
+        que justifique un freno (P14: una regla sin cicatriz es ruido).</p>
+    </div>
+  </div>
+</section>
+
 <section id="piezas">
   <div class="wrap sec-inner">
     <p class="rail"><b>5</b>piezas, cada una con su falla que evita</p>
@@ -745,11 +975,12 @@ repo-lint: 1 problema(s)
             verifica quien programa.</p>
         </div>
         <div class="piece">
-          <p class="mark">10 hooks del agente · 4 de git</p>
+          <p class="mark">11 hooks del agente · 4 de git</p>
           <h3>Frenos en el ciclo</h3>
-          <p>Antes de escribir (¿te lo pidieron?, rutas protegidas, reuso), antes de un comando
-            irreversible, después de cada edición (el lint del archivo tocado, con el error real) y
-            al cerrar la tarea. En git:
+          <p>Antes de escribir (¿te lo pidieron?, rutas protegidas, reuso) —también cuando escribe la
+            herramienta de un servidor MCP—, antes de un comando irreversible (bloquear, o
+            preguntarle al humano), después de cada edición (el lint del archivo tocado, con el error
+            real), al cerrar la tarea y cuando un subagente sensor cierra sin su veredicto. En git:
             rutas protegidas al commitear y <strong>el registro del trabajo</strong>.</p>
           <p class="solves">Evita: el agente que borra lo que no debía, el que dice «listo» sin
             verificar, y el cambio que llega al historial sin que nadie sepa por qué se hizo.</p>
@@ -816,8 +1047,69 @@ Motivo: destruye trabajo sin commitear.
   Usá `git stash` o pedí confirmación
   al humano.
 
-Reformulá el comando o pedí confirmación
-explícita. No lo reintentes igual.</code></pre>
+Reformulá el comando, o pedile al humano
+que lo corra él. No lo reintentes igual.</code></pre>
+        </figure>
+      </div>
+
+      <div class="col stack" style="margin-top:1.75rem">
+        <h3 style="font-size:var(--step-1)">Bloquear, o preguntarle al humano</h3>
+        <p>Un <code>deny</code> cuyo motivo dice «pedí confirmación» no tiene salida: el humano dice
+          que sí y el hook vuelve a bloquear. Lo destructivo que a veces <em>es</em> lo pedido va en
+          <code>bash.ask</code>: el hook no bloquea, le pasa la decisión al humano con el motivo en
+          el pedido de permiso de Claude Code, y el comando corre sólo si el humano lo aprueba.
+          <code>deny</code> gana si un comando casa las dos listas. Si el pedido llega sin el evento,
+          no se puede preguntar, y entonces bloquea: una pregunta perdida en silencio es un freno que
+          desaparece.</p>
+      </div>
+      <div class="pair">
+        <figure class="panel">
+          <figcaption>bash.ask · .claude/harness.config.json</figcaption>
+          <pre><code>{ <span class="k">"pattern"</span>: <span class="s">"git\\s+branch\\s+(-D|…)\\b"</span>,
+  <span class="k">"reason"</span>: <span class="s">"borra la rama aunque no esté
+     mergeada: los commits que sólo viven
+     ahí quedan huérfanos."</span> }</code></pre>
+        </figure>
+        <figure class="panel">
+          <figcaption>lo que ve el humano (exit 0 + JSON)</figcaption>
+          <pre><code><span class="hdr">¿Permitir?</span>  git branch -D feat/vieja
+
+CONFIRMACIÓN DEL HUMANO: borra la rama
+  aunque no esté mergeada: los commits
+  que sólo viven ahí quedan huérfanos.
+
+  › Sí     No</code></pre>
+        </figure>
+      </div>
+
+      <div class="col stack" style="margin-top:1.75rem">
+        <h3 style="font-size:var(--step-1)">El freno protege la ruta, no la herramienta</h3>
+        <p>Un servidor MCP que edita código —un índice de símbolos con <code>replace_symbol_body</code>,
+          un filesystem con <code>write_file</code>— escribe en el mismo árbol que <code>Edit</code>, así
+          que pasa por los mismos frenos: toda <code>mcp__*</code> llega a los cuatro frenos de
+          escritura, y <code>writeTools</code> separa por el <strong>verbo</strong> las que escriben en
+          el árbol de las que sólo leen. Se evalúan todas las rutas de la llamada: un <code>move</code> desde
+          afuera hacia <code>.env</code> se frena aunque la primera ruta esté fuera del repo.</p>
+      </div>
+      <div class="pair">
+        <figure class="panel">
+          <figcaption>writeTools · .claude/harness.config.json</figcaption>
+          <pre><code>{ <span class="k">"pattern"</span>: <span class="s">"^mcp__.+__(write|edit|
+     replace|insert|rename|move|…)"</span>,
+  <span class="k">"broadPattern"</span>: <span class="s">"_in_files$"</span>,
+  <span class="k">"pathFields"</span>: [<span class="s">"file_path"</span>, <span class="s">"relative_path"</span>,
+     <span class="s">"path"</span>, <span class="s">"source"</span>, <span class="s">"destination"</span>, …] }</code></pre>
+        </figure>
+        <figure class="panel blocked">
+          <figcaption>mcp__serena__replace_content → .env</figcaption>
+          <pre><code><span class="hdr">RUTA PROTEGIDA:</span> `.env` no se edita
+  desde el agente.
+
+Motivo: .env* es la llave del reino: lo
+  edita el humano, nunca el agente.
+
+Si el cambio hace falta de verdad,
+pedíselo al humano y que lo haga él.</code></pre>
         </figure>
       </div>
 
@@ -845,7 +1137,7 @@ explícita. No lo reintentes igual.</code></pre>
 
 <section id="costo">
   <div class="wrap sec-inner">
-    <p class="rail"><b>276 ms</b>lo que el arnés agrega a un turno</p>
+    <p class="rail"><b>280 ms</b>lo que el arnés agrega a un turno</p>
     <div>
       <div class="col stack">
         <p class="eyebrow">El costo, medido</p>
@@ -879,8 +1171,9 @@ explícita. No lo reintentes igual.</code></pre>
 ✓ PostToolUse  post-edit-check.mjs  144 ms
 
 Costo por evento:
-  UserPromptSubmit   207 ms
-  PreToolUse         276 ms
+  UserPromptSubmit         216 ms
+  PreToolUse               280 ms
+  PreToolUse vía mcp__.*   208 ms
 
 <span class="hdr">LATENCIA VERDE</span> — todos dentro de
 presupuesto.</code></pre>
@@ -889,7 +1182,7 @@ presupuesto.</code></pre>
 
       <div class="col stack" style="margin-top:1.75rem">
         <h3 style="font-size:var(--step-1)">Qué mide, contra qué, y qué pasa si se degrada</h3>
-        <p>Los diez hooks declarados se corren de verdad con un payload sintético, tres veces, y se
+        <p>Los once hooks declarados se corren de verdad con un payload sintético, tres veces, y se
           reporta la <strong>mediana</strong> —la media la arruina un arranque frío, el máximo
           cualquier hipo del sistema operativo—. Es una señal del gate más: si un hook se pasa de
           presupuesto, <strong>no hay entregable</strong>.</p>
@@ -900,7 +1193,8 @@ presupuesto.</code></pre>
           <tbody>
             <tr><td>un hook puro (no lanza procesos)</td><td class="mono">~70 ms</td><td>es el piso: arrancar <code>node</code>. Ningún freno propio cuesta más que eso</td></tr>
             <tr><td>los 2 hooks con permiso de lanzar procesos</td><td class="mono">118 y 144 ms</td><td>el precio de la excepción, escrito en el config y no en la cabeza de alguien</td></tr>
-            <tr><td>costo por turno del agente</td><td class="mono">276 ms</td><td>lo que el arnés le agrega a una edición, sumando los cuatro frenos que corren antes de escribir</td></tr>
+            <tr><td>costo por turno del agente</td><td class="mono">280 ms</td><td>lo que el arnés le agrega a una edición, sumando los cuatro frenos que corren antes de escribir</td></tr>
+            <tr><td>cada llamada a una herramienta MCP</td><td class="mono">208 + 72 ms</td><td>el matcher no sabe leer verbos: también una lectura MCP lanza los frenos de escritura. Se mide aparte (<code>vía mcp__.*</code>) porque es un camino que paga otra latencia</td></tr>
             <tr><td>cada señal del gate</td><td class="mono">línea <code>Tiempo:</code></td><td>sin el número, «el gate tarda» termina sacando la señal que molesta en vez de la que cuesta</td></tr>
           </tbody>
         </table>
@@ -1498,6 +1792,7 @@ DRY-RUN: 38 archivo(s) a copiar, 0 conservado(s).</code></pre>
             <tr><td><a href="https://github.com/raalzate/agent-harness/blob/main/docs/decisions/0005-indice-obligatorio.md">0005</a></td><td>El índice del código pasa de recomendación a requisito — y por qué su señal se omite en vez de fallar.</td></tr>
             <tr><td><a href="https://github.com/raalzate/agent-harness/blob/main/docs/decisions/0006-banco-en-paralelo.md">0006</a></td><td>El banco corre un proceso hijo por caso y el contrato entre padre e hijo es la salida — el gate de 129s a ~82s.</td></tr>
             <tr><td><a href="https://github.com/raalzate/agent-harness/blob/main/docs/decisions/0007-controles-fuera-del-gate.md">0007</a></td><td>Los controles caros o que dependen del reloj van fuera del gate, con el pipeline que los corre declarado y verificado por el self-test.</td></tr>
+            <tr><td><a href="https://github.com/raalzate/agent-harness/blob/main/docs/decisions/0008-foco.md">0008</a></td><td><em>Propuesto.</em> El trabajo tiene foco: un objetivo versionado en el repo, mapeado al tablero, reinyectado al abrir sesión y tras compactar.</td></tr>
             <tr><td><a href="https://github.com/raalzate/agent-harness/blob/main/docs/decisions/0009-panel-del-arnes.md">0009</a></td><td>El gate regenera el panel del arnés en cada corrida, como proceso hijo cuyo exit code se ignora: el panel se mira, no decide.</td></tr>
             <tr><td><a href="https://github.com/raalzate/agent-harness/blob/main/docs/decisions/0010-memoria-como-llega.md">0010</a></td><td>El panel muestra la memoria como llega al agente —fija, selectiva, personal, versionada— y sólo ejecuta un hook si el config lo permite.</td></tr>
           </tbody>
@@ -1610,7 +1905,7 @@ DRY-RUN: 38 archivo(s) a copiar, 0 conservado(s).</code></pre>
         L(""),
         L("──▶ harness cost (hook latency)"),
         L("LATENCIA VERDE — todos los hooks dentro de", "dim"),
-        L("presupuesto (PreToolUse: 276 ms por turno)", "dim"),
+        L("presupuesto (PreToolUse: 280 ms por turno)", "dim"),
         L("    ✓ harness cost (hook latency)", "ok"),
         L(""),
         L("GATE VERDE — entregable.", "ok")
@@ -1658,7 +1953,7 @@ DRY-RUN: 38 archivo(s) a copiar, 0 conservado(s).</code></pre>
         L(""),
         L("──▶ harness cost (hook latency)"),
         L("LATENCIA VERDE — todos los hooks dentro de", "dim"),
-        L("presupuesto (PreToolUse: 276 ms por turno)", "dim"),
+        L("presupuesto (PreToolUse: 280 ms por turno)", "dim"),
         L("    ✓ harness cost (hook latency)", "ok"),
         L(""),
         L("GATE ROJO — señales fallidas: convention lint", "no"),
@@ -1748,8 +2043,8 @@ DRY-RUN: 38 archivo(s) a copiar, 0 conservado(s).</code></pre>
           L("Motivo: edición masiva in-place sobre fuente: el", "no"),
           L("incidente arquetípico. Usá Edit/Write, o commit +", "no"),
           L("dry-run antes.", "no"),
-          L("Reformulá el comando o pedí confirmación explícita", "no"),
-          L("al humano. No lo reintentes igual.", "no"),
+          L("Reformulá el comando, o pedile al humano que lo", "no"),
+          L("corra él. No lo reintentes igual.", "no"),
           L(""),
           L("→ el agente: commit previo (punto de vuelta)", "dim"),
           L("→ imprime los 47 archivos y espera confirmación", "dim"),
@@ -2143,6 +2438,134 @@ DRY-RUN: 38 archivo(s) a copiar, 0 conservado(s).</code></pre>
   boton.addEventListener("click", function () { cajon(lateral.getAttribute("data-open") !== "true"); });
   arbol.addEventListener("click", function (e) { if (e.target.tagName === "A") cajon(false); });
   addEventListener("keydown", function (e) { if (e.key === "Escape") cajon(false); });
+})();
+</script>
+
+<script>
+/* Arquitectura: la ayuda de cada pieza. El contenido vive acá y no en atributos para que el
+   HTML del diagrama siga legible; cada entrada responde las mismas cuatro preguntas. */
+(function () {
+  var D = {
+    ui: { t: "Interfaz", cc: "Por donde entra el trabajo: la terminal, el IDE o un pipeline de CI que corre el agente sin humano.", ar: "CI corre el mismo <code>npm run gate</code> que el humano y el agente. No hay un «gate de CI» distinto: hay una definición de entregable, declarada en <code>gate.signals</code>.", donde: "<code>.github/workflows/ci.yml</code> · <code>gate.signals</code> · <code>docs/cicd.md</code>", evita: "Que CI verifique algo distinto de lo que verificó quien programó: «en mi máquina funciona»." },
+    sesion: { t: "Sesión", cc: "Claude Code abre, retoma o compacta la conversación. Al compactar, el contexto se resume y se pierde detalle.", ar: "El hook <code>SessionStart</code> imprime rama, cambios sin commitear, alertas (pre-commit sin instalar, gate pendiente) y el encabezado de <code>STATUS.md</code>. No tiene matcher, así que corre también después de compactar y el estado verificado vuelve a entrar.", donde: "<code>.claude/hooks/session-start.mjs</code> · <code>status.file</code>", evita: "Releer el repo entero para saber si algo anda, y perder el estado al compactar." },
+    pedido: { t: "Pedido", cc: "Cada mensaje del humano pasa por <code>UserPromptSubmit</code> antes de llegar al modelo; lo que el hook imprime entra al contexto.", ar: "<code>ask-first</code> marca el turno si el pedido es una pregunta (y <code>action-guard</code> bloquea editar hasta el próximo pedido); <code>sdd-router</code> pone el criterio según el tamaño del cambio; <code>graph-first</code> empuja al índice del código antes de abrir archivos.", donde: "<code>askFirst</code> · <code>sdd.routes</code> · <code>graph</code>", evita: "Actuar sobre una pregunta, y arrancar una feature sin ruta ni registro." },
+    permisos: { t: "Permisos", cc: "Antes de ejecutar una herramienta, <code>PreToolUse</code> decide: seguir (exit 0), bloquear (exit 2, stderr es lo que el agente lee) o preguntarle al humano (JSON <code>permissionDecision: \"ask\"</code>).", ar: "<code>bash.deny</code> bloquea con el motivo; <code>bash.ask</code> le pasa la decisión al humano con el motivo, y si el payload no trae el evento, bloquea en vez de perder la pregunta. <code>protectedPaths</code> cuida secretos, lockfiles y derivados; <code>reuse</code> frena boilerplate que ya tiene abstracción.", donde: "<code>bash.deny</code> · <code>bash.ask</code> · <code>protectedPaths</code> · <code>reuse</code> · ADR 0004", evita: "El comando irreversible, y el «pedí confirmación» de un <code>deny</code> que el sí del humano no podía levantar." },
+    guias: { t: "Guías", cc: "La memoria que Claude Code carga al abrir la sesión: <code>CLAUDE.md</code> y lo que importa con <code>@</code>.", ar: "Cada principio de <code>CONSTITUTION.md</code> declara su fuerza: <b>BLOCKING</b> nombra el comando que falla; <b>REVIEW</b> lo juzga el <code>reviewer</code>. La regla COHERENCIA del lint verifica que lo que la guía recomienda no esté vedado por un freno.", donde: "<code>CLAUDE.md</code> · <code>CONSTITUTION.md</code> · <code>coherence</code>", evita: "La prosa aspiracional que nadie hace cumplir, y la guía que manda a hacer lo que el freno bloquea." },
+    skills: { t: "Skills y comandos", cc: "Instrucciones que se cargan sólo cuando hacen falta (<code>/comando</code> o skill), no en cada turno.", ar: "<code>/lesson</code> convierte un incidente en el mecanismo más fuerte disponible (test &gt; hook/lint &gt; comando &gt; markdown); <code>new-guardrail</code> convierte una regla en prosa en un freno con prueba de vida; <code>/gate</code> corre el entregable e interpreta el resultado.", donde: "<code>.claude/commands/</code> · <code>.claude/skills/</code>", evita: "Tropezar dos veces con la misma piedra." },
+    memoria: { t: "Memoria verificada", cc: "Lo que persiste entre sesiones y el agente lee como verdad.", ar: "<code>STATUS.md</code> lleva sólo lo verificado con un comando; lo supuesto va en «deuda conocida». Cada incidente de <code>gotchas.md</code> declara Síntoma, Causa, Regla y Mecanismo, y el lint (regla INCIDENTE) lo exige. La deriva semanal pone rojo un <code>STATUS.md</code> viejo.", donde: "<code>status</code> · <code>incidents</code> · <code>drift.statusMaxAgeDays</code>", evita: "Una memoria que miente: el agente la lee como verdad." },
+    indice: { t: "Índice del código", cc: "Sin índice, el agente abre archivos para entender el repo: el error más caro, y no aparece en ningún log.", ar: "codegraph mantiene símbolos, llamadas y radio de impacto. <code>graph-first</code> lo recuerda en el pedido, y su señal del gate sale <b>OMITIDA</b> (no verde) si nadie corrió <code>codegraph init</code>.", donde: "<code>graph</code> · <code>docs/codegraph.md</code> · ADR 0005", evita: "Un cambio de diseño decidido sin medir qué rompe lejos." },
+    mcp: { t: "Escrituras MCP", cc: "Un servidor MCP suma herramientas propias (<code>mcp__servidor__herramienta</code>): un índice de símbolos, un filesystem, un gestor. Algunas editan archivos del repo.", ar: "Toda <code>mcp__*</code> llega a los frenos de escritura. <code>writeTools</code> separa por el <b>verbo</b> (replace, write, move…) las que escriben en el árbol; se evalúan <b>todas</b> las rutas de la llamada (un <code>move</code> trae dos); una escritura sobre todo el proyecto marca el gate y frena sobre una pregunta; con contenido y sin ruta es una escritura externa y pasa.", donde: "matcher <code>mcp__.*</code> en <code>settings.json</code> · <code>writeTools</code> · self-test 3b-bis", evita: "Editar <code>.env</code> con <code>replace_symbol_body</code> sin que <code>protected-paths</code> lo vea: P8 con una puerta lateral." },
+    mcpcosto: { t: "Costo de MCP", cc: "El matcher de <code>settings.json</code> no sabe leer verbos: toda llamada MCP, también las de lectura, lanza los hooks de escritura.", ar: "<code>hooks-timing</code> mide aparte cada alternativa regex del matcher: el camino <code>mcp__.*</code> tiene su número contra el presupuesto (hoy ≈208 ms antes y ≈72 ms después de cada llamada). Si un matcher no se puede reducir a un nombre que lo case, la fila sale OMITIDA en vez de medir un camino que no corre.", donde: "<code>scripts/hooks-timing.mjs</code> · <code>observability</code>", evita: "Una latencia que todos pagan y ningún número muestra." },
+    bucle: { t: "Bucle del agente", cc: "El modelo elige una herramienta, Claude Code la ejecuta y el resultado vuelve al contexto, en ciclo, hasta que el agente decide terminar.", ar: "Nada: el arnés no reemplaza el bucle, se engancha en sus eventos con un contrato angosto. Exit 0 sigue, exit 2 bloquea (stderr es lo que el agente lee), el JSON <code>ask</code> pregunta. Nunca exit 1: no bloquea nada y pasa desapercibido. Un config roto deja pasar.", donde: "<code>.claude/hooks/harness.mjs</code> · regla INVARIANTE · ADR 0004", evita: "Un arnés roto que bloquea al humano, y un hook que «falla» sin frenar." },
+    herram: { t: "Herramientas", cc: "Claude Code despacha cada llamada a su herramienta: Bash, Edit, Write o la de un servidor MCP.", ar: "Después de cada edición, <code>post-edit-check</code> corre el lint <b>sobre el archivo tocado</b> y devuelve el error real (archivo, línea, regla). Si el archivo es código, marca el gate pendiente; también tras un reemplazo MCP sin archivo.", donde: "<code>lint.command</code> · <code>gate.codeGlobs</code> · <code>gate.codeExtensions</code>", evita: "Enterarse del error diez ediciones después, en el gate." },
+    fin: { t: "Fin del turno", cc: "Cuando el agente quiere terminar, corre el evento <code>Stop</code>.", ar: "Si se editó código y el gate no quedó verde, <code>gate-stop</code> no deja cerrar. El gate ejecuta <code>gate.signals</code> (self-test, link-check, lint, artefactos, banco, latencia) y regenera el panel.", donde: "<code>gate.marker</code> · <code>gate.signals</code> · <code>scripts/gate.mjs</code>", evita: "«Listo» sin verificar." },
+    git: { t: "Commit y push", cc: "Fuera del ciclo del agente: frenan también al humano.", ar: "<code>pre-commit</code> repite las rutas protegidas; <code>commit-msg</code> exige el ítem de trabajo o una fuga declarada con motivo; <code>pre-push</code> frena el push directo a las ramas protegidas y el nombre de rama fuera del modelo.", donde: "<code>.githooks/</code> · <code>tracker.issuePattern</code> · <code>branches</code> · <code>workflow</code>", evita: "Un cambio que llega al historial sin que nadie sepa por qué, y el push directo a main." },
+    eventos: { t: "Eventos", cc: "Claude Code emite eventos en cada etapa (sesión, pedido, antes y después de una herramienta, fin del turno, fin de un subagente) y corre los hooks declarados.", ar: "Los nombres de evento salen de <code>settings.json</code> y ningún hook los cablea (regla EVENTOS). El self-test corre cada hook con muestras derivadas del propio config: que muerda, y que no muerda de más.", donde: "<code>.claude/settings.json</code> · <code>singleSource</code> · <code>harness-selftest.mjs</code>", evita: "Un freno instalado y muerto: el archivo está, pero el evento nunca le llega." },
+    latencia: { t: "Latencia", cc: "Todo hook se paga en cada prompt y en cada edición.", ar: "<code>npm run timing</code> corre cada hook declarado tres veces con un payload sintético y compara la mediana con su presupuesto. Es una señal del gate: sobre presupuesto no hay entregable. Hoy, ≈280 ms antes de cada edición.", donde: "<code>observability.budgetMs</code> · <code>observability.budgets</code>", evita: "El arnés que alguien apaga porque «estorba» y nadie sabe cuánto cuesta." },
+    panel: { t: "Panel y deriva", cc: "Lo que se degrada sin que ningún cambio lo rompa no aparece en un diff.", ar: "El gate regenera el panel en cada corrida (salud, memoria, plan). <code>drift.yml</code> corre semanal la deriva y la prueba de vida del <code>reviewer</code>, que se mide con una tasa porque es un juez probabilístico.", donde: "<code>panel</code> · <code>drift</code> · <code>reviewerEval</code> · ADR 0007 y 0009", evita: "Un control encendido que nadie corre: «instalado y muerto»." },
+    subagentes: { t: "Subagentes", cc: "El agente delega en un contexto aislado y recibe sólo la conclusión.", ar: "<code>explorer</code> busca antes de abrir archivos (guía); <code>reviewer</code> revisa el diff contra los principios BLOCKING (sensor inferencial); <code>gate-runner</code> corre el gate y trae el error real sin miles de líneas de log (sensor).", donde: "<code>.claude/agents/</code> · <code>taxonomy.agents</code>", evita: "Llenar el contexto principal con volcados de archivos y logs." },
+    contrato: { t: "Contrato de salida", cc: "Cuando un subagente termina, corre <code>SubagentStop</code>; un exit 2 le devuelve el turno <b>al subagente</b> con el motivo.", ar: "Si el <code>reviewer</code> o el <code>gate-runner</code> cierran sin su línea <code>VEREDICTO: …</code>, el hook los devuelve a trabajar. El patrón del <code>reviewer</code> es el mismo que mide <code>reviewer-eval</code>, y el self-test verifica que sigan iguales. Con <code>stop_hook_active</code> pasa: insistir sería un loop.", donde: "<code>subagentOutput.contracts</code> · <code>subagent-contract.mjs</code> · self-test 3e-sub", evita: "Un «se ve bien» que le llega al agente principal como aprobación." },
+    worktree: { t: "Worktrees", cc: "Git puede tener varios árboles de trabajo del mismo repo.", ar: "<code>cycle-check --verify-red</code> arma un worktree temporal <b>fuera</b> del repo en la base de la rama y exige que la prueba nueva falle sin el cambio de producción. El <code>reviewer</code> se evalúa aislado en un temporal. Ninguna medición deja un worktree registrado.", donde: "<code>xp.testFirst.verifyRed</code> · <code>reviewerEval.context</code>", evita: "Una prueba que pasa con o sin el cambio: no prueba nada." }
+  };
+  var DIR = { guia: "guía · antes de decidir", freno: "freno · antes de ejecutar", sensor: "sensor · después", runtime: "runtime de Claude Code" };
+  var GH = "https://github.com/raalzate/agent-harness/blob/main/";
+  /* La ficha extendida: cómo se ve la pieza cuando actúa (salida real de los hooks y scripts) y
+     dónde leer en largo. Se escapa al insertar: los ejemplos traen `<` y comillas. */
+  var EX = {
+    ui: { ej: "$ npm run gate\n  ✓ harness self-test\n  ✓ docs link-check\n  ✓ convention lint\n  …\nGATE VERDE — entregable.\n\n# CI corre esta misma línea: no hay un gate «de CI»", doc: ["docs/cicd.md", "El pipeline y sus reglas, en cualquier forja"] },
+    sesion: { ej: "## Estado del repo (hook SessionStart)\n- Rama: `feat/x` · HEAD: afce025 fix(panel): …\n- Sin commitear: 3 archivo(s) — …\n- ⚠️ Gate pendiente de una sesión anterior: corré `npm run gate`.\n\n### STATUS.md (encabezado)\n…", doc: ["docs/arnes.md", "El arnés de este repo, hook por hook"] },
+    pedido: { ej: "## Pedido informativo (hook ask-first)\n\nEsto es una **pregunta**: contestala con lo que ya sabés\no leyendo lo que haga falta. **No edites archivos del repo**:\nel hook `action-guard` los va a bloquear hasta el próximo\npedido del humano.", doc: ["docs/sdd.md", "El ruteo de pedidos: cuándo spec, cuándo test rojo"] },
+    permisos: { ej: "$ git reset --hard HEAD~2\n● PreToolUse · bash-guard · exit=2\nCOMANDO BLOQUEADO: `git reset --hard HEAD~2`\nMotivo: `reset --hard` destruye trabajo sin commitear.\n  Usá `git stash` o pedí confirmación.\n\n$ git branch -D feat/vieja\n● PreToolUse · bash-guard · exit=0 + ask\n¿Permitir?  CONFIRMACIÓN DEL HUMANO: borra la rama\n  aunque no esté mergeada…   › Sí   No", doc: ["docs/config-reference.md", "bash.deny, bash.ask, protectedPaths y reuse, clave por clave"] },
+    guias: { ej: "## P1 — Nada se entrega sin gate verde · BLOCKING\n\nEl entregable es `npm run gate` …\n\n*Mecanismo:* `scripts/gate.sh`, el hook `Stop`\n(`.claude/hooks/gate-stop.mjs`) y el job `gate` de CI.", doc: ["docs/buenas-practicas.md", "La teoría, agnóstica de stack"] },
+    skills: { ej: "» /lesson el lint no leía los .pyi\n\n1. ¿el incidente ya estaba registrado? → la regla no frenó\n2. mecanismo más fuerte: test > hook/lint > comando > md\n3. su caso en el self-test\n4. gate verde antes de que quede", doc: ["docs/metodo.md", "El método: leyes y ciclo del incidente"] },
+    memoria: { ej: "### GOTCHA: en Windows un binario ausente no es ENOENT\n\nSíntoma:   la matriz de CI salió roja sólo en Windows …\nCausa:     los comandos se lanzan por cmd.exe …\nRegla:     que un ejecutable exista se PREGUNTA …\nMecanismo: `existeEjecutable` en harness.mjs + caso 1d", doc: ["docs/gotchas.md", "Los incidentes, con su mecanismo"] },
+    indice: { ej: "$ codegraph status\n$ codegraph explore \"quién usa targetPath\"\n  targetPath   .claude/hooks/harness.mjs\n  ← protected-paths · action-guard · reuse-guard\n  ← post-edit-check\n  radio de impacto: 4 hooks", doc: ["docs/codegraph.md", "El índice del código, obligatorio"] },
+    mcp: { ej: "mcp__serena__replace_content\n  { relative_path: \".env\", repl: \"…\" }\n● PreToolUse · protected-paths · exit=2\nRUTA PROTEGIDA: `.env` no se edita desde el agente.\nMotivo: .env* es la llave del reino: lo edita el\n  humano, nunca el agente.\n\nmcp__serena__find_symbol { relative_path: \".env\" }\n● exit=0 — leer no es escribir", doc: ["docs/config-reference.md", "writeTools: pattern, broadPattern, pathFields"] },
+    mcpcosto: { ej: "$ npm run timing\n  ✓ PreToolUse  protected-paths.mjs vía mcp__.*   68 ms\n  ✓ PostToolUse post-edit-check.mjs vía mcp__.*  72 ms\n\nCosto por evento:\n  PreToolUse               280 ms\n  PreToolUse vía mcp__.*   208 ms\n  PostToolUse vía mcp__.*   72 ms", doc: ["docs/config-reference.md", "observability: presupuestos de latencia"] },
+    bucle: { ej: "exit 0      → seguir (en SessionStart y UserPromptSubmit,\n              el stdout entra al contexto)\nexit 2      → bloquear: stderr es lo único que el agente lee\nJSON ask    → decide el humano en el pedido de permiso\nexit 1      → nunca: no frena nada y pasa desapercibido\nconfig roto → deja pasar (el gate no puede salir verde así)", doc: ["docs/decisions/0004-contrato-de-hooks.md", "ADR 0004 — el contrato de los hooks"] },
+    herram: { ej: "● PostToolUse · post-edit-check · exit=2\nLINT DEL REPO EN ROJO tras editar `.claude/hooks/harness.mjs`:\n\n  .claude/hooks/harness.mjs:195  [EVENTOS]  el literal\n  `PreToolUse` sale de `.claude/settings.json`, no se\n  cablea acá.\n\nLeé el error, corregí la causa y volvé a editar.", doc: ["docs/arnes.md", "Qué corre después de cada edición"] },
+    fin: { ej: "● Stop · gate-stop · exit=2\nGATE PENDIENTE: hay código editado en esta sesión y el\ngate no quedó verde.\nCorré `npm run gate` (o el subagente `gate-runner`) y\narreglá lo que salga rojo.", doc: ["docs/arnes.md", "Las señales del gate y por qué está cada una"] },
+    git: { ej: "commit-msg: este commit toca código y no queda\nregistrado en ninguna parte.\n\nElegí una de las dos, y que quede en el historial:\n  1) Referenciá el ítem de trabajo en el mensaje (#123).\n  2) Declaralo, con el motivo, en una línea del cuerpo:\n     no-issue: <por qué este cambio no necesita registro>", doc: ["docs/trazabilidad.md", "Trazabilidad: commit, ítem y PR"] },
+    eventos: { ej: "\"PreToolUse\": [{\n  \"matcher\": \"Write|Edit|MultiEdit|NotebookEdit|mcp__.*\",\n  \"hooks\": [\n    { \"command\": \"node .claude/hooks/action-guard.mjs\" },\n    { \"command\": \"node .claude/hooks/protected-paths.mjs\" },\n    { \"command\": \"node .claude/hooks/reuse-guard.mjs\" }\n  ]\n}]", doc: ["docs/guias-y-sensores.md", "Guías y sensores: el marco aplicado"] },
+    latencia: { ej: "Latencia de los hooks (mediana de 3 corridas)\n  ✓ SessionStart  session-start.mjs   123 ms (presupuesto 900)\n  ✓ PreToolUse    bash-guard.mjs       67 ms (presupuesto 400)\n  ✓ PostToolUse   post-edit-check.mjs 148 ms (presupuesto 900)\n\nLATENCIA VERDE — todos los hooks dentro de presupuesto.", doc: ["docs/config-reference.md", "observability, clave por clave"] },
+    panel: { ej: "Panel del arnés · agent-harness · en vivo\n  salud: sin alarmas · 31 piezas en el mapa,\n         0 etapa(s) sin control · 25 gotchas · 7 señales\n  último gate en esta máquina: verde\n  → .git/harness-panel/index.html", doc: ["docs/panel.md", "El panel: salud, memoria y esta máquina"] },
+    subagentes: { ej: "» reviewer: revisá el diff contra la constitución\n\nVEREDICTO: aprobado con observaciones\n\nBLOQUEANTES\n- ninguno\n\nOBSERVACIONES\n- `harness.mjs:97` — P3 — muerde de más con …", doc: ["docs/arquitectura.md", "Diseño: acoplamiento, cohesión y ADR"] },
+    contrato: { ej: "● SubagentStop · subagent-contract · exit=2\nSALIDA SIN CONTRATO: el subagente `reviewer` está por\ncerrar sin lo que su salida exige\n(`VEREDICTO:\\W*(rechazado|aprobado)`).\nMotivo: el agente principal decide si entrega con esa\nlínea; sin ella, el review es una opinión.", doc: ["docs/config-reference.md", "subagentOutput: el contrato de cada subagente"] },
+    worktree: { ej: "$ node scripts/cycle-check.mjs --verify-red main\n  worktree temporal FUERA del repo, en la base de la rama\n  pruebas de la rama sobre el código de la base…\n  ✓ fallan sin el cambio: la prueba describe el cambio\n  worktree eliminado", doc: ["docs/ciclo-desarrollo.md", "El ciclo: ramas y prácticas XP"] }
+  };
+  var esc = function (t) { return String(t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); };
+
+  var cartas = Array.prototype.slice.call(document.querySelectorAll(".arq-card"));
+  var modal = document.getElementById("arq-modal");
+  if (!modal || !cartas.length) return;
+  var cuerpo = modal.querySelector(".arq-modal-cuerpo");
+  var actual = 0;
+  var origen = null;
+
+  function abrir(i) {
+    actual = (i + cartas.length) % cartas.length;
+    var carta = cartas[actual];
+    var k = carta.getAttribute("data-k");
+    var d = D[k], x = EX[k] || {};
+    if (!d) return;
+    var dir = carta.getAttribute("data-dir");
+    modal.setAttribute("data-dir", dir);
+    var icono = carta.querySelector("use");
+    modal.querySelector(".arq-modal-cab use").setAttribute("href", icono ? icono.getAttribute("href") : "#i-ciclo");
+    modal.querySelector("#arq-modal-titulo").textContent = d.t;
+    modal.querySelector(".arq-modal-cab .dir").textContent = DIR[dir];
+    cuerpo.innerHTML =
+      "<dl><dt>En Claude Code</dt><dd>" + d.cc + "</dd>" +
+      "<dt>Lo que pone el arnés</dt><dd>" + d.ar + "</dd>" +
+      "<dt>Dónde vive</dt><dd>" + d.donde + "</dd>" +
+      "<dt>Qué falla evita</dt><dd>" + d.evita + "</dd></dl>" +
+      (x.ej ? "<div class=\"arq-modal-ej\"><p>Así se ve cuando actúa</p><pre><code>" + esc(x.ej) + "</code></pre></div>" : "") +
+      (x.doc ? "<p class=\"arq-modal-doc\">Para leer en largo: <a href=\"" + GH + x.doc[0] + "\">" + x.doc[0] + "</a> — " + x.doc[1] + "</p>" : "");
+    modal.querySelector(".pos").textContent = (actual + 1) + " / " + cartas.length;
+    cuerpo.scrollTop = 0;
+    if (!modal.open) {
+      if (typeof modal.showModal === "function") modal.showModal(); else modal.setAttribute("open", "");
+    }
+  }
+  function cerrar() {
+    if (typeof modal.close === "function") modal.close(); else modal.removeAttribute("open");
+  }
+  modal.addEventListener("close", function () { if (origen) origen.focus(); });
+  cartas.forEach(function (c, i) {
+    c.setAttribute("aria-haspopup", "dialog");
+    c.addEventListener("click", function () { origen = c; abrir(i); });
+  });
+  modal.querySelector(".arq-modal-cerrar").addEventListener("click", cerrar);
+  Array.prototype.forEach.call(modal.querySelectorAll("[data-paso]"), function (b) {
+    b.addEventListener("click", function () { abrir(actual + Number(b.getAttribute("data-paso"))); });
+  });
+  // Un clic en el fondo (fuera de la caja) cierra; Esc lo cierra el propio <dialog>.
+  modal.addEventListener("click", function (e) {
+    var r = modal.getBoundingClientRect();
+    if (e.target === modal && (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom)) cerrar();
+  });
+  modal.addEventListener("keydown", function (e) {
+    if (e.key === "ArrowRight") { e.preventDefault(); abrir(actual + 1); }
+    if (e.key === "ArrowLeft") { e.preventDefault(); abrir(actual - 1); }
+  });
+
+  var filtros = Array.prototype.slice.call(document.querySelectorAll(".arq-filtro"));
+  filtros.forEach(function (f) {
+    f.addEventListener("click", function () {
+      var activo = f.getAttribute("aria-pressed") !== "true";
+      filtros.forEach(function (g) { g.setAttribute("aria-pressed", g === f && activo ? "true" : "false"); });
+      var dir = activo ? f.getAttribute("data-filtro") : null;
+      cartas.forEach(function (c) { c.classList.toggle("atenuada", !!dir && c.getAttribute("data-dir") !== dir); });
+    });
+  });
+
+  var btn = document.getElementById("arq-ayuda-btn");
+  var ayuda = document.getElementById("arq-ayuda");
+  if (btn && ayuda) btn.addEventListener("click", function () {
+    var abierto = btn.getAttribute("aria-expanded") === "true";
+    btn.setAttribute("aria-expanded", abierto ? "false" : "true");
+    ayuda.hidden = abierto;
+  });
 })();
 </script>
 

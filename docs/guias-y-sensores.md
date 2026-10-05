@@ -31,11 +31,13 @@ tercera columna, porque es donde vive la mayoría de nuestros frenos:
 | **Guía** — antes de decidir | `CLAUDE.md`, `CONSTITUTION.md`, skills y comandos | convenciones y el porqué, en prosa |
 | | hook `session-start` | inyecta rama, working tree y el encabezado de `STATUS.md`: el agente arranca sabiendo qué está verde |
 | | hooks `sdd-router`, `ask-first`, `graph-first` (`UserPromptSubmit`) | clasifican el pedido y le dicen al agente qué ruta seguir: spec primero, test rojo primero, una pregunta antes de tocar archivos, el índice antes que abrir archivos |
-| **Freno** — decidido, no ejecutado | `protected-paths`, `bash-guard`, `reuse-guard`, `action-guard` (`PreToolUse`) | deniegan con exit 2 y un `reason` que explica por qué y qué hacer en su lugar |
+| **Freno** — decidido, no ejecutado | `protected-paths`, `bash-guard`, `reuse-guard`, `action-guard` (`PreToolUse`) | deniegan con exit 2 y un `reason` que explica por qué y qué hacer en su lugar. También ven las herramientas MCP que escriben (`writeTools`): el freno protege la ruta, no la herramienta |
+| | `bash-guard` con `bash.ask` | ni deja pasar ni bloquea: le pasa la decisión **al humano** con el motivo, en el pedido de permiso de Claude Code. Es el freno de P9 (mostrar, esperar, ejecutar), que un `deny` no puede ser: el sí del humano no levanta un exit 2 |
 | **Sensor** — después del acto | `post-edit-check` (`PostToolUse`) | corre el lint **sobre el archivo recién tocado** |
 | | `gate-stop` (`Stop`) | no deja cerrar la tarea con el gate sucio |
 | | `.githooks/` (`pre-commit`, `commit-msg`, `pre-push`), CI | el mismo gate, en los otros dos lugares donde el trabajo sale |
 | | subagente `reviewer` | juicio sobre lo que ninguna regla ve |
+| | `subagent-contract` (`SubagentStop`) | el sensor del sensor: si el `reviewer` o el `gate-runner` cierran sin su `VEREDICTO:`, les devuelve el turno. Un juicio sin veredicto llega al agente principal como aprobación |
 
 **Sensores escritos para un modelo.** El artículo insiste en que un sensor rinde más cuando su
 salida está pensada para que un LLM se corrija solo — un mensaje de linter que incluye la
@@ -111,9 +113,9 @@ por costo a lo largo del ciclo del cambio. El mapa de este arnés:
 | Etapa | Costo | Control |
 |---|---|---|
 | el pedido | ~0 | `sdd-router`, `ask-first`, `graph-first` |
-| la acción decidida | ms | `protected-paths`, `bash-guard`, `reuse-guard`, `action-guard` |
+| la acción decidida | ms | `protected-paths`, `bash-guard` (`deny` y `ask`), `reuse-guard`, `action-guard` — también para las herramientas MCP que escriben |
 | la edición hecha | ~100 ms | `post-edit-check` (lint del archivo) |
-| fin del turno | el gate | `gate-stop` |
+| fin del turno | el gate | `gate-stop`, y `subagent-contract` al cerrar un subagente |
 | commit / push | barato | `pre-commit`, `commit-msg`, `pre-push` (el gate completo no corre acá) |
 | integración | el gate, en limpio | CI (`.github/workflows/ci.yml`) — el mismo `npm run gate`, más `--verify-red` en el PR |
 | continuo (deriva) | semanal | `.github/workflows/drift.yml`: el gate sobre main, `npm run drift` y `npm run eval:reviewer` |

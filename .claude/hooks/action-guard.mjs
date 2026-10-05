@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * PreToolUse Write|Edit|MultiEdit — el freno que faltaba: **no actúes sobre una pregunta**.
+ * PreToolUse Write|Edit|MultiEdit|mcp__* — el freno que faltaba: **no actúes sobre una pregunta**.
  *
  * Lee el marcador que deja `ask-first.mjs` cuando el pedido del turno fue informativo.
  * Mientras esté puesto, ninguna edición DENTRO del repo pasa. Lo limpia el siguiente
@@ -15,7 +15,7 @@
  */
 import fs from "node:fs";
 import path from "node:path";
-import { readInput, loadConfig, deny, allow, targetPath, REPO_ROOT } from "./harness.mjs";
+import { readInput, loadConfig, deny, allow, targetPath, escribe, escrituraAmplia, REPO_ROOT } from "./harness.mjs";
 
 const input = await readInput();
 const config = loadConfig();
@@ -24,10 +24,13 @@ if (!spec?.marker) allow();
 
 const marker = path.join(REPO_ROOT, spec.marker);
 if (!fs.existsSync(marker)) allow();
+if (!escribe(input, config)) allow(); // leer con un servidor MCP es parte de contestar
 
-const rel = targetPath(input);
+// Una escritura MCP sobre todo el proyecto o un directorio no trae archivo, pero cae DENTRO.
+const amplia = escrituraAmplia(input, config);
+const rel = amplia ? `${input?.tool_name} (sin archivo: todo el proyecto o un directorio)` : targetPath(input, config);
 // Fuera del repo (scratchpad, temporales): escribir ahí es parte de pensar la respuesta.
-if (!rel || rel.startsWith("..")) allow();
+if (!amplia && (!rel || rel.startsWith(".."))) allow();
 
 let pedido = "";
 try {
