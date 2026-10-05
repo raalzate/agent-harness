@@ -394,3 +394,21 @@ Mecanismo: `existeEjecutable` en `.claude/hooks/harness.mjs`, usada por `scripts
          `scripts/reviewer-eval.mjs` y el self-test (que tenía su propia copia sin PATHEXT). Caso
          1d del self-test, más los casos de `--verify-red` y del eval que corren en la matriz.
 
+### GOTCHA: un servidor MCP que edita código pasaba por al lado de las rutas protegidas
+
+Síntoma: con un índice de símbolos por MCP instalado (`replace_symbol_body`, `replace_in_files`),
+         el agente podía editar `.env` o un lockfile y `protected-paths` no corría: P8 BLOCKING
+         con una puerta lateral. Lo destapó comparar el arnés contra un diagrama de la
+         arquitectura de Claude Code (capa de integración MCP), no un incidente en producción.
+Causa:   los matchers de `settings.json` eran `Write|Edit|MultiEdit|NotebookEdit`, y los hooks
+         leían la ruta sólo de `file_path`/`notebook_path`. Las herramientas MCP llegan como
+         `mcp__<servidor>__<herramienta>` y traen la ruta en `relative_path` o `path`.
+Regla:   un freno protege la RUTA, no la herramienta con que se llega. Toda herramienta que
+         escribe pasa por los mismos frenos, y quién escribe se decide por el verbo, no por una
+         lista de servidores.
+Mecanismo: matcher `…|mcp__.*` en `settings.json`, la clave `writeTools` (`escribe`,
+         `escrituraAmplia` y `targetPaths` en `.claude/hooks/harness.mjs`, que evalúa TODAS las
+         rutas de la llamada: un `move` trae dos) y los casos 3b-bis del self-test, que además
+         verifican que el matcher deje LLEGAR el evento al hook y que una escritura externa (con
+         contenido y sin ruta) no cuente como edición del repo.
+

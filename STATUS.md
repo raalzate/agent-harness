@@ -4,8 +4,8 @@ Lo imprime el hook `SessionStart`. Sirve para no releer el repo entero para cont
 Se actualiza cuando cambia el veredicto, no en cada commit. **Sólo va lo verificado con un comando**;
 lo que se supone va en "deuda conocida".
 
-- **Fecha del último gate completo:** 2026-09-24
-- **Rama:** `feat/guias-y-sensores`
+- **Fecha del último gate completo:** 2026-10-05
+- **Rama:** `feat/frenos-mcp-subagentes`
 - **Veredicto:** VERDE (`npm run gate`)
 
 ## Señales
@@ -17,7 +17,8 @@ lo que se supone va en "deuda conocida".
 | La prueba falla sin el cambio | `node scripts/cycle-check.mjs --verify-red <base>` en CI (PR) + self-test 3f-ter | verde en el self-test — 7 casos en un repo git temporal: la prueba que describe el cambio pasa, la espejo bloquea, la fuga `no-red:` con motivo pasa, sin cambio de producción no hay nada que medir, un comando que no arranca invalida la medición (antes daba falso verde: lo cazó el `reviewer`), un `setupCommand` que falla la invalida y uno que anda mide igual; no queda ningún worktree. **La corrida en CI no se verificó todavía**: necesita un PR |
 | Deriva | `npm run drift` (lo corre `.github/workflows/drift.yml`, semanal) | sin deriva — el veredicto de este archivo es de hoy; 3 avisos: `TODO`, `CONSOLE` y la regla de `reuse` no cazaron nada en los últimos 400 commits (¿sin cicatriz o ya ganaron? decisión pendiente) |
 | Prueba de vida del reviewer | `npm run eval:reviewer` (lo corre `drift.yml` si hay `ANTHROPIC_API_KEY`) | **6/6** (umbral 80 %) en una corrida local, con el revisor aislado en un directorio temporal: P5, P4, P6, allowlist que crece, y los dos inocentes aprobados. El self-test (10b) prueba la máquina del eval y el aislamiento con revisores de mentira. **En CI no corrió todavía**: necesita el secreto `ANTHROPIC_API_KEY` |
-| Mapa del arnés | `npm run map` | completo — 30 piezas (guía 10 · freno 4 · sensor 16 · computacional 24 · inferencial 6); ninguna etapa sin control |
+| Mapa del arnés | `npm run map` | completo — 31 piezas (guía 10 · freno 4 · sensor 17 · computacional 25 · inferencial 6); ninguna etapa sin control |
+| Escrituras MCP, `bash.ask` y contrato de subagentes | self-test 3b-bis, 3c-bis, 3e-sub, 9 | verde — `protected-paths`/`action-guard`/`reuse-guard`/`post-edit-check` frenan las herramientas MCP que escriben (`writeTools`: todas las rutas de la llamada, escrituras amplias, externas sin ruta pasan); `bash-guard` le pregunta al humano por `bash.ask` (y bloquea si no puede preguntar); `subagent-contract` le devuelve el turno al `reviewer`/`gate-runner` que cierra sin veredicto, con el patrón igual al de `reviewerEval`; `hooks-timing` mide aparte el camino `mcp__.*` (≈280 ms por llamada MCP: 208 antes y 72 después, en presupuesto). **El payload de `SubagentStop` no se verificó contra una sesión real** (campos tomados de la documentación de Claude Code) |
 | Self-test del arnés | `node scripts/harness-selftest.mjs` | verde — 325 comprobaciones: 10 hooks declarados y parseados, 64 regex del config compilan, 16 rutas resuelven, los frenos probados con muestras derivadas del propio config, 8 reglas del lint muerden, 6 casos de ruteo, 8 perfiles de stack instalados en repos temporales, las 26 configs de ejemplo corridas de verdad y los 5 casos del presupuesto de latencia |
 | Los frenos no muerden de más | incluido en el self-test | verde — un archivo normal pasa `protected-paths`, `git status` pasa `bash-guard`, el router se calla en lo trivial |
 | Link-check de docs | `node scripts/docs-linkcheck.mjs` | verde — enlaces y rutas citadas medidos contra `git ls-files`, y **sólo** en archivos que git no ignora (el mismo criterio en las dos direcciones) (`docs.proseRoots` acota qué raíces) · la prosa de hooks y scripts (`proseInSource`) · que los documentos de `mentionSignals` nombren las 7 señales · y que la página enlace los **25** documentos (`mustLinkAll`) |

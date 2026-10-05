@@ -116,6 +116,11 @@ const presupuestoDe = (archivo) => {
 /**
  * Los hooks declarados, con su evento y su matcher. Los nombres de evento NO se cablean
  * acá: son las claves de `settings.hooks`, que es la fuente única (regla EVENTOS del lint).
+ *
+ * Una alternativa del matcher que es un REGEX (`mcp__.*`) es otro camino por el mismo hook, y
+ * se mide aparte: con el payload de la primera alternativa (`Write`) sólo se medía la edición
+ * propia, y las herramientas de una familia entera —que llegan al hook en CADA llamada,
+ * también las de lectura— pagaban una latencia que ningún número mostraba.
  */
 function hooksDeclarados() {
   const lista = [];
@@ -124,7 +129,23 @@ function hooksDeclarados() {
       for (const h of grupo.hooks ?? []) {
         const parsed = parseHookCommand(h.command);
         if (!parsed) continue;
-        lista.push({ evento, matcher: grupo.matcher ?? "", ...parsed });
+        const matcher = grupo.matcher ?? "";
+        // Con grupos (`(Write|Edit)`) partir por `|` corta el regex por la mitad: se toma entero.
+        const alternativas = /[()]/.test(matcher) ? [matcher] : matcher.split("|");
+        alternativas.forEach((alt, i) => {
+          const esRegex = /[.*+?[\]]/.test(alt);
+          if (i > 0 && !esRegex) return; // `Edit` tras `Write` es el mismo camino
+          const herramienta = alt.replace(/\.[*+]/g, "x").replace(/[^A-Za-z0-9_]/g, "") || "Write";
+          // El nombre derivado tiene que casar el matcher como lo ancla Claude Code: si no, se
+          // mediría un camino que en la vida real no corre, y su número no diría nada.
+          let casa = true;
+          try {
+            casa = !matcher || new RegExp(`^(?:${matcher})$`).test(herramienta);
+          } catch {
+            casa = false;
+          }
+          lista.push({ evento, matcher, herramienta, ...(i > 0 ? { via: alt } : {}), ...(casa ? {} : { noCasa: true }), ...parsed });
+        });
       }
     }
   }
@@ -139,8 +160,7 @@ function hooksDeclarados() {
  * payload cuyo `tool_name` no case con el matcher mediría un hook que en la vida real no
  * habría corrido.
  */
-function payload({ evento, matcher }) {
-  const herramienta = matcher.split("|")[0].replace(/[^A-Za-z]/g, "") || "Write";
+function payload({ evento, herramienta }) {
   return {
     hook_event_name: evento,
     tool_name: herramienta,
@@ -246,6 +266,10 @@ for (const h of hooks) {
     filas.push({ ...h, omitido: "no es un script de este repo (no se puede medir su costo acá)" });
     continue;
   }
+  if (h.noCasa) {
+    filas.push({ ...h, omitido: `no pude derivar del matcher \`${h.matcher}\` un nombre que lo case (salió \`${h.herramienta}\`): medirlo sería medir un camino que no corre` });
+    continue;
+  }
   const presupuesto = presupuestoDe(h.file);
   const { ms, muestras, roto } = medir(h);
   if (roto) filas.push({ ...h, ms, muestras, presupuesto, roto });
@@ -269,19 +293,22 @@ if (!tiene("--json")) {
       continue;
     }
     if (f.roto) {
-      console.log(`  ✗ ${f.evento.padEnd(16)} ${f.file.padEnd(38)} ROTO — ${f.roto}`);
+      console.log(`  ✗ ${f.evento.padEnd(16)} ${(f.via ? `${f.file} vía ${f.via}` : f.file).padEnd(50)} ROTO — ${f.roto}`);
       continue;
     }
     const marca = f.ms > f.presupuesto ? "✗" : "✓";
-    console.log(`  ${marca} ${f.evento.padEnd(16)} ${f.file.padEnd(38)} ${String(f.ms).padStart(5)} ms  (presupuesto ${f.presupuesto} ms)`);
+    console.log(`  ${marca} ${f.evento.padEnd(16)} ${(f.via ? `${f.file} vía ${f.via}` : f.file).padEnd(50)} ${String(f.ms).padStart(5)} ms  (presupuesto ${f.presupuesto} ms)`);
   }
 
   // El número que de verdad importa no es el de un hook: es lo que el arnés le cuesta al
   // agente en un turno completo, que es la suma de los hooks del mismo evento.
   console.log("\nCosto por evento (lo que el arnés agrega a un turno):");
-  for (const evento of [...new Set(filas.map((f) => f.evento))]) {
-    const total = filas.filter((f) => f.evento === evento && f.ms !== undefined).reduce((a, f) => a + f.ms, 0);
-    console.log(`  ${evento.padEnd(16)} ${String(total).padStart(5)} ms`);
+  // Por camino: una llamada MCP no paga los hooks de `Write` además de los suyos, así que
+  // sumarlos juntos inflaría el turno con una latencia que nadie paga.
+  const camino = (f) => (f.via ? `${f.evento} vía ${f.via}` : f.evento);
+  for (const c of [...new Set(filas.map(camino))]) {
+    const total = filas.filter((f) => camino(f) === c && f.ms !== undefined).reduce((a, f) => a + f.ms, 0);
+    console.log(`  ${c.padEnd(26)} ${String(total).padStart(5)} ms`);
   }
 }
 

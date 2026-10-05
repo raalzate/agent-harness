@@ -493,6 +493,19 @@
     "commandPattern": "^(git|npm|npx|pnpm|yarn|node|gh|glab|az|make|sed|perl|rm|find|curl)\\s",
     "reason": "una guía que recomienda lo que un freno prohíbe deja al agente en un bucle de reintentos."
   },
+  "subagentOutput": {
+    "$comment": "El contrato de salida de los subagentes sensores: `subagent-contract.mjs` (SubagentStop) le devuelve el turno al subagente si su último mensaje no casa `mustMatch`. La clave es el `name` del frontmatter. Los dos que trae el arnés ya tienen su formato en `.claude/agents/`; uno propio se agrega acá con el suyo.",
+    "contracts": {
+      "reviewer": {
+        "mustMatch": "VEREDICTO:\\W*(rechazado|aprobado)",
+        "reason": "el agente principal decide si entrega con esa línea; sin ella, el review es una opinión."
+      },
+      "gate-runner": {
+        "mustMatch": "VEREDICTO:\\W*(VERDE|ROJO)",
+        "reason": "«nada se entrega sin gate verde» se decide con esa línea, no con un resumen."
+      }
+    }
+  },
   "taxonomy": {
     "$comment": "El arnés como sistema de control: dirección (guía · freno · sensor), tipo (computacional · inferencial) y etapa de cada pieza. Lo lee `scripts/harness-map.mjs`. La dirección de un hook la pone su evento. Si agregás un subagente, un hook de git o un pipeline, ubicalo acá: una pieza sin clasificar es rojo.",
     "stages": ["sesión", "pedido", "acción decidida", "edición hecha", "fin del turno", "commit", "push", "integración", "continuo"],
@@ -501,7 +514,8 @@
       "UserPromptSubmit": { "direction": "guía", "stage": "pedido" },
       "PreToolUse": { "direction": "freno", "stage": "acción decidida" },
       "PostToolUse": { "direction": "sensor", "stage": "edición hecha" },
-      "Stop": { "direction": "sensor", "stage": "fin del turno" }
+      "Stop": { "direction": "sensor", "stage": "fin del turno" },
+      "SubagentStop": { "direction": "sensor", "stage": "fin del turno" }
     },
     "gitHooksDir": ".githooks",
     "gitHooks": {

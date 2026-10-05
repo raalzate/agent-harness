@@ -69,6 +69,45 @@ marca, el pre-commit haría imposible crear el archivo la primera vez.
 
 ---
 
+## `writeTools` — las herramientas MCP que escriben (opcional)
+
+```json
+"writeTools": {
+  "pattern": "^mcp__.+__(write|edit|create|replace|insert|rename|delete|safe_delete|move|update|apply|patch)",
+  "broadPattern": "_in_files$",
+  "pathFields": ["file_path", "notebook_path", "relative_path", "path", "source", "destination"],
+  "contentFields": ["content", "new_string", "body", "repl", "new_source"]
+}
+```
+
+Los frenos de escritura (`protected-paths`, `action-guard`, `reuse-guard`, `post-edit-check`)
+nacieron mirando `Write`/`Edit`, y una herramienta de un servidor MCP que edita código pasaba de
+largo: P8 tenía una puerta lateral. Ahora `settings.json` les manda **todas** las `mcp__*`, y esta
+clave separa las que escriben:
+
+- `pattern` decide por el **verbo** del nombre, no por servidor: una lista de servidores es la de
+  un repo, y el siguiente que se instale nacería sin freno. Las de lectura (`find_symbol`,
+  `read_file`) no casan y salen en la primera línea del hook. El proceso de node se lanza igual
+  (el matcher de settings no sabe leer verbos): cada llamada MCP paga la latencia de los hooks de
+  escritura. `hooks-timing` lo mide aparte (`vía mcp__.*`): en este repo, ~280 ms por llamada.
+- `pathFields` son **todos** los campos que nombran un archivo del árbol, y se evalúan todos: un
+  `move` trae `source` y `destination`, y mirar sólo el primero dejaba mover algo encima de
+  `.env`. Un directorio se evalúa con su `/` final, como lo escriben las reglas.
+- Un verbo de escritura cuenta sólo si trae un campo de ruta, o si `broadPattern` lo declara
+  escritura sobre todo el proyecto. Con sólo `contentFields` escribe **fuera** del árbol (una
+  página, un mensaje) y no es asunto de estos frenos. `contentFields` es lo que lee `reuse-guard`.
+
+Límite conocido: una herramienta de un servidor remoto que trae `path` (crear un archivo en otro
+repo de la forja) se evalúa como si fuera local. Si muerde de más, se angosta `pattern`.
+
+Una escritura **sin archivo** (un reemplazo sobre todo el proyecto o un directorio) no se puede
+evaluar por ruta de antemano: `action-guard` la trata como interna, `post-edit-check` marca el gate,
+y las rutas protegidas las sostiene `.githooks/pre-commit`, que mira lo que de verdad cambió.
+
+Omitir la clave = el default agnóstico de `.claude/hooks/harness.mjs` (`DEFAULT_WRITE_TOOLS`).
+
+---
+
 ## `bash.deny` — comandos sin ctrl-Z
 
 ```json
@@ -80,6 +119,21 @@ lo irreversible **de tu stack** (ver [portar.md](portar.md) paso 2).
 
 Ojo con el falso negativo obvio: el agente puede reformular. Esto no es un sandbox, es un
 guardarraíl — sube el costo del error accidental, no detiene a un adversario.
+
+### `bash.ask` — que decida el humano (opcional)
+
+```json
+"bash": { "ask": [{ "pattern": "git\\s+branch\\s+-D\\b", "reason": "los commits que sólo viven ahí quedan huérfanos." }] }
+```
+
+Mismo formato que `deny`, otra decisión: el hook no bloquea, devuelve
+`permissionDecision: "ask"` y Claude Code le muestra el `reason` al humano en el pedido de
+permiso. Si dice que sí, el comando corre. Es el nivel de P9 (mostrar, esperar confirmación,
+ejecutar): un `deny` cuyo motivo dice «pedí confirmación» no tiene salida, porque el sí del humano
+no levanta un exit 2. `deny` gana: un comando que casa las dos listas se bloquea, y el self-test
+reporta esa regla de `ask` como omitida.
+
+Pasar una regla de `deny` a `ask` afloja un freno: lo decide el humano, en su propio commit.
 
 ---
 
@@ -713,6 +767,27 @@ una **tasa** contra `minScore`. Sin `command` instalado sale OMITIDA. Si el revi
 de `observability.stateFiles` es **rojo** aunque acierte (ver el gotcha del revisor que corrió el
 gate): por eso `command` lo aísla de herramientas que ejecutan y de los hooks del repo.
 
+## `subagentOutput` — el contrato de salida de los subagentes
+
+```json
+"subagentOutput": { "contracts": { "reviewer": { "mustMatch": "VEREDICTO:\\W*(rechazado|aprobado)", "reason": "…" } } }
+```
+
+Lo lee `.claude/hooks/subagent-contract.mjs` en `SubagentStop`. La clave de `contracts` es el
+`agent_type`, es decir el `name` del frontmatter de `.claude/agents/*.md`. Si el último mensaje
+del subagente no casa `mustMatch`, el exit 2 le devuelve el turno **al subagente** con `reason`, y
+el agente principal recibe la salida completa o nada. Antes, un review que cerraba con "se ve
+bien" le llegaba al agente principal como si fuera una aprobación.
+
+`mustMatch` se evalúa sin distinguir mayúsculas y en cualquier línea. El contrato es **incondicional**
+por `agent_type`: si se le delega al `reviewer` algo que no es un review ("explicá X"), igual tiene
+que cerrar con veredicto, y si no lo hace gasta un turno extra. Un subagente sin contrato pasa. Con
+`stop_hook_active` pasa siempre: se le devolvió el turno una
+vez, e insistir es un loop. El self-test (3e-sub) prueba cada contrato en las dos direcciones y que
+el agente nombrado exista. Un contrato para un agente que no está nunca corre.
+
+---
+
 ## `taxonomy` — el arnés como sistema de control
 
 Lo lee `scripts/harness-map.mjs` (`npm run map`). Ubica cada pieza en tres ejes: dirección (guía ·
@@ -732,7 +807,9 @@ sin control se informa como hueco. Ver [guias-y-sensores.md](guias-y-sensores.md
 | `gate.codeGlobs`, `gate.codeExtensions` | `post-edit-check.mjs` (¿ensucia el gate y se lintea?), self-test |
 | `gate.installHooksCommand` | `session-start.mjs` (el aviso de pre-commit sin instalar), self-test |
 | `protectedPaths` | `protected-paths.mjs`, `.githooks/pre-commit`, self-test |
+| `writeTools` | `harness.mjs` (`escribe`, `targetPath`, `proposedContent`) → `protected-paths.mjs`, `action-guard.mjs`, `reuse-guard.mjs`, `post-edit-check.mjs`; self-test (3b-bis) |
 | `bash.deny` | `bash-guard.mjs`, self-test |
+| `bash.ask` | `bash-guard.mjs` (después de `deny`), self-test (3c-bis) |
 | `reuse` | `reuse-guard.mjs`, self-test |
 | `lint` (incluye `sourceExtensions`) | `post-edit-check.mjs`, `scripts/repo-lint.mjs`, `.githooks/pre-commit`, self-test |
 | `purity`, `purityImportSyntax`, `forbiddenDeps`, `singleSource`, `invariants`, `patterns`, `tests`, `incidents` | `scripts/repo-lint.mjs`, self-test |
@@ -754,6 +831,7 @@ sin control se informa como hueco. Ver [guias-y-sensores.md](guias-y-sensores.md
 | `coherence` | `scripts/repo-lint.mjs` (regla `COHERENCIA`), self-test (4e-bis) |
 | `drift` (y `status.file`, `patterns`, `reuse`) | `scripts/drift-check.mjs` (lo invoca `.github/workflows/drift.yml`), self-test (10a) |
 | `reviewerEval` | `scripts/reviewer-eval.mjs` (lo invoca `.github/workflows/drift.yml`), self-test (10b) |
+| `subagentOutput` | `subagent-contract.mjs` (SubagentStop), self-test (3e-sub) |
 | `taxonomy` | `scripts/harness-map.mjs`, el panel (pestaña Salud, misma función `construirMapa`), self-test (10c) |
 | `panel` (y `status`, `incidents`, `tracker`, `tests`, `docs.proseRoots`, `install.activators`, toda clave con `runner`; `panel.memory.promptSources` apunta a otras, como `sdd.routes`) | `scripts/panel/` (lo invoca `scripts/gate.mjs` al final de cada corrida), self-test (11) |
 | `gate.registry` | `scripts/gate.mjs` (lo escribe), `scripts/panel/leer-en-vivo.mjs` (lo lee) |

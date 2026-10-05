@@ -33,6 +33,7 @@ Una señal **omitida** no es verde, y el modo `fast` tampoco es entregable: omit
 | PreToolUse | `reuse-guard.mjs` | boilerplate que este repo ya resolvió |
 | PostToolUse | `post-edit-check.mjs` | corre el lint del archivo tocado y marca el gate pendiente |
 | Stop | `gate-stop.mjs` | no se cierra con código editado y gate sin correr |
+| SubagentStop | `subagent-contract.mjs` | un subagente sensor no cierra sin su veredicto |
 
 Contrato: exit 0 = seguir, exit 2 = bloquear (stderr es lo único que el agente lee). Un config
 ausente o inválido **deja pasar**: el arnés no puede bloquear al humano por estar roto.

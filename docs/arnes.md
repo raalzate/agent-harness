@@ -59,12 +59,13 @@ Los hooks son **genéricos**: toda la especificidad del repo vive en
 | `UserPromptSubmit` | `ask-first.mjs` | si el pedido es informativo (pregunta, reporte sin imperativo), marca el turno: **no se actúa sobre una pregunta** |
 | `UserPromptSubmit` | `sdd-router.mjs` | clasifica el pedido (feature → ruta SDD, falla → test rojo primero, ambiguo → preguntar una cosa); se calla en lo trivial |
 | `UserPromptSubmit` | `graph-first.mjs` | con el índice construido (`graph` → codegraph), empuja a consultarlo **antes** de abrir archivos cuando el pedido es «dónde / quién usa / qué rompe / acoplamiento»; callado si no existe |
-| `PreToolUse` Write\|Edit | `action-guard.mjs` | deniega editar dentro del repo mientras el turno esté marcado como informativo; lo limpia el próximo pedido del humano |
-| `PreToolUse` Write\|Edit | `protected-paths.mjs` | deniega editar lo que declara `protectedPaths` |
-| `PreToolUse` Write\|Edit | `reuse-guard.mjs` | bloquea boilerplate que ya tiene abstracción (`reuse`) |
-| `PreToolUse` Bash | `bash-guard.mjs` | deniega los comandos de `bash.deny` |
-| `PostToolUse` Write\|Edit | `post-edit-check.mjs` | corre el lint **sobre el archivo tocado** y devuelve el error real; marca `.git/gate-dirty` |
+| `PreToolUse` Write\|Edit\|mcp__ | `action-guard.mjs` | deniega editar dentro del repo mientras el turno esté marcado como informativo; lo limpia el próximo pedido del humano |
+| `PreToolUse` Write\|Edit\|mcp__ | `protected-paths.mjs` | deniega editar lo que declara `protectedPaths`, también desde una herramienta MCP que escribe (`writeTools`) |
+| `PreToolUse` Write\|Edit\|mcp__ | `reuse-guard.mjs` | bloquea boilerplate que ya tiene abstracción (`reuse`) |
+| `PreToolUse` Bash | `bash-guard.mjs` | deniega los comandos de `bash.deny`; los de `bash.ask` se los pregunta al humano |
+| `PostToolUse` Write\|Edit\|mcp__ | `post-edit-check.mjs` | corre el lint **sobre el archivo tocado** y devuelve el error real; marca `.git/gate-dirty` |
 | `Stop` | `gate-stop.mjs` | impide cerrar la tarea si se editó código y el gate no quedó verde |
+| `SubagentStop` | `subagent-contract.mjs` | le devuelve el turno a un subagente sensor que cierra sin su veredicto (`subagentOutput`) |
 
 El contrato con Claude Code, que es lo que hace que todo esto funcione: la entrada llega como JSON
 por stdin; **exit 0** = seguir (y el stdout de `UserPromptSubmit`/`SessionStart` entra al contexto);
@@ -91,8 +92,11 @@ config**, así que una regla nueva queda cubierta sin escribir un caso a mano:
 
 1. cada hook declarado en `settings.json` existe y `node --check` lo parsea;
 2. cada ruta del config resuelve y cada regex compila;
-3. **los frenos muerden**: por cada regla de `protectedPaths`, `bash.deny` y `reuse` reduce el
-   patrón a una muestra concreta y verifica que el hook devuelva exit 2;
+3. **los frenos muerden**: por cada regla de `protectedPaths`, `bash.deny`, `bash.ask` y `reuse` reduce el
+   patrón a una muestra concreta y verifica que el hook devuelva exit 2 (en `bash.ask`, el
+   pedido de confirmación). Las rutas protegidas se prueban también por la vía MCP, con un nombre
+   de herramienta derivado de `writeTools`, y cada contrato de `subagentOutput` en las dos
+   direcciones;
 4. **los frenos no muerden de más**: un archivo normal y un `git status` tienen que pasar;
 5. **las reglas del lint muerden**: le pasa el contenido por stdin (`--file <ruta> --stdin`), así
    nunca escribe archivos temporales dentro del árbol de fuentes;

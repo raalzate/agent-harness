@@ -80,6 +80,101 @@ export const importSyntax = (declaradas) =>
 export const codeExtensions = (declaradas) =>
   Array.isArray(declaradas) && declaradas.length ? declaradas : DEFAULT_CODE_EXTENSIONS;
 
+/**
+ * Qué herramientas de un servidor MCP ESCRIBEN EN EL REPO, y dónde traen la ruta y el contenido.
+ *
+ * Los frenos de escritura nacieron mirando sólo las herramientas propias de Claude Code
+ * (`Write`, `Edit`…), y un servidor MCP que edita código —un índice de símbolos con
+ * `replace_symbol_body`, un servidor de filesystem con `write_file`— pasaba de largo:
+ * `protected-paths` no lo veía, así que P8 tenía una puerta lateral abierta.
+ *
+ * Se decide por el VERBO del nombre, no por servidor: una lista de servidores conocidos es la
+ * lista de un repo, y el siguiente servidor instalado nace sin freno. Una herramienta de
+ * lectura (`find_symbol`, `read_file`) no casa y sale en la primera línea del hook (el proceso
+ * se lanza igual: el matcher de settings no sabe leer verbos). Cada repo lo angosta o lo amplía
+ * con `writeTools` en el config.
+ *
+ * `pathFields` son TODOS los campos que nombran un archivo del árbol, y se evalúan todos: un
+ * `move_file` trae `source` y `destination`, y mirar sólo el primero dejaba mover algo ENCIMA
+ * de `.env`. `broadPattern` nombra las que escriben sin ruta (sobre todo el proyecto).
+ */
+export const DEFAULT_WRITE_TOOLS = {
+  pattern: "^mcp__.+__(write|edit|create|replace|insert|rename|delete|safe_delete|move|update|apply|patch)",
+  broadPattern: "_in_files$",
+  pathFields: ["file_path", "notebook_path", "relative_path", "path", "source", "destination"],
+  contentFields: ["content", "new_string", "body", "repl", "new_source"],
+};
+
+/** El prefijo con que Claude Code nombra toda herramienta de un servidor MCP. */
+const PREFIJO_MCP = "mcp__";
+
+/** `writeTools` del config, campo por campo sobre el default agnóstico. */
+export const writeTools = (config) => {
+  const d = config?.writeTools ?? {};
+  const lista = (v, def) => (Array.isArray(v) && v.length ? v : def);
+  const texto = (v, def) => (typeof v === "string" && v.trim() ? v : def);
+  return {
+    pattern: texto(d.pattern, DEFAULT_WRITE_TOOLS.pattern),
+    broadPattern: texto(d.broadPattern, DEFAULT_WRITE_TOOLS.broadPattern),
+    pathFields: lista(d.pathFields, DEFAULT_WRITE_TOOLS.pathFields),
+    contentFields: lista(d.contentFields, DEFAULT_WRITE_TOOLS.contentFields),
+  };
+};
+
+/** ¿La herramienta viene de un servidor MCP? Las propias las filtra el matcher de settings. */
+export const esHerramientaMcp = (input) => String(input?.tool_name ?? "").startsWith(PREFIJO_MCP);
+
+/** Un regex del config; uno roto casa siempre (un freno se decide hacia el lado seguro). */
+const casa = (patron, texto) => {
+  try {
+    return new RegExp(patron).test(texto);
+  } catch {
+    return true;
+  }
+};
+
+/** Los campos de ruta que la llamada trae de verdad (un string, aunque sea vacío). */
+const camposDeRuta = (input, config) => {
+  const ti = input?.tool_input ?? {};
+  const campos = esHerramientaMcp(input) ? writeTools(config).pathFields : ["file_path", "notebook_path"];
+  return campos.filter((c) => typeof ti[c] === "string");
+};
+
+/**
+ * ¿Esta llamada escribe en el repo? Las herramientas propias llegan ya filtradas por el matcher
+ * de `settings.json`; las de MCP llegan TODAS, y acá se separa la escritura de la lectura.
+ *
+ * El verbo solo no alcanza: `create-project` de un servidor de despliegue o `update_page` de un
+ * gestor de documentos escriben FUERA del árbol —aunque traigan `content`—, y tratarlos como
+ * edición marcaba el gate pendiente sin un archivo tocado. Escribe en el repo la que trae una
+ * RUTA, o la que `broadPattern` declara como escritura sobre todo el proyecto.
+ */
+export function escribe(input, config) {
+  if (!esHerramientaMcp(input)) return true;
+  const wt = writeTools(config);
+  if (!casa(wt.pattern, input.tool_name)) return false;
+  return camposDeRuta(input, config).length > 0 || casa(wt.broadPattern, input.tool_name);
+}
+
+/**
+ * ¿Es una escritura MCP SIN archivo concreto? (`replace_in_files` sobre todo el proyecto, un
+ * directorio entero). Ningún freno por ruta puede evaluarla entera de antemano: `action-guard`
+ * la trata como «dentro del repo», `post-edit-check` marca el gate, y `protected-paths` mira el
+ * directorio con su `/` final; lo de adentro lo sostiene el pre-commit.
+ */
+export function escrituraAmplia(input, config) {
+  if (!esHerramientaMcp(input) || !escribe(input, config)) return false;
+  const rutas = rutasAbsolutas(input, config);
+  if (!rutas.length) return true;
+  return rutas.some((abs) => {
+    try {
+      return fs.statSync(abs).isDirectory();
+    } catch {
+      return false; // todavía no existe: es un archivo nuevo, y eso sí tiene ruta
+    }
+  });
+}
+
 /** Lee el JSON de stdin. Si no hay entrada válida, devuelve {} (nunca revienta el turno). */
 export async function readInput() {
   const chunks = [];
@@ -106,6 +201,24 @@ export function loadConfig() {
 export function deny(message) {
   process.stderr.write(`${message}\n`);
   process.exit(2);
+}
+
+/**
+ * Ni seguir ni bloquear: que DECIDA EL HUMANO. Claude Code muestra `motivo` en el pedido de
+ * permiso; si dice que sí, la herramienta corre. Es exit 0 con JSON en stdout, no exit 2: un
+ * bloqueo no se puede confirmar, así que «pedí confirmación» en un `deny` no tenía salida.
+ */
+export function ask(motivo, input) {
+  // Sin evento, Claude Code no reconoce la decisión y el comando correría sin preguntar: el
+  // freno desaparecería en silencio. Hacia el lado seguro, bloquea con el mismo motivo.
+  if (!input?.hook_event_name) deny(`${motivo}\n(no llegó el evento del hook: sin él no se puede preguntar, así que se bloquea)`);
+  process.stdout.write(
+    `${JSON.stringify({
+      // El evento sale del payload, no se cablea: un hook no decide en qué evento corre (P4).
+      hookSpecificOutput: { hookEventName: input?.hook_event_name, permissionDecision: "ask", permissionDecisionReason: motivo },
+    })}\n`,
+  );
+  process.exit(0);
 }
 
 /** Deja pasar. */
@@ -183,12 +296,23 @@ function conSymlinksResueltos(abs) {
   }
 }
 
-/** La ruta absoluta que la herramienta va a tocar. */
-function rutaAbsoluta(input) {
-  const raw = input?.tool_input?.file_path ?? input?.tool_input?.notebook_path ?? "";
-  if (!raw) return "";
-  return path.isAbsolute(raw) ? raw : path.join(input?.cwd ?? REPO_ROOT, raw);
+/**
+ * TODAS las rutas absolutas que la herramienta va a tocar. Las propias la traen en `file_path`
+ * o `notebook_path`; las de MCP, en los campos de `writeTools.pathFields` (un `move` trae dos).
+ * En MCP una ruta VACÍA es «todo el proyecto» (el default de un reemplazo masivo), no «nada».
+ */
+function rutasAbsolutas(input, config) {
+  const ti = input?.tool_input ?? {};
+  const mcp = esHerramientaMcp(input);
+  const base = input?.cwd ?? REPO_ROOT;
+  return camposDeRuta(input, config)
+    .map((c) => ti[c].trim())
+    .filter((raw) => raw || mcp)
+    .map((raw) => (path.isAbsolute(raw) ? raw : path.join(base, raw)));
 }
+
+/** La primera: alcanza para «¿esto es código?» y para el mensaje. */
+const rutaAbsoluta = (input, config) => rutasAbsolutas(input, config)[0] ?? "";
 
 /**
  * La ruta relativa a la raíz, con `/`, y con `../` adelante si cae FUERA.
@@ -211,8 +335,8 @@ export function relativaDesdeRaiz(abs, root = REPO_ROOT, plataforma = process.pl
 }
 
 /** Ruta del archivo que la herramienta va a tocar, relativa al repo y con `/`. */
-export function targetPath(input) {
-  const abs = rutaAbsoluta(input);
+export function targetPath(input, config) {
+  const abs = rutaAbsoluta(input, config);
   if (!abs) return "";
   // Dentro del repo → la ruta relativa. Fuera → una relativa con `..`, que es lo que los
   // hooks ya interpretan como «no es asunto de este repo».
@@ -229,24 +353,32 @@ export function targetPath(input) {
  * Para «¿esto es código?» da igual cuál se use (por eso `targetPath` devuelve una sola);
  * para prohibir, se evalúan todas y basta que UNA case: un freno se decide hacia el lado seguro.
  */
-export function targetPaths(input) {
-  const abs = rutaAbsoluta(input);
-  if (!abs) return [];
+export function targetPaths(input, config) {
   const nombres = [];
-  for (const candidata of [abs, conSymlinksResueltos(abs)]) {
-    const rel = relativaAlRepo(candidata);
-    if (rel && !nombres.includes(rel)) nombres.push(rel);
+  for (const abs of rutasAbsolutas(input, config)) {
+    // Un directorio se nombra con su `/` final: así lo escriben las reglas (`^node_modules/`),
+    // y sin la barra una escritura sobre el directorio entero no casaba ninguna.
+    let dir = false;
+    try {
+      dir = fs.statSync(abs).isDirectory();
+    } catch {
+      dir = false;
+    }
+    for (const candidata of [abs, conSymlinksResueltos(abs)]) {
+      const rel = relativaAlRepo(candidata);
+      const nombre = rel && dir ? `${rel}/` : rel;
+      if (nombre && !nombres.includes(nombre)) nombres.push(nombre);
+    }
   }
-  return nombres.length ? nombres : [targetPath(input)];
+  return nombres.length ? nombres : [targetPath(input, config)].filter(Boolean);
 }
 
-/** Contenido que la herramienta quiere escribir (Write, Edit o MultiEdit). */
-export function proposedContent(input) {
+/** Contenido que la herramienta quiere escribir (Write, Edit, MultiEdit o una de MCP). */
+export function proposedContent(input, config) {
   const ti = input?.tool_input ?? {};
-  if (typeof ti.content === "string") return ti.content;
-  if (typeof ti.new_string === "string") return ti.new_string;
   if (Array.isArray(ti.edits)) return ti.edits.map((e) => e?.new_string ?? "").join("\n");
-  return "";
+  const campos = esHerramientaMcp(input) ? writeTools(config).contentFields : ["content", "new_string"];
+  return campos.map((c) => ti[c]).find((v) => typeof v === "string") ?? "";
 }
 
 /** Primer patrón de `rules` que casa con `text` (cada regla es {pattern, ...}). */
