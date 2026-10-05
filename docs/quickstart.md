@@ -173,7 +173,7 @@ echo '{"tool_name":"Bash","tool_input":{"command":"rm tareas.json"}}' | node .cl
 COMANDO BLOQUEADO: `rm tareas.json`
 Motivo: `tareas.json` es el único estado del programa y no hay backup. Si querés empezar de cero,
 movelo: `mv tareas.json tareas.json.bak`.
-Reformulá el comando o pedí confirmación explícita al humano. No lo reintentes igual.
+Reformulá el comando, o pedile al humano que lo corra él. No lo reintentes igual.
 exit=2
 ```
 

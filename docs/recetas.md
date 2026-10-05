@@ -31,6 +31,9 @@ Usá el skill `new-guardrail`, o a mano:
 | una dependencia entró al manifiesto | `forbiddenDeps` |
 | una ruta se editó | `protectedPaths` |
 | un comando irreversible se ejecutó | `bash.deny` |
+| un comando destructivo que a veces **es** lo pedido | `bash.ask` (decide el humano) |
+| un servidor MCP escribe por su cuenta | `writeTools` (sus escrituras pasan por los mismos frenos) |
+| un subagente devuelve una opinión sin veredicto | `subagentOutput.contracts` |
 | nada observable (intención, criterio) | `reviewer` + una línea REVIEW en la constitución |
 
 Después, siempre las tres:
