@@ -534,7 +534,7 @@ máquina del desarrollador y en CI lo reporta como **omitido**, nunca como pasad
 "preCommit": { "extra": [
   { "name": "integridad de aserciones (IIKit)", "command": ["bash", ".tessl/plugins/tessl-labs/intent-integrity-kit/skills/iikit-core/scripts/bash/pre-commit-hook.sh"],
     "why": "un .feature editado a mano rompe el contrato con el hash; el pre-commit genérico no lo ve." },
-  { "name": "marca blanca", "command": ["node", "scripts/white-label-guard.mjs"],
+  { "name": "marca blanca", "command": ["node", "mi-guard-de-marca.mjs"],
     "why": "el nombre del proveedor en copy visible compila, lintea y pasa los tests." }
 ] }
 ```
