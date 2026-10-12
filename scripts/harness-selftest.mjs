@@ -1264,7 +1264,8 @@ const huerfanasDe = (cfg) => {
         fs.mkdirSync(path.join(tmp, ".claude"), { recursive: true });
         const cfg = {
           protectedPaths: config.protectedPaths ?? [],
-          lint: { command: [process.execPath, "-e", "process.exit(0)"], fileFlag: "--file" },
+          // `--`: el hook agrega `--file <ruta>` y node tomaría `--file` como opción propia.
+          lint: { command: [process.execPath, "-e", "process.exit(0)", "--"], fileFlag: "--file" },
           ...(preCommit === undefined ? {} : { preCommit }),
         };
         fs.writeFileSync(path.join(tmp, ".claude/harness.config.json"), JSON.stringify(cfg));
