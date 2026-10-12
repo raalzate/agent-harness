@@ -528,6 +528,30 @@ máquina del desarrollador y en CI lo reporta como **omitido**, nunca como pasad
 
 ---
 
+## `preCommit.extra` — frenos propios del repo sobre el commit entero (opcional)
+
+```json
+"preCommit": { "extra": [
+  { "name": "integridad de aserciones (IIKit)", "command": ["bash", ".tessl/plugins/tessl-labs/intent-integrity-kit/skills/iikit-core/scripts/bash/pre-commit-hook.sh"],
+    "why": "un .feature editado a mano rompe el contrato con el hash; el pre-commit genérico no lo ve." },
+  { "name": "marca blanca", "command": ["node", "scripts/white-label-guard.mjs"],
+    "why": "el nombre del proveedor en copy visible compila, lintea y pasa los tests." }
+] }
+```
+
+Lo lee `.githooks/pre-commit`, **después** de las rutas protegidas y del lint por archivo. Es el
+punto de extensión para lo que no cabe en "una regla por archivo": la integridad de aserciones de
+un kit SDD sobre todo lo staged, un guard que conoce excepciones por ruta, regenerar un artefacto
+derivado. Cada `command` es argv (sin shell), corre con el cwd en la raíz del repo y con
+`HARNESS_STAGED` en el entorno (los archivos staged, uno por línea); cualquier exit distinto de 0
+aborta el commit y se imprime `name` y `why`. Sin la clave, el paso no hace nada. El self-test lo
+prueba en un repo git temporal (3f-quater): una entrada que pasa, una que falla, una vacía.
+
+Lo que NO es: un segundo gate. Lo caro sigue en `gate.signals`; acá va sólo lo que no puede entrar
+al historial de ninguna manera.
+
+---
+
 ## `postCommit` — refrescar lo derivado (opcional)
 
 ```json
@@ -824,6 +848,7 @@ sin control se informa como hueco. Ver [guias-y-sensores.md](guias-y-sensores.md
 | `branches` | `.githooks/pre-push`, self-test |
 | `workflow` | `scripts/cycle-check.mjs` (lo invoca `.githooks/pre-push`), la ruta `cycle` del router, self-test |
 | `xp` | `scripts/cycle-check.mjs` (lo invoca `.githooks/commit-msg`), self-test (una práctica por cebo) |
+| `preCommit.extra` | `.githooks/pre-commit` (después de rutas protegidas y lint), self-test (3f-quater) |
 | `postCommit` | `.githooks/post-commit` |
 | `graph` | `graph-first.mjs`, la señal `índice del código` del gate, self-test (sus regex compilan) |
 | `observability` | `scripts/hooks-timing.mjs` (la señal `costo del arnés` del gate), `scripts/reviewer-eval.mjs` (`stateFiles`: la foto de la sesión), self-test (secciones 9 y 10) |

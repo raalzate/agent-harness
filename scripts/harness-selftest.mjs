@@ -1244,6 +1244,56 @@ const huerfanasDe = (cfg) => {
   }
 }
 
+// 3f-quater. Los frenos propios del repo sobre el commit entero (`preCommit.extra`) corren
+//     desde el pre-commit genérico y un exit distinto de 0 aborta el commit. Se prueba en un
+//     repo git DE VERDAD con un config mínimo: lint que pasa y una entrada extra por caso.
+{
+  const hook = abs(".githooks/pre-commit");
+  if (!fs.existsSync(hook)) {
+    skip("pre-commit corre preCommit.extra", "no hay .githooks/pre-commit");
+  } else if (!HAY_BASH) {
+    skip("pre-commit corre preCommit.extra", "no hay bash en esta máquina");
+  } else {
+    const correr = (preCommit) => {
+      const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "harness-precommit-"));
+      try {
+        const git = (...args) => spawnSync("git", args, { cwd: tmp, encoding: "utf8" });
+        git("init", "-q");
+        git("config", "user.email", "selftest@example.com");
+        git("config", "user.name", "selftest");
+        fs.mkdirSync(path.join(tmp, ".claude"), { recursive: true });
+        const cfg = {
+          protectedPaths: config.protectedPaths ?? [],
+          lint: { command: [process.execPath, "-e", "process.exit(0)"], fileFlag: "--file" },
+          ...(preCommit === undefined ? {} : { preCommit }),
+        };
+        fs.writeFileSync(path.join(tmp, ".claude/harness.config.json"), JSON.stringify(cfg));
+        fs.writeFileSync(path.join(tmp, "nota.txt"), "hola\n");
+        git("add", "nota.txt");
+        const res = spawnSync("bash", [hook], { cwd: tmp, encoding: "utf8" });
+        return { status: res.status, out: `${res.stdout ?? ""}${res.stderr ?? ""}` };
+      } finally {
+        fs.rmSync(tmp, { recursive: true, force: true });
+      }
+    };
+    const pasa = { name: "pasa", command: [process.execPath, "-e", "process.exit(0)"], why: "cebo verde" };
+    const falla = { name: "falla", command: [process.execPath, "-e", "process.exit(3)"], why: "cebo rojo" };
+    const veStaged = { name: "ve lo staged", command: [process.execPath, "-e", "process.exit(/nota\\.txt/.test(process.env.HARNESS_STAGED || '') ? 0 : 9)"] };
+    const casos = [
+      ["sin la clave, el paso no hace nada", undefined, 0],
+      ["una entrada que pasa deja commitear", { extra: [pasa] }, 0],
+      ["una entrada que falla aborta el commit con su motivo", { extra: [pasa, falla] }, 1],
+      ["una entrada sin command se ignora", { extra: [{ name: "vacía" }] }, 0],
+      ["el comando recibe los archivos staged en HARNESS_STAGED", { extra: [veStaged] }, 0],
+    ];
+    for (const [nombre, preCommit, esperado] of casos) {
+      const res = correr(preCommit);
+      if (res.status === esperado && (esperado === 0 || /cebo rojo/.test(res.out))) ok(`pre-commit extra: ${nombre}`);
+      else bad(`pre-commit extra: ${nombre}`, `esperaba exit ${esperado}, salió ${res.status}. salida: ${res.out.trim().slice(0, 160)}`);
+    }
+  }
+}
+
 // 3g. Los artefactos de trabajo, donde el equipo decidió. Se prueba con un CEBO en un
 //     directorio temporal: `--dir` existe justamente para no escribir en el repo.
 if (config.tracker?.artifactsIn === "tracker" && fs.existsSync(abs("scripts/artifacts-check.mjs"))) {

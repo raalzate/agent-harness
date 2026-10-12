@@ -76,7 +76,7 @@ En git, además:
 
 | Hook | Qué hace |
 |---|---|
-| `.githooks/pre-commit` | rutas protegidas + lint de los archivos staged |
+| `.githooks/pre-commit` | rutas protegidas + lint de los archivos staged + los frenos propios del repo sobre el commit entero (`preCommit.extra`: integridad de aserciones de un kit SDD, marca blanca, artefactos derivados) |
 | `.githooks/commit-msg` | además corre `node scripts/cycle-check.mjs --commit`: **las prácticas de XP que este equipo encendió** (`xp` → test primero, lote chico, refactor separado, de a dos), cada una con su fuga declarada y con motivo. Ver [ciclo-desarrollo.md](ciclo-desarrollo.md) |
 | `.githooks/commit-msg` | **el trabajo no entra al historial sin quedar registrado**: si el commit toca código, el mensaje referencia el ítem de trabajo (`tracker.issuePattern`) o declara `no-issue: <motivo>`. Agnóstico de forja — ver `docs/trazabilidad.md` |
 | `.githooks/pre-push` | **el trabajo entra a `main` por PR, no de un empujón**: falla antes de la red con el motivo y el comando para mover los commits. Complemento local de la protección de rama de la forja. Después corre `node scripts/cycle-check.mjs --push`: **el nombre de la rama sigue el modelo declarado** (`workflow`) y la rama no envejeció sin integrarse |
