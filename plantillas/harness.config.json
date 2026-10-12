@@ -141,6 +141,10 @@
     ],
     "fileFlag": "--file"
   },
+  "preCommit": {
+    "$comment": "Frenos propios del repo sobre el commit entero, después de rutas protegidas y lint: `{ name, command[], why }`; exit ≠ 0 aborta el commit; HARNESS_STAGED lleva los archivos staged (uno por línea). Vacío = nada. Ver docs/config-reference.md.",
+    "extra": []
+  },
   "purity": [
     {
       "$comment": "La capa de lógica pura: sin framework, sin I/O, sin UI. Es lo único con cobertura exigida y lo que sobrevive al próximo cambio de framework.",

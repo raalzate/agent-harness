@@ -50,6 +50,29 @@ if [ -n "$LINT" ]; then
   fi
 fi
 
+# 3. Frenos propios del repo sobre el commit entero (`preCommit.extra`): lo que no cabe en
+#    "una regla por archivo" — integridad de aserciones de un kit SDD, un guard de marca
+#    blanca, regenerar un artefacto. Cada entrada es `{ name, command[], why }`; el comando
+#    corre sin shell, con `HARNESS_STAGED` (los archivos staged, uno por línea) en el entorno,
+#    y cualquier exit distinto de 0 aborta el commit. Sin la clave, este paso no hace nada.
+HARNESS_STAGED="$STAGED" node -e '
+const fs = require("fs");
+const cp = require("node:child_process");
+const c = JSON.parse(fs.readFileSync(".claude/harness.config.json", "utf8"));
+const extra = (c.preCommit && Array.isArray(c.preCommit.extra)) ? c.preCommit.extra : [];
+let failed = 0;
+for (const e of extra) {
+  if (!e || !Array.isArray(e.command) || !e.command.length) continue;
+  const r = cp.spawnSync(e.command[0], e.command.slice(1), { stdio: "inherit", env: process.env });
+  if (r.status !== 0) {
+    failed = 1;
+    const name = e.name || e.command.join(" ");
+    console.log(`pre-commit: «${name}» falló (exit ${r.status === null ? "sin ejecutar" : r.status}).${e.why ? " " + e.why : ""}`);
+  }
+}
+process.exit(failed);
+' || FAILED=1
+
 if [ "$FAILED" -ne 0 ]; then
   echo ""
   echo "Commit abortado. Saltarse la verificación está prohibido: si el gate estorba, se arregla el gate."
