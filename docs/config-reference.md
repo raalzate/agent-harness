@@ -135,6 +135,14 @@ reporta esa regla de `ask` como omitida.
 
 Pasar una regla de `deny` a `ask` afloja un freno: lo decide el humano, en su propio commit.
 
+**`exempt` + `exemptExample` (opcional):** la forma segura y verificable de un comando que en
+general se pregunta. Si el comando **entero** casa `exempt`, pasa sin pedir el sí. Existe porque
+una pregunta que sale veinte veces por día se contesta «sí» sin leer y deja de proteger justo el
+caso raro. Se escribe anclado (`^…$`) para que un `&& otra-cosa` encadenado no herede la exención.
+El self-test exige `exemptExample`: que case la regla, que pase sin preguntar, y que encadenado
+con la muestra de la regla vuelva a preguntar. Ejemplo de este repo: `--force-with-lease` pasa sin
+pregunta sólo con `--force-if-includes` y una rama de trabajo nombrada al final.
+
 ---
 
 ## `reuse` — boilerplate que ya tiene abstracción
@@ -377,8 +385,9 @@ forja, no su reemplazo: el freno fuerte vive en el servidor. Sin esta clave, el 
 | `maxAgeDays` + `staleAction` | rama vieja = lote grande esperando. `warn` (default) avisa por stderr sin bloquear; `block` frena el push. Sin base local, la comprobación se **saltea**: no se inventa un veredicto |
 | `mergeInto` | `[{ branch, into }]`: a qué rama vuelve cada familia. **Declarado, no verificado** — a qué rama entra el cambio lo decide el pull request, que el hook no ve |
 | `reason`, `staleReason` | el porqué que se imprime al bloquear: es lo único que el agente lee cuando lo frenás |
+| `sync` | **sincronía con la base**: el PR no es donde se descubre un conflicto. En el `pre-push` baja `<remote>/<baseBranch>` y simula el merge con `git merge-tree --write-tree` (no toca el árbol). Conflicto → `conflictAction` (`block` default, o `warn`); atraso sin choque de al menos `behindWarn` commits → `behindAction` (`warn` default, o `block`). `fetch: false` mide sin red (CI). `command` es lo que se sugiere para ponerse al día. A mano: `npm run sync` (`cycle-check --sync`). `session-start` avisa al abrir la sesión si la rama ya está atrás. Git < 2.38: avisa y no bloquea |
 
-Sin `branchPattern` ni `maxAgeDays`, el freno no corre. Criterio completo y los tres modelos en
+Sin `branchPattern`, `maxAgeDays` ni `sync.enabled`, el freno no corre. Criterio completo y los tres modelos en
 config: [ciclo-desarrollo.md](ciclo-desarrollo.md).
 
 ---
@@ -847,6 +856,7 @@ sin control se informa como hueco. Ver [guias-y-sensores.md](guias-y-sensores.md
 | `askFirst` | `ask-first.mjs`, `action-guard.mjs`, self-test |
 | `branches` | `.githooks/pre-push`, self-test |
 | `workflow` | `scripts/cycle-check.mjs` (lo invoca `.githooks/pre-push`), la ruta `cycle` del router, self-test |
+| `workflow.sync` | `scripts/cycle-check.mjs` (`--push` desde `.githooks/pre-push`, y `--sync` = `npm run sync`), `session-start.mjs` (aviso sin red), self-test (3f-ter-bis) |
 | `xp` | `scripts/cycle-check.mjs` (lo invoca `.githooks/commit-msg`), self-test (una práctica por cebo) |
 | `preCommit.extra` | `.githooks/pre-commit` (después de rutas protegidas y lint), self-test (3f-quater) |
 | `postCommit` | `.githooks/post-commit` |

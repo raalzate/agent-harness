@@ -29,6 +29,23 @@ lines.push(
     : "- Working tree limpio.",
 );
 
+// Alerta: la rama ya está atrás de la base. Sin `fetch` —la red no se paga en cada sesión—:
+// con las refs que hay, que es lo mismo que va a ver el agente si arranca a trabajar ahora.
+// Es la mitad temprana del freno de sincronía; la otra mitad, con red, es el pre-push.
+const sync = config.workflow?.sync;
+const base = config.workflow?.baseBranch;
+if (sync?.enabled && base && branch && branch !== "HEAD") {
+  const ref = `${sync.remote ?? "origin"}/${base}`;
+  const atras = Number(git(["rev-list", "--count", `HEAD..${ref}`])) || 0;
+  if (atras) {
+    lines.push(
+      branch === base
+        ? `- ⚠️ \`${branch}\` local está ${atras} commit(s) atrás de \`${ref}\`: una rama abierta desde acá nace vieja. \`git pull --ff-only\` antes de abrirla.`
+        : `- ⚠️ \`${branch}\` está ${atras} commit(s) atrás de \`${ref}\`: ponete al día antes de seguir (\`${sync.command ?? `git rebase ${ref}`}\`), no en el PR.`,
+    );
+  }
+}
+
 // Alerta: el pre-commit del repo tiene que estar realmente instalado (no .sample).
 const hooksPath = git(["config", "core.hooksPath"]);
 if (hooksPath !== ".githooks") {

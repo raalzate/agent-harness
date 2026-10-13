@@ -118,7 +118,7 @@
         "reason": "saltarse los hooks de verificación está prohibido. Si el gate estorba, se arregla el gate."
       },
       {
-        "pattern": "git\\s+push\\s+.*--force(?!-with-lease)",
+        "pattern": "git\\s+push\\b.*\\s(--force|-f)(?![-\\w])",
         "reason": "`--force` reescribe historia remota. Usá --force-with-lease y pedí confirmación."
       },
       {
@@ -162,7 +162,9 @@
       {
         "$comment": "Lo destructivo que a veces es LO PEDIDO: decide el humano en el pedido de permiso de Claude Code (P9: mostrar, esperar, ejecutar). Un `deny` no se puede confirmar —el humano dice que sí y el hook vuelve a bloquear—, así que lo que es «pedí confirmación» vive acá.",
         "pattern": "git\\s+push\\s+.*--force-with-lease",
-        "reason": "reescribe historia remota (con red de seguridad, pero la reescribe). ¿La rama es tuya y nadie más empujó?"
+        "reason": "reescribe historia remota (con red de seguridad, pero la reescribe). ¿La rama es tuya y nadie más empujó? Para ponerte al día con la base no hace falta: `git merge origin/main` no reescribe nada. Sin pregunta pasa sólo la forma segura: una rama de trabajo nombrada al final y `--force-if-includes`, que rechaza el push si alguien empujó algo que no viste.",
+        "exempt": "^git\\s+push(?=\\s.*--force-if-includes(\\s|$))(?:\\s+--?[A-Za-z][\\w-]*(?:=[^\\s;&|`$<>]+)?)*\\s+[A-Za-z0-9._-]+\\s+(?:[^\\s:;&|`$<>]+:)?(?:refs/heads/)?(feat|fix|docs|chore|refactor|test|ci|perf)/[a-z0-9][a-z0-9._-]*\\s*$",
+        "exemptExample": "git push --force-with-lease --force-if-includes origin feat/mi-rama"
       },
       {
         "pattern": "git\\s+branch\\s+(-D|--delete\\s+--force)\\b",
@@ -553,7 +555,7 @@
           "\\btrunk\\b",
           "\\bgit ?flow\\b"
         ],
-        "message": "Toca el ciclo de desarrollo → `docs/ciclo-desarrollo.md`: el modelo de ramas está declarado en `workflow` (corré `npm run cycle` para verlo). Antes de empujar: la rama sale de `workflow.baseBranch`, su nombre sigue `workflow.branchPattern`, y a `branches.protected` se entra por PR. Antes de commitear: las prácticas de `xp` activas se verifican en `commit-msg` — se cumplen o se declaran con motivo en una línea, no se saltean."
+        "message": "Toca el ciclo de desarrollo → `docs/ciclo-desarrollo.md`: el modelo de ramas está declarado en `workflow` (corré `npm run cycle` para verlo). Antes de empezar: la rama sale de la base RECIÉN BAJADA (`git fetch origin` y `git switch -c <rama> origin/main`), no de un `main` local de hace días: es la causa de los PR con conflictos. Antes de abrir el PR: `npm run sync`. Antes de empujar: la rama sale de `workflow.baseBranch`, su nombre sigue `workflow.branchPattern`, y a `branches.protected` se entra por PR. Antes de commitear: las prácticas de `xp` activas se verifican en `commit-msg` — se cumplen o se declaran con motivo en una línea, no se saltean."
       },
       {
         "$comment": "CI/CD: el pipeline no es un lugar aparte donde valen otras reglas. Corre EL MISMO gate que el humano, y lo que se salta la verificación no se mergea.",
@@ -657,7 +659,18 @@
     "maxAgeDays": 5,
     "staleAction": "warn",
     "reason": "trunk-based: una sola rama larga (`main`) y ramas de trabajo cortas con nombre que dice de qué son. El nombre es lo que hace legible `git branch -a` cuando hay quince.",
-    "staleReason": "una rama que no se integra hace días es un lote grande esperando: el merge es más caro y el rojo aparece tarde. Acá avisa (`warn`) en vez de bloquear, porque una rama vieja es una señal, no siempre un error."
+    "staleReason": "una rama que no se integra hace días es un lote grande esperando: el merge es más caro y el rojo aparece tarde. Acá avisa (`warn`) en vez de bloquear, porque una rama vieja es una señal, no siempre un error.",
+    "sync": {
+      "$comment": "SINCRONÍA CON LA BASE: el PR no es el lugar donde se descubre un conflicto. En el pre-push, `cycle-check --push` baja `<remote>/<baseBranch>` (`fetch: false` lo apaga, para CI sin red) y simula el merge con `git merge-tree --write-tree` sin tocar el árbol. Conflicto → `conflictAction` (block|warn); atraso sin conflicto de al menos `behindWarn` commits → `behindAction` (warn|block). `command` es lo que se le sugiere para ponerse al día. A mano: `npm run sync`. `session-start` avisa al abrir la sesión si la rama ya está atrás (sin red: con las refs que hay). Requiere git ≥ 2.38; con uno más viejo avisa y no bloquea.",
+      "enabled": true,
+      "remote": "origin",
+      "fetch": true,
+      "conflictAction": "block",
+      "behindWarn": 1,
+      "behindAction": "warn",
+      "command": "git fetch origin && git merge origin/main",
+      "reason": "un conflicto descubierto en el PR se resuelve tarde y a ciegas: el agente ya pasó a otra cosa, y el que resuelve no sabe qué hacía cada lado. Mergear la base en la rama ANTES de empujar lo resuelve quien escribió el cambio."
+    }
   },
   "xp": {
     "$comment": "Prácticas de XP que tienen mecanismo. Cada una se activa sola (`enabled`): una regla instalada sin cicatriz detrás se desactiva en una semana y se lleva puestas a las que servían (P14). Todas tienen fuga DECLARADA con motivo — la fuga es la diferencia entre un freno que se respeta y uno que se saltea con `--no-verify`. Mecanismo: `.githooks/commit-msg` → `node scripts/cycle-check.mjs --commit`. Ver docs/ciclo-desarrollo.md.",

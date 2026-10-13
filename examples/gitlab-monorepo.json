@@ -131,7 +131,7 @@
         "reason": "destruye trabajo sin commitear."
       },
       {
-        "pattern": "git\\s+push\\s+.*--force(?!-with-lease)",
+        "pattern": "git\\s+push\\b.*\\s(--force|-f)(?![-\\w])",
         "reason": "reescribe historia remota. Usá --force-with-lease y pedí confirmación."
       },
       {
