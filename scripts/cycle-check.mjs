@@ -389,7 +389,11 @@ if (tiene("--branch")) {
   const ramas = new Set();
   for (const linea of entrada.split("\n").filter(Boolean)) {
     const [refLocal, , refRemoto] = linea.split(/\s+/);
-    const rama = (refLocal || refRemoto || "").replace(/^refs\/heads\//, "");
+    const ref = refLocal || refRemoto || "";
+    // Un tag (`v1.2.3`) no es una rama de trabajo: el modelo de ramas no lo juzga. Sin esto, un
+    // repo cuyo release es «empujar un tag» no puede publicar nada.
+    if (/^refs\/tags\//.test(ref) || /^refs\/tags\//.test(refRemoto || "")) continue;
+    const rama = ref.replace(/^refs\/heads\//, "");
     if (rama && rama !== "(delete)") ramas.add(rama);
   }
   for (const rama of ramas) {

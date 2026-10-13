@@ -1066,6 +1066,15 @@ const huerfanasDe = (cfg) => {
           if (r.status === 0) ok(`ciclo: \`${larga}\` (rama larga del modelo) no sigue el patrón de trabajo, y está bien`);
           else bad(`ciclo: \`${larga}\` exenta del patrón`, `exit ${r.status}: el freno bloquea la rama del propio modelo`);
         }
+
+        // Un release es «empujar un tag»: el pre-push no puede juzgarlo como si fuera una rama.
+        const empujarTag = spawnSync("node", [script, "--push"], {
+          cwd: REPO_ROOT,
+          encoding: "utf8",
+          input: "refs/tags/v9.9.9 0000000000000000000000000000000000000001 refs/tags/v9.9.9 0000000000000000000000000000000000000000\n",
+        });
+        if (empujarTag.status === 0) ok("ciclo: empujar un tag (`refs/tags/v…`) no se juzga como nombre de rama");
+        else bad("ciclo: empujar un tag", `exit ${empujarTag.status}: el pre-push trata el tag como rama y el repo no puede publicar un release — ${empujarTag.stderr.trim().slice(0, 160)}`);
       }
     }
 
