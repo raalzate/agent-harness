@@ -501,7 +501,7 @@ function seccionRegistro(v, m, rutaRaiz) {
   );
 }
 
-function seccionGestor(v, m, rutaRaiz) {
+function seccionGestor(v, m) {
   const citas = m.citas ?? [];
   const g = v.gestor;
   if (!g && !citas.length) return "";
@@ -568,7 +568,7 @@ function pestanaAhora(v, m, rutaRaiz) {
       ? seccion("repos", "Código", v.repos.map(tarjetaRepo).join(""), { abierta: true, extra: `<small>${v.repos.length}</small>`, resumen: sucios.length ? `${sucios.length} con cambios: ${sucios.map((r) => r.nombre).join(", ")}` : "todo limpio" })
       : "",
     sondas ? seccion("sondas", "Servicios locales", sondas, { abierta: true, extra: `<small>${v.sondas.length}</small>`, resumen: `${v.sondas.filter((s) => s.viva).length}/${v.sondas.length} responden` }) : "",
-    seccionGestor(v, m, rutaRaiz),
+    seccionGestor(v, m),
     seccion("tokens", "Consumo de tokens (esta máquina)", tokens, { resumen: t ? `${abreviar(t.hoy.salida)} de salida hoy` : "sin datos" }),
   ].join("");
 }
