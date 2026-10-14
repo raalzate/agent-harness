@@ -35,7 +35,7 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 // El mismo helper que usan el hook y el lint: comparar contra la lista DECLARADA dejaba pasar
 // justo el caso del incidente (el gate declara una extensión que el default agnóstico no tiene).
-import { codeExtensions, depsMatcher, importSyntax, segmentosDeRuta, relativaDesdeRaiz, esUnidadPelada, parseHookCommand, firstMatch, existeEjecutable, writeTools, escribe } from "../.claude/hooks/harness.mjs";
+import { codeExtensions, depsMatcher, importSyntax, segmentosDeRuta, relativaDesdeRaiz, esUnidadPelada, parseHookCommand, firstMatch, existeEjecutable, writeTools, escribe , rutaDeEstado } from "../.claude/hooks/harness.mjs";
 
 const REPO_ROOT = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
 const abs = (p) => path.join(REPO_ROOT, p);
@@ -311,6 +311,8 @@ const patronesDelConfig = [
   ...(config.askFirst?.strongQuestionPatterns ?? []).map((p) => ["askFirst.strongQuestionPatterns", p]),
   ...(config.askFirst?.directRequestPatterns ?? []).map((p) => ["askFirst.directRequestPatterns", p]),
   ...(config.loop?.normalize ?? []).map((p) => ["loop.normalize", p]),
+  ...(config.task?.trivialEvidence ?? []).map((p) => ["task.trivialEvidence", p]),
+  ...(config.task?.criterionPattern ? [["task.criterionPattern", config.task.criterionPattern]] : []),
   ["tests.filePattern", config.tests?.filePattern],
   ["tests.onlyPattern", config.tests?.onlyPattern],
   // Plantillas con marcador: se compilan con el marcador ya sustituido, que es como las
@@ -812,8 +814,9 @@ if (hookFiles.has("reuse-guard.mjs")) {
  * presupuesto agotado veía rojo el caso de `gate-stop` (con escalada, el hook deja cerrar), y
  * los casos de `ask-first` le borraban la escalada real: medir no puede cambiar la sesión.
  */
+// `rutaDeEstado`: en un worktree `.git` es un archivo, y `abs(".git/x")` reventaba con ENOTDIR.
 const estadoLoop = [config.loop?.marker, config.loop?.ledger].filter(Boolean).map((rel) => {
-  const f = abs(rel);
+  const f = rutaDeEstado(rel);
   const contenido = fs.existsSync(f) ? fs.readFileSync(f) : null;
   fs.rmSync(f, { force: true });
   return { f, contenido };
@@ -1028,6 +1031,16 @@ if (config.loop && fs.existsSync(abs("scripts/gate.mjs")) && ["action-guard.mjs"
       ok("ciclo acotado: el mismo error con otra ruta temporal sigue contando");
     else bad("ciclo acotado: rutas temporales", `una ruta de ${os.tmpdir()} distinta en cada corrida reinició la cuenta: el freno nunca muerde`);
 
+    // Una señal que declara `countsAttempts: false` (la de la tarea: «todavía no terminé» repite
+    // la misma salida y no es estar trabado) no agota el presupuesto.
+    fs.writeFileSync(
+      path.join(tmp, ".claude", "harness.config.json"),
+      JSON.stringify({ gate: { marker: ".git/gate-dirty", signals: [{ name: "cebo", command: senal, why: "selftest", countsAttempts: false }] }, panel: { enabled: false }, loop: loopCfg }),
+    );
+    if (!secuencia([A, A, A, A]).agotado) ok("ciclo acotado: una señal con `countsAttempts: false` no agota el presupuesto");
+    else bad("ciclo acotado: countsAttempts", "una señal exenta agotó el presupuesto: «no terminé» se confunde con «estoy trabado»");
+    escribirCfg(loopCfg);
+
     // Verde en el medio: la cuenta se borra.
     if (!secuencia([A, A, "ok", A, A]).agotado) ok("ciclo acotado: una señal verde borra su cuenta");
     else bad("ciclo acotado: verde borra", "la cuenta sobrevivió a un verde");
@@ -1063,6 +1076,163 @@ if (config.loop && fs.existsSync(abs("scripts/gate.mjs")) && ["action-guard.mjs"
     else bad("ciclo acotado: sin clave", "el gate contó intentos en un repo que no los pidió");
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true });
+  }
+}
+
+// 3e-tarea. La tarea declarada (#52 alcance, #53 criterios con evidencia). Planificar antes de
+//     escribir, no salirse de lo planificado, y que «terminado» lo demuestre el arnés corriendo
+//     la evidencia, no el agente diciéndolo. Repo git temporal con el script y los hooks
+//     copiados: lo que importa es la cadena (el script escribe la tarea, el hook la lee).
+if (config.task?.file && !fs.existsSync(abs("scripts/task.mjs"))) {
+  bad("tarea declarada", "el config declara `task` y no existe scripts/task.mjs: freno instalado y muerto");
+} else if (config.task?.file && fs.existsSync(abs("scripts/task.mjs")) && hookFiles.has("protected-paths.mjs")) {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "harness-tarea-"));
+  try {
+    const gitT = (...a) => spawnSync("git", a, { cwd: tmp, encoding: "utf8" });
+    gitT("init", "-q", "-b", "main");
+    gitT("config", "user.email", "selftest@example.com");
+    gitT("config", "user.name", "selftest");
+    for (const d of ["scripts", ".claude/hooks", "src", "docs"]) fs.mkdirSync(path.join(tmp, d), { recursive: true });
+    fs.copyFileSync(abs("scripts/task.mjs"), path.join(tmp, "scripts", "task.mjs"));
+    for (const h of fs.readdirSync(abs(".claude/hooks")).filter((n) => n.endsWith(".mjs")))
+      fs.copyFileSync(abs(`.claude/hooks/${h}`), path.join(tmp, ".claude", "hooks", h));
+    // El ítem del gestor, de mentira: un archivo que el comando declarado imprime.
+    fs.writeFileSync(path.join(tmp, "item-7.md"), "Texto.\n\n- [ ] suma dos números\n- [x] no rompe la resta\n- nota que no es criterio\n");
+    fs.writeFileSync(path.join(tmp, "src", "a.js"), "x\n");
+    fs.writeFileSync(path.join(tmp, "prueba.js"), "process.exit(require('fs').readFileSync('src/a.js','utf8').includes('ok') ? 0 : 1)\n");
+    const tareaCfg = {
+      file: ".git/harness-task.json",
+      log: ".git/harness-tasks.log",
+      criteriaCommand: ["node", "-e", "process.stdout.write(require('fs').readFileSync('item-' + process.argv[1] + '.md','utf8'))", "{issue}"],
+      criterionPattern: "^\\s*[-*]\\s+\\[[ xX]\\]\\s+(.+)$",
+      trivialEvidence: ["^(true|:|exit 0)$", "^echo\\b"],
+      timeoutMs: 60000,
+    };
+    fs.writeFileSync(
+      path.join(tmp, ".claude", "harness.config.json"),
+      JSON.stringify({ protectedPaths: [{ pattern: "^\\.env", reason: "selftest" }], bash: { deny: [{ pattern: "git\\s+push\\s+.*--force", reason: "selftest" }] }, task: tareaCfg }),
+    );
+    gitT("add", "-A");
+    gitT("commit", "-qm", "base");
+
+    const task = (...a) => {
+      const r = spawnSync(process.execPath, [path.join(tmp, "scripts", "task.mjs"), ...a], { cwd: tmp, encoding: "utf8" });
+      return { status: r.status, out: `${r.stdout}${r.stderr}` };
+    };
+    const editar = (rel) =>
+      spawnSync(process.execPath, [path.join(tmp, ".claude", "hooks", "protected-paths.mjs")], {
+        input: JSON.stringify({ cwd: tmp, hook_event_name: "PreToolUse", tool_name: "Write", tool_input: { file_path: path.isAbsolute(rel) ? rel : path.join(tmp, rel), content: "x" } }),
+        encoding: "utf8",
+      });
+    const caso = (cond, nombre, falla) => (cond ? ok(`tarea: ${nombre}`) : bad(`tarea: ${nombre}`, falla));
+
+    // Sin tarea, nada cambia.
+    const docX = path.join("docs", "x.md");
+    caso(editar(docX).status === 0, "sin tarea activa, editar no se frena", "el Change Guard muerde sin tarea declarada");
+    const sinTarea = task("verify");
+    caso(sinTarea.status === 0 && /sin tarea/i.test(sinTarea.out), "sin tarea activa, verificar no opina", `exit ${sinTarea.status}: ${sinTarea.out.slice(0, 120)}`);
+
+    // Tarea sin alcance: no se edita nada todavía (planificar antes de escribir).
+    task("start", "1");
+    const antesDelAlcance = editar("src/a.js");
+    caso(antesDelAlcance.status === 2 && /alcance/i.test(antesDelAlcance.stderr), "sin alcance declarado no se edita producción", `exit ${antesDelAlcance.status}`);
+
+    // Ampliar el alcance exige motivo.
+    caso(task("scope", "src/").status !== 0, "declarar alcance sin motivo se rechaza", "aceptó un alcance sin `--why`");
+    caso(task("scope", "src/", "--why", "la suma vive acá").status === 0, "declarar alcance con motivo se acepta", "rechazó un alcance con motivo");
+    caso(editar("src/a.js").status === 0, "dentro del alcance se edita", "frenó una edición dentro del alcance");
+    const fuera = editar(docX);
+    caso(fuera.status === 2 && /fuera del alcance/i.test(fuera.stderr), "fuera del alcance se frena y lo dice", `exit ${fuera.status}: editó fuera de lo declarado`);
+    caso(editar(path.join(os.tmpdir(), "borrador.md")).status === 0, "fuera del repo no se frena", "frenó un borrador fuera del repo");
+
+    // Criterios y evidencia: verificar lo corre el arnés.
+    task("criterion", "suma dos números");
+    caso(task("verify").status === 1, "un criterio sin evidencia es rojo", "verificó verde sin evidencia");
+    caso(task("evidence", "1", "--", "true").status !== 0, "evidencia trivial se rechaza", "aceptó `true` como evidencia");
+    caso(task("evidence", "1", "--", "git", "push", "origin", "--force").status !== 0, "evidencia que bash.deny prohíbe se rechaza", "la evidencia saltaba bash-guard");
+    caso(task("evidence", "1", "--", "node", "prueba.js").status === 0, "evidencia real se registra", "rechazó una evidencia real");
+    caso(task("verify").status === 1, "evidencia que falla es rojo", "verificó verde con la prueba fallando");
+    fs.writeFileSync(path.join(tmp, "src", "a.js"), "ok\n");
+    const verde = task("verify");
+    caso(verde.status === 0, "con evidencia que pasa y todo dentro del alcance, verde", `exit ${verde.status}: ${verde.out.slice(-200)}`);
+
+    // Lo tocado por Bash también cuenta: el diff contra el inicio de la tarea.
+    fs.writeFileSync(path.join(tmp, "docs", "colado.md"), "x\n");
+    const colado = task("verify");
+    caso(colado.status === 1 && /docs\/colado\.md/.test(colado.out), "un archivo cambiado fuera del alcance es rojo y se nombra", `exit ${colado.status}`);
+    caso(task("done").status !== 0 && fs.existsSync(path.join(tmp, tareaCfg.file)), "no se cierra una tarea en rojo", "cerró la tarea con la verificación roja");
+    fs.rmSync(path.join(tmp, "docs", "colado.md"));
+    caso(task("done").status === 0 && !fs.existsSync(path.join(tmp, tareaCfg.file)), "en verde, `done` cierra la tarea", "no cerró una tarea verde");
+    const log = fs.existsSync(path.join(tmp, tareaCfg.log)) ? fs.readFileSync(path.join(tmp, tareaCfg.log), "utf8") : "";
+    caso(/"item":"1"/.test(log) && /"verificada":true/.test(log), "el cierre queda en el registro de tareas", `registro: ${log.slice(0, 120)}`);
+
+    // Lo commiteado también cuenta, y un renombre no esconde el origen: `git diff` con detección de
+    // renombres listaba sólo el nombre nuevo (dentro) y el borrado de afuera desaparecía.
+    task("start", "2");
+    // Todo el repo como alcance no es un alcance: es apagar el freno con un motivo.
+    caso(["**", "*", ".", "./"].every((a) => task("scope", a, "--why", "todo").status !== 0), "un alcance que es todo el repo se rechaza", "aceptó `**`/`.` como alcance");
+    task("scope", "src/", "--why", "selftest");
+    task("criterion", "suma");
+    task("evidence", "1", "--", "node", "prueba.js");
+    fs.writeFileSync(path.join(tmp, "notas.txt"), "x\n");
+    gitT("add", "notas.txt");
+    gitT("commit", "-qm", "fuera del alcance, commiteado");
+    const commiteado = task("verify");
+    caso(commiteado.status === 1 && /notas\.txt/.test(commiteado.out), "un archivo commiteado fuera del alcance es rojo", `exit ${commiteado.status}`);
+    // item-7.md existía al empezar la tarea y está fuera del alcance: moverlo adentro lo borra de afuera.
+    gitT("mv", "item-7.md", path.join("src", "item-7.md"));
+    const renombre = task("verify");
+    caso(renombre.status === 1 && /^\s+item-7\.md$/m.test(renombre.out), "mover un archivo de afuera hacia el alcance no esconde el origen", `exit ${renombre.status}: ${renombre.out.slice(0, 200)}`);
+    gitT("mv", path.join("src", "item-7.md"), "item-7.md");
+
+    // Si git no puede calcular el diff, la verificación NO es verde (omitido no es verde).
+    const archivoTarea = path.join(tmp, tareaCfg.file);
+    const conBaseFalsa = { ...JSON.parse(fs.readFileSync(archivoTarea, "utf8")), base: "0".repeat(40) };
+    fs.writeFileSync(archivoTarea, JSON.stringify(conBaseFalsa));
+    const sinDiff = task("verify");
+    caso(sinDiff.status === 1 && /diff/i.test(sinDiff.out), "una base que git no conoce es rojo, no verde", `exit ${sinDiff.status}`);
+
+    // Una tarea corrupta deja pasar (P5): el arnés roto no bloquea al humano.
+    for (const corrupta of ["[]", '"x"', JSON.stringify({ item: "3", alcance: "src/" })]) {
+      fs.writeFileSync(archivoTarea, corrupta);
+      const r = editar(path.join("src", "a.js"));
+      const inicio = spawnSync(process.execPath, [path.join(tmp, ".claude", "hooks", "session-start.mjs")], { input: "{}", cwd: tmp, encoding: "utf8" });
+      caso(r.status === 0 && inicio.status === 0, `una tarea corrupta (${corrupta.slice(0, 20)}) deja pasar`, `protected-paths exit ${r.status}, session-start exit ${inicio.status}`);
+    }
+    fs.rmSync(archivoTarea, { force: true });
+    gitT("reset", "-q", "--hard", "HEAD~1");
+
+    // En un worktree `.git` es un ARCHIVO que apunta al gitdir real: la tarea se guarda ahí y el
+    // hook la encuentra sin lanzar git (los hooks no lanzan procesos).
+    const wt = path.join(tmp, "..", `${path.basename(tmp)}-wt`);
+    gitT("worktree", "add", "-q", wt);
+    try {
+      const enWt = spawnSync(process.execPath, [path.join(wt, "scripts", "task.mjs"), "start", "9"], { cwd: wt, encoding: "utf8" });
+      spawnSync(process.execPath, [path.join(wt, "scripts", "task.mjs"), "scope", "src/", "--why", "selftest"], { cwd: wt, encoding: "utf8" });
+      const hookWt = spawnSync(process.execPath, [path.join(wt, ".claude", "hooks", "protected-paths.mjs")], {
+        input: JSON.stringify({ cwd: wt, hook_event_name: "PreToolUse", tool_name: "Write", tool_input: { file_path: path.join(wt, "notas.md"), content: "x" } }),
+        encoding: "utf8",
+      });
+      caso(enWt.status === 0 && hookWt.status === 2, "en un worktree la tarea se abre y el alcance muerde", `start exit ${enWt.status} (${`${enWt.stderr}`.split("\n")[0]}), hook exit ${hookWt.status}`);
+    } finally {
+      gitT("worktree", "remove", "--force", wt);
+      fs.rmSync(wt, { recursive: true, force: true });
+    }
+
+    // Los criterios salen de las casillas del ítem del gestor.
+    task("start", "7", "--from-tracker");
+    const desdeGestor = tareaActivaEn(tmp, tareaCfg.file);
+    caso(desdeGestor?.criterios?.length === 2 && /suma/.test(desdeGestor.criterios[0].texto), "los criterios se traen de las casillas del ítem", `criterios: ${JSON.stringify(desdeGestor?.criterios)}`);
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+}
+
+function tareaActivaEn(raiz, rel) {
+  try {
+    return JSON.parse(fs.readFileSync(path.join(raiz, rel), "utf8"));
+  } catch {
+    return null;
   }
 }
 

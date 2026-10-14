@@ -9,7 +9,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
-import { readInput, loadConfig, allow, REPO_ROOT } from "./harness.mjs";
+import { readInput, loadConfig, allow, tareaActiva, rutaDeEstado, REPO_ROOT } from "./harness.mjs";
 
 await readInput();
 const config = loadConfig() ?? {};
@@ -56,9 +56,20 @@ if (hooksPath !== ".githooks") {
 }
 
 // Alerta: gate pendiente de una sesión anterior.
-const marker = path.join(REPO_ROOT, config.gate?.marker ?? ".git/gate-dirty");
+const marker = rutaDeEstado(config.gate?.marker ?? ".git/gate-dirty");
 if (fs.existsSync(marker)) {
   lines.push(`- ⚠️ Gate pendiente de una sesión anterior: corré \`${config.gate?.command ?? "node scripts/gate.mjs"}\`.`);
+}
+
+// La tarea declarada que quedó abierta: es lo primero que hay que retomar, y sin decirlo el
+// agente arranca otra cosa y `protected-paths` lo frena sin que entienda por qué.
+const tarea = tareaActiva(config);
+if (tarea) {
+  const sinEvidencia = (tarea.criterios ?? []).filter((c) => !c.evidencia).length;
+  lines.push(
+    `- Tarea abierta: **${tarea.item}** · alcance: ${tarea.alcance?.length ? tarea.alcance.map((a) => `\`${a.ruta}\``).join(", ") : "SIN DECLARAR"} · ` +
+      `${tarea.criterios?.length ?? 0} criterio(s), ${sinEvidencia} sin evidencia. \`node scripts/task.mjs status\`.`,
+  );
 }
 
 // STATUS.md: estado verificado + deuda conocida.

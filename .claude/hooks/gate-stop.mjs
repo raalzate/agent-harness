@@ -12,7 +12,7 @@
  */
 import fs from "node:fs";
 import path from "node:path";
-import { readInput, loadConfig, deny, allow, REPO_ROOT } from "./harness.mjs";
+import { readInput, loadConfig, deny, allow, rutaDeEstado } from "./harness.mjs";
 
 const input = await readInput();
 const config = loadConfig();
@@ -21,9 +21,9 @@ if (!config) allow();
 // Si el propio hook ya bloqueó una vez y el agente sigue en loop, no insistir.
 if (input?.stop_hook_active) allow();
 
-if (config.loop?.marker && fs.existsSync(path.join(REPO_ROOT, config.loop.marker))) allow();
+if (config.loop?.marker && fs.existsSync(rutaDeEstado(config.loop.marker))) allow();
 
-const marker = path.join(REPO_ROOT, config.gate?.marker ?? ".git/gate-dirty");
+const marker = rutaDeEstado(config.gate?.marker ?? ".git/gate-dirty");
 if (!fs.existsSync(marker)) allow();
 
 deny(

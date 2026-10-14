@@ -20,7 +20,7 @@
  */
 import fs from "node:fs";
 import path from "node:path";
-import { readInput, loadConfig, deny, allow, targetPath, escribe, escrituraAmplia, REPO_ROOT } from "./harness.mjs";
+import { readInput, loadConfig, deny, allow, targetPath, escribe, escrituraAmplia, rutaDeEstado } from "./harness.mjs";
 
 const input = await readInput();
 const config = loadConfig();
@@ -28,7 +28,7 @@ const config = loadConfig();
 /** El marcador declarado en `rel`, si está puesto; su contenido (sin la fecha), recortado. */
 const puesto = (rel) => {
   if (!rel) return null;
-  const abs = path.join(REPO_ROOT, rel);
+  const abs = rutaDeEstado(rel);
   if (!fs.existsSync(abs)) return null;
   try {
     return fs.readFileSync(abs, "utf8").split("\n").slice(1).join(" ").trim().slice(0, 300);

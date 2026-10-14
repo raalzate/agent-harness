@@ -7,6 +7,7 @@ prisa. Los demás principios ágiles siguen valiendo — pero se declaran como l
 | # | Principio | Cómo se ve cuando falta | Mecanismo | Fuerza |
 |---|---|---|---|---|
 | 1 | **Software funcionando es la medida del avance** | "está listo, sólo falta probarlo" | `gate.command`: el entregable es el gate verde, no la opinión de quien lo escribió. El hook `Stop` no deja cerrar la tarea con el gate sucio | BLOQUEA |
+| 1b | **Planificación verificable y Definición de Hecho por tarea** | el agente se pone a escribir sin decir qué toca, se sale de la tarea «de paso», y declara «listo» porque terminó de escribir | `task`: `scripts/task.mjs` declara ítem, alcance (cada ampliación con motivo) y criterios con el comando que los demuestra; `protected-paths` frena editar fuera del alcance, y la señal «task» del gate re-ejecuta la evidencia y cruza el diff contra el alcance | BLOQUEA |
 | 2 | **Lote chico** | un PR de 40 archivos que nadie revisa de verdad | `xp.smallBatch`: archivos y líneas del commit contra el límite de ESTE equipo, con fuga declarada (`big-batch: <motivo>`) — más `branches.protected` y el gate en cada push | BLOQUEA |
 | 3 | **El trabajo es visible** | "¿esto por qué se cambió?" y el historial no contesta | `.githooks/commit-msg`: un commit que toca código referencia su ítem (`tracker.issuePattern`) o declara `no-issue: <motivo>` en su línea | BLOQUEA |
 | 4 | **Una sola fuente del trabajo** | la spec en el repo, las tareas en el gestor, ninguna al día | `tracker.artifactsIn` + `node scripts/artifacts-check.mjs` en el gate | BLOQUEA |
