@@ -291,6 +291,7 @@ const patronesDelConfig = [
   ...(config.protectedPaths ?? []).map((r) => ["protectedPaths", r.pattern]),
   ...(config.bash?.deny ?? []).map((r) => ["bash.deny", r.pattern]),
   ...(config.bash?.ask ?? []).map((r) => ["bash.ask", r.pattern]),
+  ...(config.bash?.ask ?? []).filter((r) => r.exempt).map((r) => ["bash.ask.exempt", r.exempt]),
   ...(config.reuse ?? []).flatMap((r) => [
     ["reuse.pattern", r.pattern],
     ["reuse.appliesTo", r.appliesTo],
@@ -526,6 +527,33 @@ if (hookFiles.has("bash-guard.mjs")) {
       ok(`bash-guard le pregunta al humano por \`${muestra.trim()}\``);
     else bad(`bash-guard pregunta por \`${muestra.trim()}\``, `exit ${r.status}, stdout «${r.stdout.trim().slice(0, 80)}»: no llegó el pedido de confirmación`);
   }
+  // `exempt`: la forma segura pasa SIN preguntar (P3: una pregunta que sale siempre se contesta
+  // sin leer), y la exención no se hereda encadenando otro comando detrás (P2). El ejemplo tiene
+  // que casar la regla: si no, el caso probaría una exención que nunca se alcanza.
+  for (const regla of (config.bash?.ask ?? []).filter((r) => r.exempt)) {
+    const ejemplo = regla.exemptExample;
+    const pedir = (command) => {
+      const r = runHook("bash-guard.mjs", { hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command } });
+      return { status: r.status, pregunta: r.stdout.includes('"ask"') };
+    };
+    if (!ejemplo) {
+      bad(`bash.ask \`${regla.pattern}\` con \`exempt\``, "falta `exemptExample`: una exención sin ejemplo no se puede probar");
+      continue;
+    }
+    if (!firstMatch([regla], ejemplo)) {
+      bad(`bash.ask: \`exemptExample\` casa la regla`, `\`${ejemplo}\` no casa \`${regla.pattern}\`: la exención no prueba nada`);
+      continue;
+    }
+    const libre = pedir(ejemplo);
+    if (libre.status === 0 && !libre.pregunta) ok(`bash-guard deja pasar sin preguntar la forma segura \`${ejemplo}\``);
+    else bad(`bash.ask exento: \`${ejemplo}\``, `exit ${libre.status}, ${libre.pregunta ? "preguntó igual" : "bloqueó"}: la exención no aplica`);
+
+    const muestra = sampleFromPattern(regla.pattern);
+    const encadenado = pedir(`${ejemplo} && ${muestra ?? ejemplo}`);
+    if (encadenado.pregunta || encadenado.status === 2) ok("bash-guard: la exención no se hereda encadenando otro comando");
+    else bad("bash.ask exento encadenado", `\`${ejemplo} && …\` pasó sin preguntar: \`exempt\` no está anclado`);
+  }
+
   // Sin `hook_event_name` el JSON de «ask» no se reconoce y el comando correría sin preguntar:
   // hacia el lado seguro, bloquea.
   const regla = (config.bash?.ask ?? []).map((r) => sampleFromPattern(r.pattern)).find((m) => m && !firstMatch(config.bash?.deny, m));
@@ -1250,6 +1278,110 @@ const huerfanasDe = (cfg) => {
     // así que el único lugar donde vive es el pipeline que el config declara en `runner`.
     const rojo = config.xp?.testFirst?.verifyRed;
     if (rojo?.enabled) corredorDeclarado("la verificación de rojo sin el cambio", rojo.runner, "--verify-red");
+  }
+}
+
+// 3f-ter-bis. Sincronía con la base (`workflow.sync`): una rama que CHOCA con la base no se
+//     empuja. Cebo en un repo git temporal fuera del árbol (P7) con un `origin` bare, y la base
+//     la avanza OTRO clon: así el `origin/main` local queda viejo y el caso sólo pasa si el freno
+//     hace `fetch` antes de medir — medir contra refs viejas es el error que el freno existe para
+//     cazar. El config del cebo trae sólo `sync`, para que nombre y edad no tapen el veredicto.
+{
+  const script = abs("scripts/cycle-check.mjs");
+  const sync = config.workflow?.sync;
+  if (!fs.existsSync(script)) {
+    skip("ciclo: sincronía con la base", "el repo no trae scripts/cycle-check.mjs");
+  } else {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "harness-sync-"));
+    try {
+      const g = (cwd, ...a) => spawnSync("git", a, { cwd, encoding: "utf8" });
+      const origen = path.join(tmp, "origen.git");
+      const work = path.join(tmp, "work");
+      const otro = path.join(tmp, "otro");
+      const escribir = (dir, rel, txt) => fs.writeFileSync(path.join(dir, rel), txt);
+      const commitear = (dir, rel, txt) => {
+        escribir(dir, rel, txt);
+        g(dir, "add", rel);
+        g(dir, "commit", "-q", "-m", `cambia ${rel}`);
+      };
+      const identidad = (dir) => {
+        g(dir, "config", "user.email", "selftest@example.com");
+        g(dir, "config", "user.name", "selftest");
+      };
+
+      g(tmp, "init", "-q", "--bare", origen);
+      g(origen, "symbolic-ref", "HEAD", "refs/heads/main");
+      g(tmp, "init", "-q", work);
+      identidad(work);
+      g(work, "checkout", "-q", "-b", "main");
+      g(work, "remote", "add", "origin", origen);
+      escribir(work, "b.txt", "b\n");
+      commitear(work, "a.txt", "uno\n");
+      g(work, "add", "b.txt");
+      g(work, "commit", "-q", "-m", "b");
+      g(work, "push", "-q", "-u", "origin", "main");
+
+      const soportaMergeTree = g(work, "merge-tree", "--write-tree", "HEAD", "HEAD").status === 0;
+      if (!soportaMergeTree) {
+        skip("ciclo: sincronía con la base", "este git no trae `merge-tree --write-tree` (≥ 2.38)");
+      } else {
+        // Tres ramas desde la base original: una al día, una que choca y una atrasada sin choque.
+        for (const [rama, rel, txt] of [["feat/choca", "a.txt", "tres\n"], ["feat/atrasada", "c.txt", "c\n"]]) {
+          g(work, "checkout", "-q", "-b", rama, "main");
+          commitear(work, rel, txt);
+        }
+        // La base avanza desde OTRO clon: `work` no se entera hasta que alguien hace fetch.
+        g(tmp, "clone", "-q", origen, otro);
+        identidad(otro);
+        commitear(otro, "a.txt", "dos\n");
+        g(otro, "push", "-q", "origin", "main");
+        g(work, "fetch", "-q", "origin");
+        g(work, "checkout", "-q", "-B", "feat/al-dia", "origin/main");
+        commitear(work, "d.txt", "d\n");
+        // Volver `origin/main` al punto viejo: el freno tiene que bajar la base por su cuenta.
+        g(work, "update-ref", "refs/remotes/origin/main", g(work, "rev-parse", "main").stdout.trim());
+
+        const cebo = (cambios = {}) => {
+          const ruta = path.join(tmp, `cfg-${Math.random().toString(36).slice(2)}.json`);
+          const s = { ...(sync ?? {}), enabled: true, remote: "origin", fetch: true, command: undefined, ...cambios };
+          fs.writeFileSync(ruta, JSON.stringify({ workflow: { baseBranch: "main", sync: s } }));
+          return ruta;
+        };
+        const empujar = (rama, cfg, sha = g(work, "rev-parse", rama).stdout.trim()) =>
+          spawnSync("node", [script, "--push", "--config", cfg], {
+            cwd: work,
+            encoding: "utf8",
+            input: `refs/heads/${rama} ${sha} refs/heads/${rama} ${"0".repeat(40)}\n`,
+          });
+
+        const casos = [
+          ["una rama que CHOCA con la base no se empuja (y nombra el archivo)", empujar("feat/choca", cebo()), (r) => r.status === 1 && r.stderr.includes("a.txt")],
+          ["una rama atrasada SIN choque se empuja con aviso", empujar("feat/atrasada", cebo()), (r) => r.status === 0 && /atr[aá]s/.test(r.stderr)],
+          ["una rama al día se empuja en silencio", empujar("feat/al-dia", cebo()), (r) => r.status === 0 && !r.stderr.trim()],
+          ["`conflictAction: warn` avisa y deja empujar", empujar("feat/choca", cebo({ conflictAction: "warn" })), (r) => r.status === 0 && r.stderr.includes("a.txt")],
+          ["`behindAction: block` frena también el atraso", empujar("feat/atrasada", cebo({ behindAction: "block" })), (r) => r.status === 1],
+          ["borrar una rama remota no se mide", empujar("feat/choca", cebo(), "0".repeat(40)), (r) => r.status === 0],
+          ["sin `sync.enabled`, el freno no corre", empujar("feat/choca", cebo({ enabled: false })), (r) => r.status === 0],
+        ];
+        for (const [nombre, r, pasa] of casos) {
+          if (pasa(r)) ok(`ciclo (sincronía): ${nombre}`);
+          else bad(`ciclo (sincronía): ${nombre}`, `exit ${r.status}. stderr: ${(r.stderr ?? "").trim().slice(0, 240)}`);
+        }
+
+        // A mano, el mismo veredicto: `npm run sync` antes de abrir el PR.
+        g(work, "checkout", "-q", "feat/choca");
+        const manual = spawnSync("node", [script, "--sync", "--config", cebo()], { cwd: work, encoding: "utf8" });
+        if (manual.status === 1 && manual.stderr.includes("a.txt")) ok("ciclo (sincronía): `--sync` da el mismo veredicto a mano");
+        else bad("ciclo (sincronía): `--sync` a mano", `exit ${manual.status}. stderr: ${(manual.stderr ?? "").trim().slice(0, 240)}`);
+
+        // El árbol de trabajo no se toca: el merge se simula en la base de objetos.
+        const limpio = !g(work, "status", "--porcelain").stdout.trim() && g(work, "rev-parse", "--abbrev-ref", "HEAD").stdout.trim() === "feat/choca";
+        if (limpio) ok("ciclo (sincronía): simular el merge no toca el árbol ni la rama");
+        else bad("ciclo (sincronía): simular el merge", "el chequeo dejó cambios o movió HEAD");
+      }
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
   }
 }
 

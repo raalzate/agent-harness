@@ -96,7 +96,7 @@
         "reason": "saltarse los hooks de verificación está prohibido. Si el gate estorba, se arregla el gate."
       },
       {
-        "pattern": "git\\s+push\\s+.*--force(?!-with-lease)",
+        "pattern": "git\\s+push\\b.*\\s(--force|-f)(?![-\\w])",
         "reason": "`--force` reescribe historia remota. Usá --force-with-lease y pedí confirmación."
       },
       {
@@ -456,7 +456,18 @@
     "maxAgeDays": 5,
     "staleAction": "warn",
     "reason": "una rama por tarea, con nombre que dice de qué es: es lo que hace legible `git branch -a` cuando hay quince abiertas.",
-    "staleReason": "una rama que no se integra hace días es un lote grande esperando: el merge es más caro y el rojo aparece tarde."
+    "staleReason": "una rama que no se integra hace días es un lote grande esperando: el merge es más caro y el rojo aparece tarde.",
+    "sync": {
+      "$comment": "Sincronía con la base: en el pre-push se baja `<remote>/<baseBranch>` y se simula el merge (`git merge-tree`, sin tocar el árbol). Conflicto = bloquea; atraso sin choque = avisa. Viaja ENCENDIDO porque sólo muerde un conflicto real, que en el PR iba a aparecer igual pero más tarde. `fetch: false` en CI sin red. A mano: `node scripts/cycle-check.mjs --sync`. Ver docs/ciclo-desarrollo.md.",
+      "enabled": true,
+      "remote": "origin",
+      "fetch": true,
+      "conflictAction": "block",
+      "behindWarn": 1,
+      "behindAction": "warn",
+      "command": "git fetch origin && git merge origin/main",
+      "reason": "un conflicto descubierto en el PR se resuelve tarde y a ciegas; antes de empujar lo resuelve quien escribió el cambio."
+    }
   },
   "xp": {
     "$comment": "Prácticas de XP con mecanismo. TODAS viajan APAGADAS a propósito: una regla instalada sin cicatriz detrás se desactiva en una semana y se lleva puestas a las que servían (P14). Encendé la que tu equipo ya decidió, empezando por `testFirst`. Las lee `.githooks/commit-msg` → `node scripts/cycle-check.mjs --commit`. Ver docs/ciclo-desarrollo.md.",

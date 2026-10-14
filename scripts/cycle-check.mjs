@@ -16,6 +16,7 @@
  *   node scripts/cycle-check.mjs --commit <archivo-de-mensaje>   # prácticas XP (commit-msg)
  *   node scripts/cycle-check.mjs --push                          # modelo de ramas (pre-push, refs por stdin)
  *   node scripts/cycle-check.mjs --branch <nombre>               # una rama suelta, sin git
+ *   node scripts/cycle-check.mjs --sync [<rama>]                 # ¿la rama choca con la base? (antes del PR)
  *   node scripts/cycle-check.mjs --verify-red [<base>]           # la prueba nueva falla sin el cambio (CI, en el PR)
  *   node scripts/cycle-check.mjs --rules                         # qué está activo y de dónde sale
  *   [--config <ruta>]                                            # para los cebos del self-test (P7)
@@ -127,6 +128,76 @@ function revisarEdad(rama) {
   ].join("\n");
 
   if ((workflow.staleAction ?? "warn") === "block") bloquear(texto, []);
+  else process.stderr.write(`${texto}\n\n`);
+}
+
+/**
+ * Sincronía con la base: ¿esta rama, mergeada HOY, choca? La edad no lo dice —una rama de un
+ * día choca si alguien tocó las mismas líneas—, y el PR lo descubre tarde, cuando el agente ya
+ * pasó a otra cosa y nadie se acuerda de qué resolvía cada lado.
+ *
+ * Se simula el merge con `git merge-tree --write-tree` (git ≥ 2.38): calcula el resultado en la
+ * base de objetos y no toca el árbol ni el índice (P7). Exit 1 = conflicto, 0 = limpio; otro
+ * código = git viejo o refs rotas, y eso NO es un veredicto: se avisa y se deja pasar.
+ *
+ * El `fetch` es lo que hace honesta la medición: medir contra un `origin/<base>` de hace tres
+ * días es exactamente el error que este freno existe para cazar. Si la red falla, se mide contra
+ * lo que hay y se dice.
+ */
+function revisarSincronia(rama, sha, { manual = false } = {}) {
+  const sync = workflow.sync;
+  if (!sync?.enabled || !rama) return;
+  const base = workflow.baseBranch;
+  if (!base || rama === base) return;
+  const remoto = sync.remote ?? "origin";
+
+  let fetchFallo = false;
+  if (sync.fetch !== false) fetchFallo = spawnSync("git", ["fetch", "--quiet", remoto, base], { encoding: "utf8" }).status !== 0;
+  const ref = [`${remoto}/${base}`, base].find((r) => git("rev-parse", "--verify", "--quiet", r));
+  if (!ref) return; // sin base no hay medición honesta: no se inventa un veredicto
+  const punta = sha || rama;
+
+  const atras = Number(git("rev-list", "--count", `${punta}..${ref}`)) || 0;
+  const aviso = fetchFallo ? ` (no se pudo bajar \`${remoto}/${base}\`: medido contra la copia local)` : "";
+  // merge y no rebase: ponerse al día no reescribe la rama, así que el push siguiente es uno
+  // normal y no hace falta `--force-with-lease` (que con razón pide confirmación al humano).
+  const salida = sync.command ?? `git fetch ${remoto} && git merge ${remoto}/${base}`;
+  if (!atras) {
+    if (manual) process.stdout.write(`ciclo (sincronía): \`${rama}\` está al día con \`${ref}\`${aviso}.\n`);
+    return;
+  }
+
+  const r = spawnSync("git", ["merge-tree", "--write-tree", "--name-only", "--no-messages", ref, punta], { encoding: "utf8" });
+  if (r.status === 1) {
+    // Primera línea: el árbol resultante. Después, un archivo en conflicto por línea.
+    const archivos = [...new Set((r.stdout ?? "").split("\n").slice(1).map((l) => l.trim()).filter(Boolean))];
+    const texto = [
+      `ciclo (sincronía): \`${rama}\` CHOCA con \`${ref}\` — ${atras} commit(s) de la base que la rama no tiene${aviso}.`,
+      "",
+      "Archivos en conflicto:",
+      ...archivos.map((f) => `  - ${f}`),
+      ...(sync.reason ? ["", `Motivo: ${sync.reason}`] : []),
+      "",
+      "Resolvelo ACÁ, donde sabés qué hace cada lado, no en el PR:",
+      `  ${salida}`,
+      "  # resolvé, `git add <archivo>`, `git commit`, corré el gate y empujá: sin reescribir nada",
+    ].join("\n");
+    if ((sync.conflictAction ?? "block") === "block") bloquear(texto, []);
+    else process.stderr.write(`${texto}\n\n`);
+    return;
+  }
+  if (r.status !== 0) {
+    process.stderr.write(`ciclo (sincronía): no se pudo simular el merge con \`${ref}\` (¿git < 2.38?). Sin veredicto: no bloquea.\n\n`);
+    return;
+  }
+
+  const umbral = Number(sync.behindWarn ?? 1);
+  if (atras < umbral) return;
+  const texto = [
+    `ciclo (sincronía): \`${rama}\` está ${atras} commit(s) atrás de \`${ref}\`${aviso}. Hoy no choca; cada commit que entra a la base lo hace más probable.`,
+    `  ${salida}`,
+  ].join("\n");
+  if (sync.behindAction === "block") bloquear(texto, []);
   else process.stderr.write(`${texto}\n\n`);
 }
 
@@ -361,6 +432,7 @@ if (tiene("--rules")) {
     ["patrón de rama", workflow.branchPattern ?? "—"],
     ["rama base", workflow.baseBranch ?? "—"],
     ["edad máxima de rama", workflow.maxAgeDays ? `${workflow.maxAgeDays} días (${workflow.staleAction ?? "warn"})` : "—"],
+    ["sincronía con la base", workflow.sync?.enabled ? `conflicto: ${workflow.sync.conflictAction ?? "block"} · atraso: ${workflow.sync.behindAction ?? "warn"}` : "—"],
     ["XP · test primero", xp.testFirst?.enabled ? "activo" : "—"],
     ["XP · rojo sin el cambio", xp.testFirst?.enabled && xp.testFirst?.verifyRed?.enabled ? `activo (${(xp.testFirst.verifyRed.command ?? []).join(" ")})` : "—"],
     ["XP · lote chico", xp.smallBatch?.enabled ? `activo (${xp.smallBatch.maxFiles ?? "∞"} archivos / ${xp.smallBatch.maxLines ?? "∞"} líneas)` : "—"],
@@ -386,20 +458,30 @@ if (tiene("--branch")) {
   } catch {
     entrada = "";
   }
-  const ramas = new Set();
+  const ramas = new Map(); // rama → sha local que se empuja
   for (const linea of entrada.split("\n").filter(Boolean)) {
-    const [refLocal, , refRemoto] = linea.split(/\s+/);
+    const [refLocal, shaLocal, refRemoto] = linea.split(/\s+/);
     const ref = refLocal || refRemoto || "";
     // Un tag (`v1.2.3`) no es una rama de trabajo: el modelo de ramas no lo juzga. Sin esto, un
     // repo cuyo release es «empujar un tag» no puede publicar nada.
     if (/^refs\/tags\//.test(ref) || /^refs\/tags\//.test(refRemoto || "")) continue;
     const rama = ref.replace(/^refs\/heads\//, "");
-    if (rama && rama !== "(delete)") ramas.add(rama);
+    // Borrar una rama remota llega con sha de ceros: no hay nada que mergear.
+    const sha = /^0+$/.test(shaLocal ?? "") ? null : shaLocal;
+    if (rama && rama !== "(delete)") ramas.set(rama, sha);
   }
-  for (const rama of ramas) {
+  for (const [rama, sha] of ramas) {
     revisarRama(rama);
     revisarEdad(rama);
+    if (sha) revisarSincronia(rama, sha);
   }
+} else if (tiene("--sync")) {
+  // El mismo chequeo que el pre-push, a mano: antes de abrir el PR, o al retomar una rama.
+  const pedida = flag("--sync");
+  const rama = pedida && !pedida.startsWith("--") ? pedida : git("rev-parse", "--abbrev-ref", "HEAD");
+  if (!workflow.sync?.enabled) process.stdout.write("ciclo (sincronía): OMITIDO — `workflow.sync` no está activo.\n");
+  else if (rama === workflow.baseBranch) process.stdout.write(`ciclo (sincronía): estás en \`${rama}\`, la base. Abrí la rama desde \`${workflow.sync.remote ?? "origin"}/${rama}\` recién bajado.\n`);
+  else revisarSincronia(rama, git("rev-parse", "--verify", "--quiet", rama), { manual: true });
 } else if (tiene("--commit")) {
   const archivo = flag("--commit");
   let msg = "";
