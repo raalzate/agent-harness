@@ -544,7 +544,7 @@
     "reason": "una guía que recomienda lo que un freno prohíbe deja al agente en un bucle de reintentos."
   },
   "subagentOutput": {
-    "$comment": "El contrato de salida de los subagentes sensores: `subagent-contract.mjs` (SubagentStop) le devuelve el turno al subagente si su último mensaje no casa `mustMatch`. La clave es el `name` del frontmatter. Los dos que trae el arnés ya tienen su formato en `.claude/agents/`; uno propio se agrega acá con el suyo.",
+    "$comment": "El contrato de salida de los subagentes sensores: `subagent-contract.mjs` (SubagentStop) le devuelve el turno al subagente si su último mensaje no casa `mustMatch`. La clave es el `name` del frontmatter. Los que trae el arnés ya tienen su formato en `.claude/agents/`; uno propio se agrega acá con el suyo.",
     "contracts": {
       "reviewer": {
         "mustMatch": "VEREDICTO:\\W*(rechazado|aprobado)",
@@ -553,6 +553,10 @@
       "gate-runner": {
         "mustMatch": "VEREDICTO:\\W*(VERDE|ROJO)",
         "reason": "«nada se entrega sin gate verde» se decide con esa línea, no con un resumen."
+      },
+      "ci-investigator": {
+        "mustMatch": "VEREDICTO:\\W*(ROJO|VERDE|OMITIDO|EN CURSO)",
+        "reason": "si CI bloquea el merge se decide con esa línea; OMITIDO tiene que decirse, porque no es verde."
       }
     }
   },
@@ -578,7 +582,8 @@
     "agents": {
       "explorer": { "direction": "guía", "kind": "inferencial", "stage": "pedido" },
       "reviewer": { "direction": "sensor", "kind": "inferencial", "stage": "fin del turno" },
-      "gate-runner": { "direction": "sensor", "kind": "computacional", "stage": "fin del turno" }
+      "gate-runner": { "direction": "sensor", "kind": "computacional", "stage": "fin del turno" },
+      "ci-investigator": { "direction": "sensor", "kind": "inferencial", "stage": "integración" }
     },
     "$guides": "Agregá `CLAUDE.md` (etapa `sesión`) cuando exista: el instalador no lo copia, porque cada repo escribe el suyo.",
     "guides": {
@@ -587,6 +592,23 @@
     },
     "pipelines": {
       ".github/workflows/ci.yml": { "stage": "integración" }
+    }
+  },
+  "ci": {
+    "investigate": {
+      "$comment": "Leer el fallo del pipeline remoto con el CLI de la forja (docs/cicd.md). Lo lee `scripts/ci-investigate.mjs` y lo usa el subagente `ci-investigator`. Viaja con GitHub (`gh`) porque la plantilla de CI es de GitHub Actions; para GitLab, Azure, Bitbucket o Jenkins, las plantillas están en docs/cicd.md. Filtrá `listCommand` por el workflow del gate: sin filtro, la última corrida puede ser otra (un despliegue de Pages) y tapar al gate. CLI ausente o sin credenciales = OMITIDO, y omitido no es verde.",
+      "listCommand": ["gh", "run", "list", "--workflow", "ci.yml", "--branch", "{branch}", "--limit", "1", "--json", "databaseId,status,conclusion,name,url"],
+      "idField": "databaseId",
+      "conclusionField": "conclusion",
+      "nameField": "name",
+      "urlField": "url",
+      "failedValues": ["failure", "timed_out", "startup_failure"],
+      "passedValues": ["success"],
+      "logCommand": ["gh", "run", "view", "{run}", "--log-failed"],
+      "logFields": ["job", "paso"],
+      "stripPattern": "^\\d{4}-\\d{2}-\\d{2}T[\\d:.]+Z\\s?",
+      "contextLines": 2,
+      "maxLines": 40
     }
   },
   "drift": {
@@ -720,7 +742,8 @@
       "scripts/harness-map.mjs": "taxonomy",
       "scripts/drift-check.mjs": "drift",
       ".claude/hooks/deploy-guard.mjs": "deploy.bash.ask",
-      "scripts/deploy.mjs": "deploy.entry"
+      "scripts/deploy.mjs": "deploy.entry",
+      "scripts/ci-investigate.mjs": "ci.investigate.listCommand"
     }
   }
 }

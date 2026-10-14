@@ -44,6 +44,7 @@ verifica que ese pipeline lo invoque:
 | rojo sin el cambio | `node scripts/cycle-check.mjs --verify-red <base>` | `.github/workflows/ci.yml`, en cada PR | una prueba que pasa igual sin el cambio de producción: un espejo del código |
 | deriva | `npm run drift` | `.github/workflows/drift.yml`, semanal | un `STATUS.md` con veredicto vencido (rojo) y reglas que nunca cazaron nada en el historial (aviso) |
 | prueba de vida del reviewer | `npm run eval:reviewer` | `.github/workflows/drift.yml`, semanal, si hay clave | que el único sensor inferencial encuentre lo que dice encontrar, como **tasa** contra un umbral |
+| investigador de CI | `npm run ci:investigate` | a pedido (`/ci`, subagente `ci-investigator`) | el fallo que sólo aparece en la forja: corrida, job, paso y línea del error, cruzados con el gate local (verde acá y rojo allá = entorno). Necesita red y el CLI logueado: sin eso sale OMITIDO |
 
 `npm run map` muestra todas las piezas del arnés —estas incluidas— por etapa, con su dirección
 (guía · freno · sensor) y su tipo (computacional · inferencial). Ver [guias-y-sensores.md](guias-y-sensores.md).
@@ -127,6 +128,7 @@ Lo que no puede reducir a un ejemplo lo reporta como **omitido**, nunca como pas
 | `explorer` | búsqueda amplia; índice antes que lectura de archivos | la exploración contamina el contexto principal |
 | `reviewer` | revisa el diff contra los principios BLOCKING de `CONSTITUTION.md` | el review no lo hace quien escribió el código |
 | `gate-runner` | corre el gate y reporta veredicto + error real | miles de líneas de log no entran al contexto principal |
+| `ci-investigator` | lee el fallo del pipeline remoto con el CLI de la forja (`ci.investigate`) y lo cruza con el gate local | el log de CI no entra al contexto principal, y la evidencia del fallo no sale del agente que lo causó |
 
 ## Comandos (`.claude/commands/`)
 
@@ -138,6 +140,7 @@ Lo que no puede reducir a un ejemplo lo reporta como **omitido**, nunca como pas
 | `/harness-port <repo>` | instalar el arnés en otro repo y dejarlo verde allá |
 | `/architecture <símbolo>` | medir el radio de impacto con el índice antes de mover código, y dejar el ADR escrito ([arquitectura.md](arquitectura.md)) |
 | `/code-index [init]` | verificar (o instalar) el índice del código: sin él, el agente lee caro ([codegraph.md](codegraph.md)) |
+| `/ci [rama \| --run <id>]` | leer el fallo de CI con evidencia antes de llamarlo «flaky» ([cicd.md](cicd.md)) |
 
 ## Skills (`.claude/skills/`)
 

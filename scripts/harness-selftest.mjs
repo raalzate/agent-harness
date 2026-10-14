@@ -20,8 +20,8 @@
  *   8. los perfiles de stack son instalables y NO llevan reglas de otro repo, y las configs
  *      de ejemplo que se publican para copiar parsean y compilan;
  *   9. el COSTO del arnés está medido: cada hook entra en su presupuesto de latencia;
- *  10. los controles FUERA del gate (deriva, prueba del reviewer, mapa) están vivos y el
- *      pipeline declarado en su `runner` los corre (ADR 0007).
+ *  10. los controles FUERA del gate (deriva, prueba del reviewer, investigador de CI, mapa)
+ *      están vivos y el pipeline declarado en su `runner` los corre (ADR 0007).
  *  11. el PANEL se genera: determinista sin la capa en vivo, sus alarmas muerden sobre un cebo
  *      y callan sobre el repo real, y el gate lo regenera (con su registro) aunque salga rojo;
  *      la memoria del agente se mide como llega, sin ejecutar nada que el config no permita.
@@ -311,6 +311,11 @@ const patronesDelConfig = [
   ...(config.askFirst?.strongQuestionPatterns ?? []).map((p) => ["askFirst.strongQuestionPatterns", p]),
   ...(config.askFirst?.directRequestPatterns ?? []).map((p) => ["askFirst.directRequestPatterns", p]),
   ...(config.loop?.normalize ?? []).map((p) => ["loop.normalize", p]),
+  // El investigador de CI los compila con `i` y en un try/catch: un patrón roto acá no caza nada
+  // y el reporte sale vacío, que se lee como «no encontré el error» en vez de «el patrón no anda».
+  ...(config.ci?.investigate?.failurePatterns ?? []).map((p) => ["ci.investigate.failurePatterns", p]),
+  ["ci.investigate.stripPattern", config.ci?.investigate?.stripPattern],
+  ...(config.ci?.investigate?.ignorePatterns ?? []).map((p) => ["ci.investigate.ignorePatterns", p]),
   ...(config.task?.trivialEvidence ?? []).map((p) => ["task.trivialEvidence", p]),
   ...(config.task?.criterionPattern ? [["task.criterionPattern", config.task.criterionPattern]] : []),
   ["tests.filePattern", config.tests?.filePattern],
@@ -3140,7 +3145,7 @@ section("9. costo del arnés (hooks-timing)");
   else bad("la medición de latencia está en el gate", "hay presupuesto declarado y ninguna señal lo corre: métrica que nadie mira");
 }
 
-section("10. controles fuera del gate (deriva y revisor)");
+section("10. controles fuera del gate (deriva, revisor e investigador de CI)");
 
 // 10a. La deriva. Un repo git temporal con un cebo propio: un STATUS viejo es rojo, uno de hoy
 //      pasa, uno sin fecha es rojo, y de dos reglas de contenido sólo la que nunca casó en el
@@ -3303,6 +3308,131 @@ section("10. controles fuera del gate (deriva y revisor)");
       else bad(`revisor: el caso «${c.name}» existe`, `\`${c.diff}\` no existe`);
     }
     if (config.reviewerEval) corredorDeclarado("la prueba de vida del revisor", config.reviewerEval.runner, "scripts/reviewer-eval.mjs");
+  }
+}
+
+// 10d. El investigador de CI. No se puede llamar a la forja desde el self-test (red, cuenta,
+//      no determinista), así que se prueba la MÁQUINA con un CLI de mentira: dos scripts que
+//      imprimen la lista de corridas y el log de lo que falló con la forma de `gh` (`job\tpaso\tlínea`).
+//      Muerde (un fallo → exit 1 con el job, la línea y el cruce con el gate local), no muerde de
+//      más (una corrida verde → exit 0 sin log), y un CLI ausente o sin credenciales es OMITIDO,
+//      nunca verde. Corre con `cwd` en un temporal: nada toca este árbol (P7).
+{
+  const script = abs("scripts/ci-investigate.mjs");
+  if (!fs.existsSync(script)) {
+    bad("investigador de CI", "no existe scripts/ci-investigate.mjs: el fallo remoto sólo lo puede contar el agente de memoria");
+  } else {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "harness-ci-"));
+    try {
+      // La lista de corridas: el modo sale del primer argumento, la rama del segundo — si la rama
+      // no llegó sustituida en `{branch}`, la lista sale vacía y el caso que muerde falla.
+      const lista = path.join(tmp, "lista.cjs");
+      fs.writeFileSync(
+        lista,
+        [
+          "const [modo, rama] = process.argv.slice(2);",
+          'if (modo === "sin-credenciales") { process.stderr.write("HTTP 401: Bad credentials\\n"); process.exit(1); }',
+          'if (rama !== "feat/cebo") { console.log("[]"); process.exit(0); }',
+          'const conclusion = { falla: "failure", verde: "success", curso: "" }[modo];',
+          'const status = modo === "curso" ? "in_progress" : "completed";',
+          'console.log(JSON.stringify([{ databaseId: 4242, status, conclusion, name: "CI", url: "https://forja.example/run/4242" }]));',
+        ].join("\n"),
+      );
+      const log = path.join(tmp, "log.cjs");
+      const ruido = Array.from({ length: 40 }, (_, n) => `gate (windows-latest)\\tgate\\tlinea de ruido ${n}`);
+      fs.writeFileSync(
+        log,
+        [
+          "if (process.argv[2] !== \"4242\") { process.stderr.write(\"run equivocado\\n\"); process.exit(1); }",
+          "const lineas = [",
+          ...ruido.slice(0, 20).map((l) => `  "${l}",`),
+          '  "gate (windows-latest)\\tgate\\t──▶ harness self-test",',
+          '  "gate (windows-latest)\\tgate\\t  ✗ hooks parsean",',
+          '  "gate (windows-latest)\\tgate\\t      Error: ENOENT C:\\\\cebo\\\\ruta-con-barras",',
+          '  "gate (windows-latest)\\tgate\\t    ✗ harness self-test (812 ms)",',
+          ...ruido.slice(20, 30).map((l) => `  "${l}",`),
+          // Un caso VERDE que nombra un error: con `ignorePatterns` no es una línea del fallo.
+          '  "gate (windows-latest)\\tgate\\t  ✓ un error de mentira que el freno caza bien",',
+          ...ruido.slice(30).map((l) => `  "${l}",`),
+          "];",
+          'console.log(lineas.join("\\n"));',
+        ].join("\n"),
+      );
+      fs.writeFileSync(
+        path.join(tmp, "reg.json"),
+        JSON.stringify({ rama: "feat/cebo", head: "abc1234", senales: { "harness self-test": { estado: "verde" }, "convention lint": { estado: "verde" } } }),
+      );
+      const cebo = (listCommand, extra = {}) => {
+        const ruta = path.join(tmp, `config-${Math.random().toString(36).slice(2)}.json`);
+        fs.writeFileSync(
+          ruta,
+          JSON.stringify({
+            gate: { registry: "reg.json" },
+            ci: {
+              investigate: {
+                listCommand,
+                idField: "databaseId",
+                statusField: "status",
+                conclusionField: "conclusion",
+                failedValues: ["failure"],
+                logCommand: ["node", log, "{run}"],
+                logFields: ["job", "step"],
+                ignorePatterns: ["^\\s*✓"],
+                contextLines: 1,
+                maxLines: 12,
+                ...extra,
+              },
+            },
+          }),
+        );
+        const r = spawnSync("node", [script, "--config", ruta, "--branch", "feat/cebo"], {
+          cwd: tmp,
+          encoding: "utf8",
+          env: { ...process.env, CEBO_SECRETO: "valor-que-no-se-imprime" },
+        });
+        return { status: r.status, out: `${r.stdout ?? ""}${r.stderr ?? ""}` };
+      };
+
+      const falla = cebo(["node", lista, "falla", "{branch}"]);
+      if (falla.status === 1 && /ENOENT C:\\cebo/.test(falla.out) && /gate \(windows-latest\)/.test(falla.out))
+        ok("investigador de CI: una corrida fallida es exit 1 con el job y la línea real del error");
+      else bad("investigador de CI muerde", `exit ${falla.status}: ${falla.out.trim().slice(0, 300)}`);
+
+      if (/harness self-test/.test(falla.out) && /sólo en CI/.test(falla.out))
+        ok("investigador de CI: cruza con el gate local — la señal verde acá y roja en CI apunta al entorno");
+      else bad("investigador de CI cruza con el registro del gate", falla.out.trim().slice(0, 300));
+
+      if (!/linea de ruido (0|10|39)\b/.test(falla.out) && !/error de mentira/.test(falla.out) && !/valor-que-no-se-imprime/.test(falla.out))
+        ok("investigador de CI: trae sólo el error con su contexto (no el log entero ni lo que `ignorePatterns` descarta) y no vuelca el entorno");
+      else bad("investigador de CI recorta", `el reporte trae ruido o el entorno: ${falla.out.trim().slice(0, 300)}`);
+
+      const recorte = cebo(["node", lista, "falla", "{branch}"], { failurePatterns: ["ruido"], maxLines: 5 });
+      const lineasRuido = (recorte.out.match(/linea de ruido/g) ?? []).length;
+      if (recorte.status === 1 && lineasRuido > 0 && lineasRuido <= 5 && /recortad/.test(recorte.out))
+        ok("investigador de CI: `maxLines` acota el reporte y lo dice");
+      else bad("investigador de CI respeta maxLines", `${lineasRuido} líneas de ruido con maxLines 5: ${recorte.out.trim().slice(0, 200)}`);
+
+      const verde = cebo(["node", lista, "verde", "{branch}"]);
+      if (verde.status === 0 && /verde/i.test(verde.out) && !/ENOENT/.test(verde.out))
+        ok("investigador de CI: una corrida verde es exit 0 y no trae log (no muerde de más)");
+      else bad("investigador de CI no muerde de más", `exit ${verde.status}: ${verde.out.trim().slice(0, 200)}`);
+
+      const curso = cebo(["node", lista, "curso", "{branch}"]);
+      if (curso.status === 0 && /en curso/i.test(curso.out))
+        ok("investigador de CI: una corrida en curso es exit 0, sin conclusión que inventar");
+      else bad("investigador de CI con corrida en curso", `exit ${curso.status}: ${curso.out.trim().slice(0, 200)}`);
+
+      const ausente = cebo(["comando-que-no-existe-en-ninguna-maquina", "{branch}"]);
+      if (ausente.status === 0 && /OMITIDO/.test(ausente.out)) ok("investigador de CI: sin el CLI de la forja sale OMITIDO, no verde");
+      else bad("investigador de CI sin CLI", `exit ${ausente.status}: ${ausente.out.trim().slice(0, 200)}`);
+
+      const sinCred = cebo(["node", lista, "sin-credenciales", "{branch}"]);
+      if (sinCred.status === 0 && /OMITIDO/.test(sinCred.out) && /401/.test(sinCred.out))
+        ok("investigador de CI: un CLI sin credenciales sale OMITIDO con el motivo");
+      else bad("investigador de CI sin credenciales", `exit ${sinCred.status}: ${sinCred.out.trim().slice(0, 200)}`);
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
   }
 }
 

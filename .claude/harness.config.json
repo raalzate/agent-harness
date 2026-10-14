@@ -818,6 +818,10 @@
       "gate-runner": {
         "mustMatch": "VEREDICTO:\\W*(VERDE|ROJO)",
         "reason": "«nada se entrega sin gate verde» (P1) se decide con esa línea, no con un resumen."
+      },
+      "ci-investigator": {
+        "mustMatch": "VEREDICTO:\\W*(ROJO|VERDE|OMITIDO|EN CURSO)",
+        "reason": "el agente principal decide si CI bloquea el merge con esa línea; sin ella, «CI anda raro» es una opinión, y OMITIDO tiene que decirse: no es verde."
       }
     }
   },
@@ -857,7 +861,8 @@
     "agents": {
       "explorer": { "direction": "guía", "kind": "inferencial", "stage": "pedido" },
       "reviewer": { "direction": "sensor", "kind": "inferencial", "stage": "fin del turno" },
-      "gate-runner": { "direction": "sensor", "kind": "computacional", "stage": "fin del turno" }
+      "gate-runner": { "direction": "sensor", "kind": "computacional", "stage": "fin del turno" },
+      "ci-investigator": { "direction": "sensor", "kind": "inferencial", "stage": "integración" }
     },
     "guides": {
       "CLAUDE.md": { "stage": "sesión" },
@@ -942,6 +947,28 @@
         "expect": "aprobado"
       }
     ]
+  },
+  "ci": {
+    "investigate": {
+      "$comment": "LEER EL FALLO DEL PIPELINE REMOTO (docs/cicd.md). Lo lee `scripts/ci-investigate.mjs` (`npm run ci:investigate`), y lo usa el subagente `ci-investigator`. El agente no puede ser la única fuente de evidencia de su propio trabajo: el gate local verde no dice nada de un fallo que sólo aparece en CI (Windows, rutas, shell). `listCommand` (argv, sin shell; `{branch}` = la rama) devuelve JSON con las corridas, la más nueva primero (`listPath` si vienen dentro de un objeto); `idField`, `conclusionField`, `nameField`, `urlField` leen cada corrida; `failedValues`/`passedValues` deciden rojo/verde (otro valor = en curso o sin veredicto, exit 0). `logCommand` (`{run}` = el id) trae el log de lo que falló; `logFields` nombra los campos separados por tab al principio de cada línea (gh: job y paso); `stripPattern` se le quita a cada línea (la marca de tiempo); `failurePatterns` marcan una línea de error (sin distinguir mayúsculas; sin la clave rige un default agnóstico) y se muestran con `contextLines` de contexto, hasta `maxLines`. Cruza con `gate.registry`: verde acá y roja en CI apunta al entorno. CLI ausente o sin credenciales = OMITIDO, exit 0 — y omitido no es verde. Las plantillas de GitLab, Azure, Bitbucket y Jenkins están en docs/cicd.md.",
+      "$listCommand": "`--workflow ci.yml`: sin filtro, la última corrida de `main` es el despliegue de Pages, que sale verde y tapa al gate. Lo destapó la primera corrida real.",
+      "listCommand": ["gh", "run", "list", "--workflow", "ci.yml", "--branch", "{branch}", "--limit", "1", "--json", "databaseId,status,conclusion,name,url"],
+      "idField": "databaseId",
+      "conclusionField": "conclusion",
+      "nameField": "name",
+      "urlField": "url",
+      "failedValues": ["failure", "timed_out", "startup_failure"],
+      "passedValues": ["success"],
+      "logCommand": ["gh", "run", "view", "{run}", "--log-failed"],
+      "logFields": ["job", "paso"],
+      "stripPattern": "^\\d{4}-\\d{2}-\\d{2}T[\\d:.]+Z\\s?",
+      "failurePatterns": ["\\berror\\b", "\\bfail(ed|ure|ing)?\\b", "\\bexception\\b", "\\bfatal\\b", "✗", "exit code [1-9]", "GATE ROJO"],
+      "$ignorePatterns": "Un caso VERDE del self-test cuyo nombre dice «gate rojo» o «error» casa `failurePatterns` sin ser el fallo: la primera corrida real llenaba el reporte de líneas `✓`.",
+      "ignorePatterns": ["^\\s*✓"],
+      "contextLines": 2,
+      "maxLines": 40,
+      "timeoutMs": 60000
+    }
   },
   "coherence": {
     "$comment": "GUÍA Y FRENO NO SE CONTRADICEN (regla COHERENCIA del lint). Lo que `guides` recomienda en un bloque de shell, y lo que un `reason`/`message` del config cita entre backticks, no puede estar vedado por `bash.deny`: el agente haría lo que le dijeron, el hook lo frenaría y reintentaría en bucle. `commandPattern` es la forma de un comando en ESTE repo (qué palabra lo abre); sin esa clave la regla no corre. Un comando que la PROPIA regla de `bash.deny` caza es la ofensa que su motivo describe, no una recomendación. Ver docs/guias-y-sensores.md.",
@@ -1097,7 +1124,8 @@
       "scripts/cycle-check.mjs": "workflow.branchPattern",
       "scripts/hooks-timing.mjs": "observability.budgetMs",
       ".claude/hooks/deploy-guard.mjs": "deploy.bash.ask",
-      "scripts/deploy.mjs": "deploy.entry"
+      "scripts/deploy.mjs": "deploy.entry",
+      "scripts/ci-investigate.mjs": "ci.investigate.listCommand"
     }
   }
 }
