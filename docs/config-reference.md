@@ -887,6 +887,46 @@ una **tasa** contra `minScore`. Sin `command` instalado sale OMITIDA. Si el revi
 de `observability.stateFiles` es **rojo** aunque acierte (ver el gotcha del revisor que corrió el
 gate): por eso `command` lo aísla de herramientas que ejecutan y de los hooks del repo.
 
+## `ci.investigate` — leer el fallo del pipeline remoto (opcional)
+
+```json
+"ci": { "investigate": {
+  "listCommand": ["gh", "run", "list", "--workflow", "ci.yml", "--branch", "{branch}", "--limit", "1",
+                  "--json", "databaseId,status,conclusion,name,url"],
+  "idField": "databaseId", "conclusionField": "conclusion", "nameField": "name", "urlField": "url",
+  "failedValues": ["failure", "timed_out", "startup_failure"], "passedValues": ["success"],
+  "logCommand": ["gh", "run", "view", "{run}", "--log-failed"],
+  "logFields": ["job", "paso"], "stripPattern": "^\\d{4}-\\d{2}-\\d{2}T[\\d:.]+Z\\s?",
+  "failurePatterns": ["\\berror\\b", "✗", "GATE ROJO"], "ignorePatterns": ["^\\s*✓"],
+  "contextLines": 2, "maxLines": 40, "timeoutMs": 60000
+} }
+```
+
+Lo lee `scripts/ci-investigate.mjs` (`npm run ci:investigate`), y lo corre el subagente
+`ci-investigator` (`/ci`). Agnóstico de forja: los comandos son argv **sin shell** (en Windows, sólo
+un `.cmd` pasa por `cmd.exe`, y por eso la rama y el id se aceptan sólo con caracteres de rama).
+
+| Clave | Qué hace | Default |
+|---|---|---|
+| `listCommand` | argv; `{branch}` = la rama (actual o `--branch`). Devuelve JSON con las corridas, la más nueva primero | — (sin ella, OMITIDO) |
+| `listPath` | dónde está la lista si viene dentro de un objeto (`values` en Bitbucket); un objeto suelto es la corrida | — |
+| `idField`, `conclusionField`, `nameField`, `urlField` | campos de la corrida, con puntos para anidar (`definition.name`) | `id`, `conclusion`, `name`, `url` |
+| `failedValues` / `passedValues` | la conclusión que es rojo (exit 1) / verde (exit 0). Otra = en curso o sin veredicto, exit 0 | `["failure"]` / `["success"]` |
+| `logCommand` | argv; `{run}` = el id. Devuelve el log de lo que falló | — (rojo sin log: se dice) |
+| `logFields` | campos separados por tab al principio de cada línea del log (gh: job y paso): se reportan como «dónde falló» | `[]` |
+| `stripPattern` | regex que se le quita a cada línea (la marca de tiempo) | — |
+| `failurePatterns` | regex que marcan una línea de error (sin distinguir mayúsculas) | error, fail, exception, fatal, `✗`, `exit code N` |
+| `ignorePatterns` | regex de líneas que casan un patrón de error sin serlo (un caso verde que dice «rojo») | `[]` |
+| `contextLines`, `maxLines` | contexto alrededor de cada línea marcada, y tope del reporte (dice que recortó y cómo ver el resto) | `2`, `40` |
+| `timeoutMs` | cuánto se espera al CLI | `60000` |
+
+Cruza las líneas marcadas con `gate.registry`: una señal cuyo nombre aparece en el error y que está
+verde en el registro local es **«falla sólo en CI → entorno»** (SO, rutas, shell, variables). CLI
+ausente, sin credenciales, sin red o JSON ilegible: **OMITIDO**, exit 0 — omitido no es verde. Nunca
+imprime el entorno; del error del CLI muestra sólo la primera línea. No es señal del gate: depende
+de la red y de una cuenta. El self-test (10d) prueba la máquina con un CLI de mentira, y sus regex
+compilan en la sección 2. Plantillas de GitLab, Azure, Bitbucket y Jenkins en [cicd.md](cicd.md).
+
 ## `subagentOutput` — el contrato de salida de los subagentes
 
 ```json
@@ -955,10 +995,11 @@ sin control se informa como hueco. Ver [guias-y-sensores.md](guias-y-sensores.md
 | `coherence` | `scripts/repo-lint.mjs` (regla `COHERENCIA`), self-test (4e-bis) |
 | `drift` (y `status.file`, `patterns`, `reuse`) | `scripts/drift-check.mjs` (lo invoca `.github/workflows/drift.yml`), self-test (10a) |
 | `reviewerEval` | `scripts/reviewer-eval.mjs` (lo invoca `.github/workflows/drift.yml`), self-test (10b) |
+| `ci.investigate` (y `gate.registry`) | `scripts/ci-investigate.mjs` (lo corre el subagente `ci-investigator` y `/ci`), self-test (2: sus regex; 10d: la máquina con un CLI de mentira) |
 | `subagentOutput` | `subagent-contract.mjs` (SubagentStop), self-test (3e-sub) |
 | `taxonomy` | `scripts/harness-map.mjs`, el panel (pestaña Salud, misma función `construirMapa`), self-test (10c) |
 | `panel` (y `status`, `incidents`, `tracker`, `tests`, `docs.proseRoots`, `install.activators`, toda clave con `runner`; `panel.memory.promptSources` apunta a otras, como `sdd.routes`) | `scripts/panel/` (lo invoca `scripts/gate.mjs` al final de cada corrida), self-test (11) |
-| `gate.registry` | `scripts/gate.mjs` (lo escribe), `scripts/panel/leer-en-vivo.mjs` (lo lee) |
+| `gate.registry` | `scripts/gate.mjs` (lo escribe), `scripts/panel/leer-en-vivo.mjs` y `scripts/ci-investigate.mjs` (lo leen) |
 
 Todo lo que aparece en esta tabla lo verifica `node scripts/harness-selftest.mjs`: una ruta que no
 existe o un regex que no compila es **gate rojo**, no un misterio de la semana que viene.

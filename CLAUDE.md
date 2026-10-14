@@ -22,8 +22,8 @@ nada del repo.
 ```
 .claude/harness.config.json   la única fuente de especificidad
 .claude/hooks/                hooks genéricos (también frenan escrituras MCP); harness.mjs es la plomería
-.claude/agents/               explorer · reviewer · gate-runner
-.claude/commands/             /gate · /lesson · /harness-audit · /harness-port · /architecture · /code-index
+.claude/agents/               explorer · reviewer · gate-runner · ci-investigator
+.claude/commands/             /gate · /lesson · /harness-audit · /harness-port · /architecture · /code-index · /ci
 .claude/skills/               new-guardrail: una regla en prosa → un freno con su prueba de vida
 .claude/evals/reviewer/       los diffs con los que se le toma la prueba de vida al reviewer
 scripts/gate.sh               ejecuta gate.signals; no sabe de stacks
@@ -32,6 +32,7 @@ scripts/cycle-check.mjs       ramas y prácticas XP; --verify-red: la prueba fal
 scripts/harness-map.mjs       el arnés como sistema de control: guía/freno/sensor por etapa
 scripts/drift-check.mjs       lo que se degrada sin que ningún cambio lo rompa (programado)
 scripts/reviewer-eval.mjs     la prueba de vida del reviewer, con tasa (programado)
+scripts/ci-investigate.mjs    el fallo de CI leído con el CLI de la forja, cruzado con el gate local
 scripts/harness-selftest.mjs  prueba de vida: genera los casos DESDE el config
 scripts/harness-bench.mjs     el arnés instalado en un repo real de cada stack (el encaje)
 scripts/harness-init.mjs      instalador en otro repo (dry-run por defecto, con perfil de stack)
@@ -91,6 +92,7 @@ npm run map            # ¿qué guía, freno o sensor actúa en cada etapa, y d�
 npm run drift          # ¿algo se degradó sin que nadie lo tocara? (lo corre drift.yml, semanal)
 npm run panel          # la salud del arnés en una página (el gate ya lo regenera en cada corrida)
 npm run eval:reviewer  # ¿el reviewer encuentra lo que dice encontrar? (caro: fuera del gate)
+npm run ci:investigate # ¿por qué falló CI? corrida, job, línea, y si el gate local lo ve (red: fuera del gate)
 ```
 
 - Lo que no va en el gate porque es caro o depende del reloj vive en un pipeline declarado

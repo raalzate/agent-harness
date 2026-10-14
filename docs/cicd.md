@@ -208,6 +208,83 @@ hay que actualizarla, y mientras tanto la rama queda **sin protección efectiva*
   derivada; su señal se reporta OMITIDA en el pipeline y eso es lo correcto. Ver
   [codegraph.md](codegraph.md).
 
+## Cuando CI falla y el gate local no: leer el fallo remoto
+
+El gate local verde no dice nada de un fallo que sólo aparece en la forja: otro sistema operativo,
+otras rutas, otro shell, otra versión de la herramienta. Sin el log, la explicación que el agente
+da es la que ya tenía («seguro es flaky»), y **el agente no puede ser la única fuente de evidencia
+de su propio trabajo**. El investigador trae la evidencia de afuera:
+
+```bash
+npm run ci:investigate                              # la última corrida de la rama actual
+node scripts/ci-investigate.mjs --branch main       # la de otra rama
+node scripts/ci-investigate.mjs --run 38489206894   # una corrida concreta
+```
+
+Usa el CLI de la forja que declara `ci.investigate` (`listCommand` trae la última corrida en JSON,
+`logCommand` el log de lo que falló) y devuelve un reporte **corto**: la corrida, el job y el paso,
+las líneas que casan `failurePatterns` con su contexto (hasta `maxLines`), y el **cruce con el
+registro del gate local** (`gate.registry`): una señal verde acá y roja en CI apunta al entorno,
+no al código. Exit 0 = verde, en curso o sin dato; exit 1 = encontró un fallo. Un CLI ausente o sin
+credenciales sale **OMITIDO** —y omitido no es verde—. El subagente `ci-investigator` (y `/ci`) lo
+corre y explica el resultado sin traer el log entero al contexto principal. Cada clave está
+explicada en el `$comment` de `ci.investigate` del config (este documento viaja con el instalador
+y la referencia de claves no: un enlace acá apuntaría a la nada en el repo portado).
+
+Las plantillas por forja son **ejemplos**: el script no conoce ninguna, y sólo la de GitHub corrió
+de verdad en este repo. Los comandos van como argv, sin shell, así que una credencial nunca va en
+el config: la lee el CLI de su propio login (o `curl --netrc`).
+
+**GitHub** (`gh`, la de este repo). Filtrá por el workflow del gate: sin `--workflow`, la última
+corrida de `main` era el despliegue de Pages, verde, y tapaba al gate.
+
+```json
+"listCommand": ["gh", "run", "list", "--workflow", "ci.yml", "--branch", "{branch}", "--limit", "1",
+                "--json", "databaseId,status,conclusion,name,url"],
+"idField": "databaseId", "conclusionField": "conclusion",
+"failedValues": ["failure", "timed_out", "startup_failure"], "passedValues": ["success"],
+"logCommand": ["gh", "run", "view", "{run}", "--log-failed"],
+"logFields": ["job", "paso"], "stripPattern": "^\\d{4}-\\d{2}-\\d{2}T[\\d:.]+Z\\s?"
+```
+
+**GitLab** (`glab`). El estado y la conclusión son el mismo campo: lo que no está en ninguna de las
+dos listas (`running`, `pending`) se reporta como en curso. El log es por job, no por pipeline: si
+tu versión de `glab` no lo trae de un pipeline, `logCommand` puede ser un script del repo que pida
+los jobs fallidos y concatene sus trazas.
+
+```json
+"listCommand": ["glab", "ci", "list", "--ref", "{branch}", "--per-page", "1", "--output", "json"],
+"idField": "id", "conclusionField": "status", "urlField": "web_url",
+"failedValues": ["failed"], "passedValues": ["success"],
+"logCommand": ["glab", "ci", "trace", "{run}"]
+```
+
+**Azure DevOps** (`az pipelines`, extensión `azure-devops`). La lista sale del CLI; el log, de la
+API de builds (`az devops invoke` o un script del repo que la llame).
+
+```json
+"listCommand": ["az", "pipelines", "runs", "list", "--branch", "{branch}", "--top", "1", "--output", "json"],
+"idField": "id", "conclusionField": "result", "nameField": "definition.name",
+"failedValues": ["failed"], "passedValues": ["succeeded"]
+```
+
+**Jenkins** (API JSON con `curl`; la credencial en `~/.netrc`, nunca en el argv). `lastBuild`
+devuelve un objeto suelto: es la corrida misma. Un build en curso tiene `result: null` En un job
+*multibranch* la rama va codificada en la URL (`feat%2Fx`), y el script no la codifica: o la rama
+no lleva `/`, o un script del repo arma la URL.
+
+```json
+"listCommand": ["curl", "-sf", "--netrc", "https://jenkins.example/job/mi-repo/job/{branch}/lastBuild/api/json"],
+"idField": "number", "conclusionField": "result", "urlField": "url",
+"failedValues": ["FAILURE", "UNSTABLE"], "passedValues": ["SUCCESS"],
+"logCommand": ["curl", "-sf", "--netrc", "https://jenkins.example/job/mi-repo/job/{branch}/{run}/consoleText"]
+```
+
+**Bitbucket Pipelines** no tiene CLI oficial: la API REST con `curl --netrc`
+(`/2.0/repositories/<ws>/<repo>/pipelines/?target.branch={branch}&sort=-created_on&pagelen=1`)
+devuelve `{ "values": [...] }`, así que va con `"listPath": "values"`, y la conclusión vive en
+`state.result.name` (`FAILED`/`SUCCESSFUL`). El log es por paso: un script del repo que lo junte.
+
 ## Cuando el gate tarda
 
 El síntoma clásico: quince minutos de pipeline, y alguien empieza a mergear "en rojo, pero es un
