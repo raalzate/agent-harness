@@ -25,6 +25,7 @@ node scripts/cycle-check.mjs --rules      # qué modelo está activo y de dónde
 | `longLived` | las ramas del modelo (`main`, `develop`, `release`), exentas del patrón | **sí** — exención |
 | `baseBranch` | de dónde sale la rama y contra qué se mide su edad | **sí** — para la edad |
 | `maxAgeDays` + `staleAction` | rama vieja = lote grande esperando (`warn` avisa, `block` frena) | **sí** — `pre-push` |
+| `sync` | la rama **choca** con la base (merge simulado tras `fetch`): `conflictAction` bloquea; el atraso sin choque avisa (`behindAction`) | **sí** — `pre-push`, y `npm run sync` a mano |
 | `mergeInto` | a qué rama entra cada familia de ramas | **no**: lo decide el pull request, que el hook no ve |
 | `branches.protected` | dónde se entra por PR y no de un empujón | **sí** — `pre-push` |
 
@@ -133,6 +134,30 @@ Patrón: ^(feat|fix|docs|chore|refactor|test|ci|perf)/[a-z0-9][a-z0-9._-]*$
 Renombrar la rama local y volver a empujar:
   git branch -m <nombre-que-sigue-el-patrón>
 ```
+
+```
+$ git push
+ciclo (sincronía): `feat/x` CHOCA con `origin/main` — 3 commit(s) de la base que la rama no tiene.
+
+Archivos en conflicto:
+  - <el archivo que tocaron los dos lados>
+
+Resolvelo ACÁ, donde sabés qué hace cada lado, no en el PR:
+  git fetch origin && git merge origin/main
+  # resolvé, `git add <archivo>`, `git commit`, corré el gate y empujá: sin reescribir nada
+```
+
+Ponerse al día es un **merge**, no un rebase: no reescribe la rama, así que el push siguiente es
+uno normal y no hace falta `--force-with-lease`, que pide confirmación al humano (`bash.ask`). Si
+igual hace falta reescribir, la forma que pasa sin pregunta es la que declara `exempt`: rama de
+trabajo nombrada al final y `--force-if-includes`.
+
+La edad no avisa de esto: una rama de un día choca si alguien tocó las mismas líneas. El
+conflicto lo resuelve quien escribió el cambio, antes de empujar, y no quien revisa el PR días
+después. La medición baja la base primero (`fetch`): medir contra un `origin/main` viejo es
+justo el error que causa los PR con conflictos. Al abrir la sesión, `session-start` ya avisa si
+la rama está atrás, y la ruta `cycle` del router le pide al agente abrir la rama desde
+`origin/main` recién bajado.
 
 ```
 $ git commit -m "fix: el router no ve los pedidos en pasado"

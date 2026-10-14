@@ -118,8 +118,12 @@
         "reason": "saltarse los hooks de verificación está prohibido. Si el gate estorba, se arregla el gate."
       },
       {
-        "pattern": "git\\s+push\\s+.*--force(?!-with-lease)",
+        "pattern": "git\\s+push\\b.*\\s(--force|-f)(?![-\\w])",
         "reason": "`--force` reescribe historia remota. Usá --force-with-lease y pedí confirmación."
+      },
+      {
+        "pattern": "(\\b(rm|mv|cp|tee|truncate|unlink|del)\\b|>)[^|;&]*\\.git[\\\\/]gate-(escalate|attempts)",
+        "reason": "el marcador y el libro del ciclo acotado (`loop`) los escribe el gate y los levanta el pedido del humano. Borrarlos o reescribirlos desde el agente es saltarse la escalada: pará y contale al humano qué falla, qué probaste y tu próxima hipótesis."
       },
       {
         "pattern": "git\\s+reset\\s+--hard",
@@ -162,7 +166,9 @@
       {
         "$comment": "Lo destructivo que a veces es LO PEDIDO: decide el humano en el pedido de permiso de Claude Code (P9: mostrar, esperar, ejecutar). Un `deny` no se puede confirmar —el humano dice que sí y el hook vuelve a bloquear—, así que lo que es «pedí confirmación» vive acá.",
         "pattern": "git\\s+push\\s+.*--force-with-lease",
-        "reason": "reescribe historia remota (con red de seguridad, pero la reescribe). ¿La rama es tuya y nadie más empujó?"
+        "reason": "reescribe historia remota (con red de seguridad, pero la reescribe). ¿La rama es tuya y nadie más empujó? Para ponerte al día con la base no hace falta: `git merge origin/main` no reescribe nada. Sin pregunta pasa sólo la forma segura: una rama de trabajo nombrada al final y `--force-if-includes`, que rechaza el push si alguien empujó algo que no viste.",
+        "exempt": "^git\\s+push(?=\\s.*--force-if-includes(\\s|$))(?:\\s+--?[A-Za-z][\\w-]*(?:=[^\\s;&|`$<>]+)?)*\\s+[A-Za-z0-9._-]+\\s+(?:[^\\s:;&|`$<>]+:)?(?:refs/heads/)?(feat|fix|docs|chore|refactor|test|ci|perf)/[a-z0-9][a-z0-9._-]*\\s*$",
+        "exemptExample": "git push --force-with-lease --force-if-includes origin feat/mi-rama"
       },
       {
         "pattern": "git\\s+branch\\s+(-D|--delete\\s+--force)\\b",
@@ -553,7 +559,7 @@
           "\\btrunk\\b",
           "\\bgit ?flow\\b"
         ],
-        "message": "Toca el ciclo de desarrollo → `docs/ciclo-desarrollo.md`: el modelo de ramas está declarado en `workflow` (corré `npm run cycle` para verlo). Antes de empujar: la rama sale de `workflow.baseBranch`, su nombre sigue `workflow.branchPattern`, y a `branches.protected` se entra por PR. Antes de commitear: las prácticas de `xp` activas se verifican en `commit-msg` — se cumplen o se declaran con motivo en una línea, no se saltean."
+        "message": "Toca el ciclo de desarrollo → `docs/ciclo-desarrollo.md`: el modelo de ramas está declarado en `workflow` (corré `npm run cycle` para verlo). Antes de empezar: la rama sale de la base RECIÉN BAJADA (`git fetch origin` y `git switch -c <rama> origin/main`), no de un `main` local de hace días: es la causa de los PR con conflictos. Antes de abrir el PR: `npm run sync`. Antes de empujar: la rama sale de `workflow.baseBranch`, su nombre sigue `workflow.branchPattern`, y a `branches.protected` se entra por PR. Antes de commitear: las prácticas de `xp` activas se verifican en `commit-msg` — se cumplen o se declaran con motivo en una línea, no se saltean."
       },
       {
         "$comment": "CI/CD: el pipeline no es un lugar aparte donde valen otras reglas. Corre EL MISMO gate que el humano, y lo que se salta la verificación no se mergea.",
@@ -598,6 +604,15 @@
       }
     ],
     "doc": "docs/sdd.md"
+  },
+  "loop": {
+    "$comment": "Ciclo acotado (P12): el gate cuenta los intentos sobre el MISMO error por señal y, al pasar `maxAttempts`, deja `marker`: `action-guard` frena editar dentro del repo, `gate-stop` deja cerrar para escalar, y el próximo pedido del humano (`ask-first`) repone el presupuesto. La huella es la señal + las últimas `tailLines` líneas de su salida, sin el ruido que cambia entre corridas aunque el error sea el mismo (`normalize`; vacío = el default agnóstico de scripts/gate.mjs: colores, fechas, duraciones, línea:columna, hashes, temporales). Sin esta clave no se cuenta nada. Todo en `.git/` (P7).",
+    "maxAttempts": 2,
+    "ledger": ".git/gate-attempts.json",
+    "marker": ".git/gate-escalate",
+    "tailLines": 40,
+    "normalize": [],
+    "message": "El gate había agotado los intentos sobre el mismo error y el humano contestó: seguí con SU indicación, no con la hipótesis que ya falló."
   },
   "askFirst": {
     "$comment": "«Una pregunta se contesta; una acción se pide». `ask-first.mjs` marca el turno cuando el pedido es interrogativo Y no trae verbo de acción; `action-guard.mjs` deniega toda edición DENTRO del repo mientras el marcador esté puesto. Lo limpia el siguiente pedido del usuario: la fuga es humana a propósito. `pastPatterns` desempata el caso que originó el hook: un verbo de acción EN PASADO («¿aplicaste eso?») pregunta por lo hecho, no pide que se haga. La detección es ANGOSTA (interrogación explícita) porque un clasificador ancho bloquearía instrucciones legítimas — y un freno que muerde de más se desactiva a mano. Lo que NO caza está declarado en STATUS.md.",
@@ -657,7 +672,18 @@
     "maxAgeDays": 5,
     "staleAction": "warn",
     "reason": "trunk-based: una sola rama larga (`main`) y ramas de trabajo cortas con nombre que dice de qué son. El nombre es lo que hace legible `git branch -a` cuando hay quince.",
-    "staleReason": "una rama que no se integra hace días es un lote grande esperando: el merge es más caro y el rojo aparece tarde. Acá avisa (`warn`) en vez de bloquear, porque una rama vieja es una señal, no siempre un error."
+    "staleReason": "una rama que no se integra hace días es un lote grande esperando: el merge es más caro y el rojo aparece tarde. Acá avisa (`warn`) en vez de bloquear, porque una rama vieja es una señal, no siempre un error.",
+    "sync": {
+      "$comment": "SINCRONÍA CON LA BASE: el PR no es el lugar donde se descubre un conflicto. En el pre-push, `cycle-check --push` baja `<remote>/<baseBranch>` (`fetch: false` lo apaga, para CI sin red) y simula el merge con `git merge-tree --write-tree` sin tocar el árbol. Conflicto → `conflictAction` (block|warn); atraso sin conflicto de al menos `behindWarn` commits → `behindAction` (warn|block). `command` es lo que se le sugiere para ponerse al día. A mano: `npm run sync`. `session-start` avisa al abrir la sesión si la rama ya está atrás (sin red: con las refs que hay). Requiere git ≥ 2.38; con uno más viejo avisa y no bloquea.",
+      "enabled": true,
+      "remote": "origin",
+      "fetch": true,
+      "conflictAction": "block",
+      "behindWarn": 1,
+      "behindAction": "warn",
+      "command": "git fetch origin && git merge origin/main",
+      "reason": "un conflicto descubierto en el PR se resuelve tarde y a ciegas: el agente ya pasó a otra cosa, y el que resuelve no sabe qué hacía cada lado. Mergear la base en la rama ANTES de empujar lo resuelve quien escribió el cambio."
+    }
   },
   "xp": {
     "$comment": "Prácticas de XP que tienen mecanismo. Cada una se activa sola (`enabled`): una regla instalada sin cicatriz detrás se desactiva en una semana y se lleva puestas a las que servían (P14). Todas tienen fuga DECLARADA con motivo — la fuga es la diferencia entre un freno que se respeta y uno que se saltea con `--no-verify`. Mecanismo: `.githooks/commit-msg` → `node scripts/cycle-check.mjs --commit`. Ver docs/ciclo-desarrollo.md.",
@@ -744,7 +770,9 @@
     "$stateFiles": "Los archivos de ESTADO que un hook puede escribir al correr. Medir corre los hooks de verdad, así que se toman antes y se restauran después: un marcador fabricado por la medición bloquea el turno siguiente y nadie entiende por qué. Se declara en vez de deducirse de `gate.marker` + `askFirst.marker` porque deducirlo dejaba la prueba CIEGA al día en que entre un tercer hook con marcador propio.",
     "stateFiles": [
       ".git/gate-dirty",
-      ".git/agent-answer-first"
+      ".git/agent-answer-first",
+      ".git/gate-escalate",
+      ".git/gate-attempts.json"
     ]
   },
   "subagentOutput": {

@@ -28,7 +28,7 @@ que importa, y dejar el permiso humano donde de verdad decide algo.
 | `… staging --apply`, destino `approval: "agent"` | **autoriza** sin preguntar | el script verifica todo antes de ejecutar |
 | `… prod --apply`, destino `approval: "human"` | **pregunta** al humano, con el comando | el humano decide, después de leer el dry-run |
 | `… <destino-no-declarado> --apply` | **pregunta** | nadie declaró qué hace |
-| `… staging --apply && otra-cosa`, un salto de línea, `--config`, otra bandera, no-ASCII | **no opina** (permiso normal) | sólo la forma exacta hereda la autorización ([ADR 0011](decisions/0011-el-arnes-autoriza-un-camino.md)) |
+| `… staging --apply && otra-cosa`, un salto de línea, `--config`, otra bandera, no-ASCII | **no opina** (permiso normal) | sólo la forma exacta hereda la autorización ([ADR 0012](decisions/0012-el-arnes-autoriza-un-camino.md)) |
 | `kubectl apply`, `az webapp deploy`, `railway up`… | **pregunta**, y nombra el camino seguro | desplegar por fuera: sin gate, sin rama verificada y sin registro |
 | `aws secretsmanager get-secret-value`, `railway variables`… | **pregunta** | imprime secretos al transcript |
 | `terraform destroy`, `az group delete`, `kubectl delete ns`… | **bloquea** | destruye un entorno entero: lo hace el humano |

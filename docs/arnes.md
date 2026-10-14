@@ -56,16 +56,16 @@ Los hooks son **genéricos**: toda la especificidad del repo vive en
 | Momento | Hook | Qué hace |
 |---|---|---|
 | `SessionStart` | `session-start.mjs` | imprime rama, HEAD, cambios sin commitear y `STATUS.md`; avisa si el pre-commit no está instalado o si hay gate pendiente |
-| `UserPromptSubmit` | `ask-first.mjs` | si el pedido es informativo (pregunta, reporte sin imperativo), marca el turno: **no se actúa sobre una pregunta** |
+| `UserPromptSubmit` | `ask-first.mjs` | si el pedido es informativo (pregunta, reporte sin imperativo), marca el turno: **no se actúa sobre una pregunta**. Además repone el presupuesto de intentos (`loop`): el pedido del humano contesta la escalada |
 | `UserPromptSubmit` | `sdd-router.mjs` | clasifica el pedido (feature → ruta SDD, falla → test rojo primero, ambiguo → preguntar una cosa); se calla en lo trivial |
 | `UserPromptSubmit` | `graph-first.mjs` | con el índice construido (`graph` → codegraph), empuja a consultarlo **antes** de abrir archivos cuando el pedido es «dónde / quién usa / qué rompe / acoplamiento»; callado si no existe |
-| `PreToolUse` Write\|Edit\|mcp__ | `action-guard.mjs` | deniega editar dentro del repo mientras el turno esté marcado como informativo; lo limpia el próximo pedido del humano |
+| `PreToolUse` Write\|Edit\|mcp__ | `action-guard.mjs` | deniega editar dentro del repo mientras el turno esté marcado como informativo **o** el gate haya agotado el presupuesto de intentos (`loop`); los dos los limpia el próximo pedido del humano |
 | `PreToolUse` Write\|Edit\|mcp__ | `protected-paths.mjs` | deniega editar lo que declara `protectedPaths`, también desde una herramienta MCP que escribe (`writeTools`) |
 | `PreToolUse` Write\|Edit\|mcp__ | `reuse-guard.mjs` | bloquea boilerplate que ya tiene abstracción (`reuse`) |
 | `PreToolUse` Bash | `bash-guard.mjs` | deniega los comandos de `bash.deny`; los de `bash.ask` se los pregunta al humano |
 | `PreToolUse` Bash, `mcp__*` | `deploy-guard.mjs` | despliegue: autoriza el punto de entrada (`deploy.entry`) según `approval`, pregunta por desplegar por fuera o por imprimir secretos, bloquea destruir un entorno ([despliegue.md](despliegue.md)) |
 | `PostToolUse` Write\|Edit\|mcp__ | `post-edit-check.mjs` | corre el lint **sobre el archivo tocado** y devuelve el error real; marca `.git/gate-dirty` |
-| `Stop` | `gate-stop.mjs` | impide cerrar la tarea si se editó código y el gate no quedó verde |
+| `Stop` | `gate-stop.mjs` | impide cerrar la tarea si se editó código y el gate no quedó verde — salvo con el presupuesto agotado: ahí lo que corresponde es cerrar y escalar |
 | `SubagentStop` | `subagent-contract.mjs` | le devuelve el turno a un subagente sensor que cierra sin su veredicto (`subagentOutput`) |
 
 El contrato con Claude Code, que es lo que hace que todo esto funcione: la entrada llega como JSON
@@ -166,7 +166,8 @@ Lo que no puede reducir a un ejemplo lo reporta como **omitido**, nunca como pas
 - Leer la salida real (archivo, línea, mensaje) antes de reintentar. Reintento sólo con hipótesis
   nueva.
 - Presupuesto: **2 intentos** sobre el mismo error; al tercero se para y se escala con el
-  diagnóstico.
+  diagnóstico. Lo cuenta el gate (`loop`): a la tercera corrida roja con la misma huella, frena
+  las ediciones hasta que el humano conteste ([config-reference.md](config-reference.md)).
 
 ## Deuda conocida del arnés
 

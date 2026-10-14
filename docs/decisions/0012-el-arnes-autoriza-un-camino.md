@@ -1,4 +1,4 @@
-# ADR 0011 — El arnés autoriza UN camino de despliegue, y sólo esa forma exacta
+# ADR 0012 — El arnés autoriza UN camino de despliegue, y sólo esa forma exacta
 
 - **Fecha:** 2026-10-13
 - **Estado:** aceptado

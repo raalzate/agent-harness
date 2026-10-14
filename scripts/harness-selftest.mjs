@@ -291,6 +291,7 @@ const patronesDelConfig = [
   ...(config.protectedPaths ?? []).map((r) => ["protectedPaths", r.pattern]),
   ...(config.bash?.deny ?? []).map((r) => ["bash.deny", r.pattern]),
   ...(config.bash?.ask ?? []).map((r) => ["bash.ask", r.pattern]),
+  ...(config.bash?.ask ?? []).filter((r) => r.exempt).map((r) => ["bash.ask.exempt", r.exempt]),
   ...(config.reuse ?? []).flatMap((r) => [
     ["reuse.pattern", r.pattern],
     ["reuse.appliesTo", r.appliesTo],
@@ -309,6 +310,7 @@ const patronesDelConfig = [
   ...(config.askFirst?.pastPatterns ?? []).map((p) => ["askFirst.pastPatterns", p]),
   ...(config.askFirst?.strongQuestionPatterns ?? []).map((p) => ["askFirst.strongQuestionPatterns", p]),
   ...(config.askFirst?.directRequestPatterns ?? []).map((p) => ["askFirst.directRequestPatterns", p]),
+  ...(config.loop?.normalize ?? []).map((p) => ["loop.normalize", p]),
   ["tests.filePattern", config.tests?.filePattern],
   ["tests.onlyPattern", config.tests?.onlyPattern],
   // Plantillas con marcador: se compilan con el marcador ya sustituido, que es como las
@@ -526,6 +528,33 @@ if (hookFiles.has("bash-guard.mjs")) {
       ok(`bash-guard le pregunta al humano por \`${muestra.trim()}\``);
     else bad(`bash-guard pregunta por \`${muestra.trim()}\``, `exit ${r.status}, stdout «${r.stdout.trim().slice(0, 80)}»: no llegó el pedido de confirmación`);
   }
+  // `exempt`: la forma segura pasa SIN preguntar (P3: una pregunta que sale siempre se contesta
+  // sin leer), y la exención no se hereda encadenando otro comando detrás (P2). El ejemplo tiene
+  // que casar la regla: si no, el caso probaría una exención que nunca se alcanza.
+  for (const regla of (config.bash?.ask ?? []).filter((r) => r.exempt)) {
+    const ejemplo = regla.exemptExample;
+    const pedir = (command) => {
+      const r = runHook("bash-guard.mjs", { hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command } });
+      return { status: r.status, pregunta: r.stdout.includes('"ask"') };
+    };
+    if (!ejemplo) {
+      bad(`bash.ask \`${regla.pattern}\` con \`exempt\``, "falta `exemptExample`: una exención sin ejemplo no se puede probar");
+      continue;
+    }
+    if (!firstMatch([regla], ejemplo)) {
+      bad(`bash.ask: \`exemptExample\` casa la regla`, `\`${ejemplo}\` no casa \`${regla.pattern}\`: la exención no prueba nada`);
+      continue;
+    }
+    const libre = pedir(ejemplo);
+    if (libre.status === 0 && !libre.pregunta) ok(`bash-guard deja pasar sin preguntar la forma segura \`${ejemplo}\``);
+    else bad(`bash.ask exento: \`${ejemplo}\``, `exit ${libre.status}, ${libre.pregunta ? "preguntó igual" : "bloqueó"}: la exención no aplica`);
+
+    const muestra = sampleFromPattern(regla.pattern);
+    const encadenado = pedir(`${ejemplo} && ${muestra ?? ejemplo}`);
+    if (encadenado.pregunta || encadenado.status === 2) ok("bash-guard: la exención no se hereda encadenando otro comando");
+    else bad("bash.ask exento encadenado", `\`${ejemplo} && …\` pasó sin preguntar: \`exempt\` no está anclado`);
+  }
+
   // Sin `hook_event_name` el JSON de «ask» no se reconoce y el comando correría sin preguntar:
   // hacia el lado seguro, bloquea.
   const regla = (config.bash?.ask ?? []).map((r) => sampleFromPattern(r.pattern)).find((m) => m && !firstMatch(config.bash?.deny, m));
@@ -777,6 +806,30 @@ if (hookFiles.has("reuse-guard.mjs")) {
   }
 }
 
+/**
+ * El estado del ciclo acotado de ESTA máquina (`loop.marker` y `loop.ledger`) se aparta mientras
+ * corren los casos de hooks y se devuelve al terminar. Sin esto, un desarrollador con el
+ * presupuesto agotado veía rojo el caso de `gate-stop` (con escalada, el hook deja cerrar), y
+ * los casos de `ask-first` le borraban la escalada real: medir no puede cambiar la sesión.
+ */
+const estadoLoop = [config.loop?.marker, config.loop?.ledger].filter(Boolean).map((rel) => {
+  const f = abs(rel);
+  const contenido = fs.existsSync(f) ? fs.readFileSync(f) : null;
+  fs.rmSync(f, { force: true });
+  return { f, contenido };
+});
+let estadoDevuelto = false;
+const devolverEstadoLoop = () => {
+  if (estadoDevuelto) return;
+  estadoDevuelto = true;
+  for (const { f, contenido } of estadoLoop) {
+    if (contenido === null) fs.rmSync(f, { force: true });
+    else fs.writeFileSync(f, contenido);
+  }
+};
+// Si un caso lanza en el medio, la escalada real del desarrollador no se pierde.
+process.on("exit", devolverEstadoLoop);
+
 // 3e. El hook Stop no deja cerrar con el gate pendiente.
 if (hookFiles.has("gate-stop.mjs") && config.gate?.marker) {
   const marker = abs(config.gate.marker);
@@ -904,6 +957,113 @@ if (config.askFirst?.marker && hookFiles.has("ask-first.mjs") && hookFiles.has("
 
   if (respaldo !== null) fs.writeFileSync(marker, respaldo);
   else fs.rmSync(marker, { force: true });
+}
+devolverEstadoLoop();
+
+// 3e-loop. Ciclo acotado (P12): el gate cuenta los intentos sobre el MISMO error y, agotado el
+//     presupuesto, frena y escala. Se prueba en un repo temporal con el gate y los hooks
+//     copiados de verdad, porque lo que importa es la cadena entera: el gate deja el marcador,
+//     `action-guard` frena, `gate-stop` deja cerrar y el pedido del humano repone. Un eslabón
+//     que no lee la clave que el otro escribe es un freno instalado y muerto.
+if (config.loop && fs.existsSync(abs("scripts/gate.mjs")) && ["action-guard.mjs", "ask-first.mjs", "gate-stop.mjs"].every((h) => hookFiles.has(h))) {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "harness-loop-"));
+  try {
+    fs.mkdirSync(path.join(tmp, "scripts"), { recursive: true });
+    fs.mkdirSync(path.join(tmp, ".claude", "hooks"), { recursive: true });
+    fs.copyFileSync(abs("scripts/gate.mjs"), path.join(tmp, "scripts", "gate.mjs"));
+    for (const h of fs.readdirSync(abs(".claude/hooks")).filter((n) => n.endsWith(".mjs")))
+      fs.copyFileSync(abs(`.claude/hooks/${h}`), path.join(tmp, ".claude", "hooks", h));
+
+    // La señal lee su resultado de un archivo: «ok» sale verde, cualquier otra cosa es el error.
+    const senal = ["node", "-e", "const m=require('fs').readFileSync('msg.txt','utf8');if(m==='ok')process.exit(0);console.error(m);process.exit(1)"];
+    const loopCfg = { maxAttempts: 2, ledger: ".git/gate-attempts.json", marker: ".git/gate-escalate", tailLines: 40, normalize: [] };
+    const escribirCfg = (loop) =>
+      fs.writeFileSync(
+        path.join(tmp, ".claude", "harness.config.json"),
+        JSON.stringify({ gate: { marker: ".git/gate-dirty", signals: [{ name: "cebo", command: senal, why: "selftest" }] }, panel: { enabled: false }, ...(loop ? { loop } : {}) }),
+      );
+    const marcador = path.join(tmp, loopCfg.marker);
+    const libro = path.join(tmp, loopCfg.ledger);
+    const limpiar = () => [marcador, libro].forEach((f) => fs.rmSync(f, { force: true }));
+    const gate = (msg) => {
+      fs.writeFileSync(path.join(tmp, "msg.txt"), msg);
+      return spawnSync(process.execPath, [path.join(tmp, "scripts", "gate.mjs")], { cwd: tmp, encoding: "utf8" });
+    };
+    const hookTmp = (hook, payload) =>
+      spawnSync(process.execPath, [path.join(tmp, ".claude", "hooks", hook)], { input: JSON.stringify({ cwd: tmp, ...payload }), encoding: "utf8" });
+    const secuencia = (msgs) => {
+      limpiar();
+      let ultimo;
+      for (const m of msgs) ultimo = gate(m);
+      return { agotado: fs.existsSync(marcador), salida: `${ultimo.stdout}${ultimo.stderr}` };
+    };
+    escribirCfg(loopCfg);
+    const A = "Error: falta la clave en a.js:12:3 (34 ms)";
+
+    // ¿MUERDE? Tres veces el mismo error con maxAttempts = 2.
+    const tres = secuencia([A, A, A]);
+    if (tres.agotado && /PRESUPUESTO AGOTADO/.test(tres.salida)) ok("ciclo acotado: el mismo error 3 veces agota el presupuesto y lo dice");
+    else bad("ciclo acotado muerde", `3 veces el mismo error: marcador=${tres.agotado}; el bucle sigue sin límite`);
+
+    // ¿NO MUERDE DE MÁS? Dos veces todavía es presupuesto.
+    if (!secuencia([A, A]).agotado) ok("ciclo acotado: 2 intentos todavía están dentro del presupuesto");
+    else bad("ciclo acotado no muerde de más", "2 intentos ya dejaron el marcador");
+
+    // El error cambió = hipótesis nueva: la cuenta vuelve a 1.
+    if (!secuencia([A, A, "Error: otra cosa en b.js:3:1", "Error: otra cosa en b.js:3:1"]).agotado)
+      ok("ciclo acotado: un error distinto reinicia la cuenta");
+    else bad("ciclo acotado: error distinto", "un mensaje nuevo siguió contando como el mismo error");
+
+    // Lo que cambia sin cambiar el error (línea, columna, duración) NO reinicia: sin normalizar,
+    // mover una línea reiniciaba la cuenta para siempre y el freno no mordía nunca.
+    if (secuencia([A, "Error: falta la clave en a.js:40:9 (912 ms)", "Error: falta la clave en a.js:7:1 (2 ms)"]).agotado)
+      ok("ciclo acotado: el mismo error en otra línea y con otra duración sigue contando");
+    else bad("ciclo acotado: normalización", "cambiar línea:columna o duración reinició la cuenta: el freno nunca muerde");
+
+    // La ruta temporal de ESTA máquina (en macOS, `/var/folders/…/T`, sin «tmp» en el nombre) cambia
+    // en cada corrida: una herramienta que la imprime al fallar reiniciaba la cuenta siempre.
+    // Bajo `tmp` (que vive en os.tmpdir()), para que el `finally` se lleve los directorios.
+    const conTemporal = () => `Error: no existe ${path.join(fs.mkdtempSync(path.join(tmp, "cebo-")), "x.json")}`;
+    if (secuencia([conTemporal(), conTemporal(), conTemporal()]).agotado)
+      ok("ciclo acotado: el mismo error con otra ruta temporal sigue contando");
+    else bad("ciclo acotado: rutas temporales", `una ruta de ${os.tmpdir()} distinta en cada corrida reinició la cuenta: el freno nunca muerde`);
+
+    // Verde en el medio: la cuenta se borra.
+    if (!secuencia([A, A, "ok", A, A]).agotado) ok("ciclo acotado: una señal verde borra su cuenta");
+    else bad("ciclo acotado: verde borra", "la cuenta sobrevivió a un verde");
+
+    // La cadena: con el marcador puesto, action-guard frena editar adentro y deja afuera…
+    secuencia([A, A, A]);
+    const adentro = hookTmp("action-guard.mjs", { hook_event_name: "PreToolUse", tool_name: "Write", tool_input: { file_path: path.join(tmp, "x.mjs"), content: "x" } });
+    if (adentro.status === 2 && /PRESUPUESTO DE INTENTOS AGOTADO/.test(adentro.stderr)) ok("ciclo acotado: agotado, action-guard frena editar dentro del repo");
+    else bad("ciclo acotado: action-guard", `exit ${adentro.status}: se puede seguir reintentando con el presupuesto agotado`);
+    const afuera = hookTmp("action-guard.mjs", { hook_event_name: "PreToolUse", tool_name: "Write", tool_input: { file_path: path.join(os.tmpdir(), "diagnostico.md"), content: "x" } });
+    if (afuera.status === 0) ok("ciclo acotado: escribir el diagnóstico fuera del repo sigue permitido");
+    else bad("ciclo acotado: fuera del repo", `exit ${afuera.status}: el freno bloquea de más`);
+
+    // …gate-stop deja cerrar (forzar a seguir es el bucle) aunque el gate esté sucio…
+    fs.writeFileSync(path.join(tmp, ".git", "gate-dirty"), "selftest");
+    const cerrar = hookTmp("gate-stop.mjs", { hook_event_name: "Stop", stop_hook_active: false });
+    if (cerrar.status === 0) ok("ciclo acotado: agotado, gate-stop deja cerrar para escalar");
+    else bad("ciclo acotado: gate-stop", `exit ${cerrar.status}: el hook empuja a seguir reintentando con el presupuesto agotado`);
+
+    // …y el pedido del humano repone el presupuesto.
+    const humano = hookTmp("ask-first.mjs", { hook_event_name: "UserPromptSubmit", prompt: "probá con la otra clave" });
+    if (humano.status === 0 && !fs.existsSync(marcador) && !fs.existsSync(libro) && /repuesto/i.test(humano.stdout))
+      ok("ciclo acotado: el pedido del humano levanta el marcador y repone la cuenta");
+    else bad("ciclo acotado: reposición", `exit ${humano.status}, marcador=${fs.existsSync(marcador)}, libro=${fs.existsSync(libro)}`);
+    const sucio = hookTmp("gate-stop.mjs", { hook_event_name: "Stop", stop_hook_active: false });
+    if (sucio.status === 2) ok("ciclo acotado: repuesto el presupuesto, gate-stop vuelve a exigir el gate");
+    else bad("ciclo acotado: gate-stop tras reponer", `exit ${sucio.status}: el freno del gate quedó apagado`);
+
+    // Sin la clave, nada cambia: ni marcador ni libro (falla abierto, P5).
+    escribirCfg(null);
+    const sinClave = secuencia([A, A, A, A]);
+    if (!sinClave.agotado && !fs.existsSync(libro)) ok("ciclo acotado: sin `loop` en el config, el gate no cuenta nada");
+    else bad("ciclo acotado: sin clave", "el gate contó intentos en un repo que no los pidió");
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
 }
 
 // 3e-ter. El trabajo entra a las ramas protegidas por PR. Se prueba con la entrada que git
@@ -1475,6 +1635,110 @@ const huerfanasDe = (cfg) => {
     // así que el único lugar donde vive es el pipeline que el config declara en `runner`.
     const rojo = config.xp?.testFirst?.verifyRed;
     if (rojo?.enabled) corredorDeclarado("la verificación de rojo sin el cambio", rojo.runner, "--verify-red");
+  }
+}
+
+// 3f-ter-bis. Sincronía con la base (`workflow.sync`): una rama que CHOCA con la base no se
+//     empuja. Cebo en un repo git temporal fuera del árbol (P7) con un `origin` bare, y la base
+//     la avanza OTRO clon: así el `origin/main` local queda viejo y el caso sólo pasa si el freno
+//     hace `fetch` antes de medir — medir contra refs viejas es el error que el freno existe para
+//     cazar. El config del cebo trae sólo `sync`, para que nombre y edad no tapen el veredicto.
+{
+  const script = abs("scripts/cycle-check.mjs");
+  const sync = config.workflow?.sync;
+  if (!fs.existsSync(script)) {
+    skip("ciclo: sincronía con la base", "el repo no trae scripts/cycle-check.mjs");
+  } else {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "harness-sync-"));
+    try {
+      const g = (cwd, ...a) => spawnSync("git", a, { cwd, encoding: "utf8" });
+      const origen = path.join(tmp, "origen.git");
+      const work = path.join(tmp, "work");
+      const otro = path.join(tmp, "otro");
+      const escribir = (dir, rel, txt) => fs.writeFileSync(path.join(dir, rel), txt);
+      const commitear = (dir, rel, txt) => {
+        escribir(dir, rel, txt);
+        g(dir, "add", rel);
+        g(dir, "commit", "-q", "-m", `cambia ${rel}`);
+      };
+      const identidad = (dir) => {
+        g(dir, "config", "user.email", "selftest@example.com");
+        g(dir, "config", "user.name", "selftest");
+      };
+
+      g(tmp, "init", "-q", "--bare", origen);
+      g(origen, "symbolic-ref", "HEAD", "refs/heads/main");
+      g(tmp, "init", "-q", work);
+      identidad(work);
+      g(work, "checkout", "-q", "-b", "main");
+      g(work, "remote", "add", "origin", origen);
+      escribir(work, "b.txt", "b\n");
+      commitear(work, "a.txt", "uno\n");
+      g(work, "add", "b.txt");
+      g(work, "commit", "-q", "-m", "b");
+      g(work, "push", "-q", "-u", "origin", "main");
+
+      const soportaMergeTree = g(work, "merge-tree", "--write-tree", "HEAD", "HEAD").status === 0;
+      if (!soportaMergeTree) {
+        skip("ciclo: sincronía con la base", "este git no trae `merge-tree --write-tree` (≥ 2.38)");
+      } else {
+        // Tres ramas desde la base original: una al día, una que choca y una atrasada sin choque.
+        for (const [rama, rel, txt] of [["feat/choca", "a.txt", "tres\n"], ["feat/atrasada", "c.txt", "c\n"]]) {
+          g(work, "checkout", "-q", "-b", rama, "main");
+          commitear(work, rel, txt);
+        }
+        // La base avanza desde OTRO clon: `work` no se entera hasta que alguien hace fetch.
+        g(tmp, "clone", "-q", origen, otro);
+        identidad(otro);
+        commitear(otro, "a.txt", "dos\n");
+        g(otro, "push", "-q", "origin", "main");
+        g(work, "fetch", "-q", "origin");
+        g(work, "checkout", "-q", "-B", "feat/al-dia", "origin/main");
+        commitear(work, "d.txt", "d\n");
+        // Volver `origin/main` al punto viejo: el freno tiene que bajar la base por su cuenta.
+        g(work, "update-ref", "refs/remotes/origin/main", g(work, "rev-parse", "main").stdout.trim());
+
+        const cebo = (cambios = {}) => {
+          const ruta = path.join(tmp, `cfg-${Math.random().toString(36).slice(2)}.json`);
+          const s = { ...(sync ?? {}), enabled: true, remote: "origin", fetch: true, command: undefined, ...cambios };
+          fs.writeFileSync(ruta, JSON.stringify({ workflow: { baseBranch: "main", sync: s } }));
+          return ruta;
+        };
+        const empujar = (rama, cfg, sha = g(work, "rev-parse", rama).stdout.trim()) =>
+          spawnSync("node", [script, "--push", "--config", cfg], {
+            cwd: work,
+            encoding: "utf8",
+            input: `refs/heads/${rama} ${sha} refs/heads/${rama} ${"0".repeat(40)}\n`,
+          });
+
+        const casos = [
+          ["una rama que CHOCA con la base no se empuja (y nombra el archivo)", empujar("feat/choca", cebo()), (r) => r.status === 1 && r.stderr.includes("a.txt")],
+          ["una rama atrasada SIN choque se empuja con aviso", empujar("feat/atrasada", cebo()), (r) => r.status === 0 && /atr[aá]s/.test(r.stderr)],
+          ["una rama al día se empuja en silencio", empujar("feat/al-dia", cebo()), (r) => r.status === 0 && !r.stderr.trim()],
+          ["`conflictAction: warn` avisa y deja empujar", empujar("feat/choca", cebo({ conflictAction: "warn" })), (r) => r.status === 0 && r.stderr.includes("a.txt")],
+          ["`behindAction: block` frena también el atraso", empujar("feat/atrasada", cebo({ behindAction: "block" })), (r) => r.status === 1],
+          ["borrar una rama remota no se mide", empujar("feat/choca", cebo(), "0".repeat(40)), (r) => r.status === 0],
+          ["sin `sync.enabled`, el freno no corre", empujar("feat/choca", cebo({ enabled: false })), (r) => r.status === 0],
+        ];
+        for (const [nombre, r, pasa] of casos) {
+          if (pasa(r)) ok(`ciclo (sincronía): ${nombre}`);
+          else bad(`ciclo (sincronía): ${nombre}`, `exit ${r.status}. stderr: ${(r.stderr ?? "").trim().slice(0, 240)}`);
+        }
+
+        // A mano, el mismo veredicto: `npm run sync` antes de abrir el PR.
+        g(work, "checkout", "-q", "feat/choca");
+        const manual = spawnSync("node", [script, "--sync", "--config", cebo()], { cwd: work, encoding: "utf8" });
+        if (manual.status === 1 && manual.stderr.includes("a.txt")) ok("ciclo (sincronía): `--sync` da el mismo veredicto a mano");
+        else bad("ciclo (sincronía): `--sync` a mano", `exit ${manual.status}. stderr: ${(manual.stderr ?? "").trim().slice(0, 240)}`);
+
+        // El árbol de trabajo no se toca: el merge se simula en la base de objetos.
+        const limpio = !g(work, "status", "--porcelain").stdout.trim() && g(work, "rev-parse", "--abbrev-ref", "HEAD").stdout.trim() === "feat/choca";
+        if (limpio) ok("ciclo (sincronía): simular el merge no toca el árbol ni la rama");
+        else bad("ciclo (sincronía): simular el merge", "el chequeo dejó cambios o movió HEAD");
+      }
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
   }
 }
 

@@ -30,7 +30,13 @@ if (hit) {
   );
 }
 
-const confirmar = firstMatch(config.bash?.ask, command);
+// `exempt` es la forma segura y verificable de un comando que en general se pregunta: si el
+// comando ENTERO casa `exempt`, no hace falta el sí del humano. Sin esto, una pregunta que
+// sale veinte veces por día se contesta «sí» sin leer, y deja de proteger justo el caso raro.
+// El regex se escribe anclado (`^…$`) para que un `&& otra-cosa` encadenado no herede la exención.
+const confirmar = (config.bash?.ask ?? []).find(
+  (regla) => firstMatch([regla], command) && !(regla.exempt && firstMatch([{ pattern: regla.exempt }], command)),
+);
 if (confirmar) ask(`CONFIRMACIÓN DEL HUMANO: ${confirmar.reason}`, input);
 
 allow();

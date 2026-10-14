@@ -14,6 +14,11 @@
  * Deliberadamente ANGOSTO: sólo caza interrogación explícita (empieza con «¿», termina
  * con «?», o arranca con una palabra interrogativa). Un clasificador ancho bloquearía
  * instrucciones legítimas, y un freno que muerde de más se desactiva a mano en una semana.
+ *
+ * Y es también el hook que repone el presupuesto de intentos (`loop`): cuando el gate agota el
+ * presupuesto, la escalada la contesta el humano, y su próximo pedido —sea cual sea— es la
+ * respuesta. Vive acá y no en un hook propio porque cada hook de pedido es un arranque de node
+ * más en CADA prompt, y éste ya corre en ese momento.
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -21,8 +26,27 @@ import { readInput, loadConfig, allow, REPO_ROOT } from "./harness.mjs";
 
 const input = await readInput();
 const config = loadConfig();
+
+// El humano habló: la escalada está contestada y el presupuesto vuelve a estar entero.
+let repuesto = false;
+for (const rel of [config?.loop?.marker, config?.loop?.ledger].filter(Boolean)) {
+  try {
+    const abs = path.join(REPO_ROOT, rel);
+    if (rel === config.loop.marker && fs.existsSync(abs)) repuesto = true;
+    fs.rmSync(abs, { force: true });
+  } catch {
+    /* no poder borrarlo deja el freno puesto un turno más; el humano lo ve en el mensaje */
+  }
+}
+const avisoRepuesto = repuesto
+  ? `## Presupuesto de intentos repuesto (hook ask-first)\n\n${
+      config.loop.message ??
+      "El gate había agotado los intentos sobre el mismo error y el humano contestó: seguí con SU indicación, no con la hipótesis que ya falló."
+    }`
+  : "";
+
 const spec = config?.askFirst;
-if (!spec?.marker) allow();
+if (!spec?.marker) allow(avisoRepuesto || undefined);
 
 const prompt = String(input?.prompt ?? "").trim();
 const marker = path.join(REPO_ROOT, spec.marker);
@@ -38,7 +62,7 @@ const limpiar = () => {
 
 if (!prompt) {
   limpiar();
-  allow();
+  allow(avisoRepuesto || undefined);
 }
 
 const casa = (patrones) =>
@@ -66,7 +90,7 @@ const esAccion = verboDeAccion && (pedidoDirecto || !preguntaFuerte);
 
 if (!esPregunta || esAccion) {
   limpiar();
-  allow();
+  allow(avisoRepuesto || undefined);
 }
 
 try {
@@ -78,6 +102,7 @@ try {
 
 allow(
   [
+    ...(avisoRepuesto ? [avisoRepuesto, ""] : []),
     "## Pedido informativo (hook ask-first)",
     "",
     spec.message ??

@@ -5,6 +5,10 @@
  * "Test verde ≠ compila ≠ entregable": el marcador `.git/gate-dirty` lo pone
  * `post-edit-check.mjs` en cada edición de código y lo borra `scripts/gate.mjs`
  * cuando TODAS las señales salen verdes.
+ *
+ * Con una excepción: si el gate agotó el presupuesto de intentos (`loop.marker`), el hook DEJA
+ * cerrar. Obligar a seguir con el gate rojo es exactamente el bucle sin límite que el ciclo
+ * acotado corta: lo que corresponde es parar y escalar, y para escalar hay que poder cerrar.
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -16,6 +20,8 @@ if (!config) allow();
 
 // Si el propio hook ya bloqueó una vez y el agente sigue en loop, no insistir.
 if (input?.stop_hook_active) allow();
+
+if (config.loop?.marker && fs.existsSync(path.join(REPO_ROOT, config.loop.marker))) allow();
 
 const marker = path.join(REPO_ROOT, config.gate?.marker ?? ".git/gate-dirty");
 if (!fs.existsSync(marker)) allow();
