@@ -1,6 +1,6 @@
 # Constitución — Agent Harness
 
-**Versión 1.2.0** · Principios que no se negocian **en este repo**. Las convenciones operativas
+**Versión 1.3.0** · Principios que no se negocian **en este repo**. Las convenciones operativas
 viven en `CLAUDE.md`; el arnés que hace cumplir estos principios, en `docs/arnes.md`.
 
 Cada principio dice su **fuerza**:
@@ -21,7 +21,9 @@ cuerpo. Un principio que nadie hace cumplir se borra o se convierte en mecanismo
 El entregable es `npm run gate`: harness self-test, docs link-check y convention lint.
 Una señal **omitida** no es verde, y `gate:fast` verde tampoco.
 
-*Mecanismo:* `scripts/gate.sh`, el hook `Stop` (`.claude/hooks/gate-stop.mjs`) y el job `gate` de CI.
+*Mecanismo:* `scripts/gate.sh`, el hook `Stop` (`.claude/hooks/gate-stop.mjs`) y el job `gate` de CI. El
+hook `Stop` deja cerrar con el gate rojo en un solo caso: el presupuesto de intentos agotado (P12),
+porque ahí lo que corresponde es parar y escalar — y el mensaje final no dice «listo».
 
 ## P2 — Todo freno prueba que muerde · BLOCKING
 
@@ -115,11 +117,17 @@ forja da igual: lo que cuenta como referencia lo declara `tracker.issuePattern`.
 el gestor. Que el registro sea el *adecuado* —feature con ítem madre y tareas, no un bug suelto—
 sigue siendo juicio del `reviewer`.
 
-## P12 — Conducta ante el error · REVIEW
+## P12 — Conducta ante el error · BLOCKING
 
 Leer la salida real (archivo, línea, mensaje) antes de reintentar; reintentar sólo con hipótesis
 nueva; presupuesto de **2 intentos** sobre el mismo error, y al tercero se para y se escala con el
 diagnóstico. Fallar rápido y con causa vale más que degradar en silencio.
+
+*Mecanismo:* `loop` en el config — `scripts/gate.mjs` cuenta las corridas rojas con la misma huella
+por señal y, pasado `maxAttempts`, deja un marcador: `action-guard.mjs` frena editar dentro del
+repo, `gate-stop.mjs` deja cerrar para escalar y el próximo pedido del humano repone el
+presupuesto. Prueba de vida: sección 3e-loop del self-test. Que el diagnóstico de la escalada sea
+bueno —y que cada reintento traiga hipótesis nueva— sigue siendo juicio del `reviewer`.
 
 ## P13 — Cada incidente deja infraestructura · BLOCKING
 
@@ -163,3 +171,4 @@ El `reviewer` verifica que un choque se haya escalado y no resuelto a escondidas
 | 1.0.0 | 2026-08-21 | Primera versión (ver `docs/decisions/0001-arnes-portable.md`). |
 | 1.1.0 | 2026-08-25 | P11 nuevo: el trabajo queda registrado (`commit-msg` + `artifacts-check`), agnóstico de forja. Los principios siguientes corren un número. |
 | 1.2.0 | 2026-09-24 | Precedencia entre BLOCKING (la pregunta abierta de `docs/guias-y-sensores.md`). P2 alcanza al único sensor inferencial: el `reviewer` tiene prueba de vida (`scripts/reviewer-eval.mjs`, fuera del gate). |
+| 1.3.0 | 2026-10-13 | P12 pasa de REVIEW a BLOCKING: el gate cuenta los intentos sobre el mismo error y, agotados, frena las ediciones hasta que el humano conteste (`loop`, #51); P1 nombra esa única excepción del hook `Stop`. Era la práctica 10 de XP —ciclos acotados, no actividad infinita— sin mecanismo, y `gate-stop` empujaba al bucle. |
