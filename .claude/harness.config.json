@@ -925,7 +925,18 @@
       "vercel ls",
       "fly status",
       "docker build -t web .",
-      "gh run list"
+      "gh run list",
+      "aws ec2 describe-instances",
+      "aws eks describe-cluster --name prod",
+      "aws eks list-clusters",
+      "aws eks update-kubeconfig --name prod",
+      "eksctl get cluster",
+      "az aks show -g rg -n k8s",
+      "az aks get-credentials -g rg -n k8s",
+      "gcloud container clusters list",
+      "gcloud container clusters get-credentials k8s",
+      "gcloud deploy releases list",
+      "az containerapp show -n web -g rg"
     ],
     "bash": {
       "deny": [
@@ -940,6 +951,10 @@
         {
           "pattern": "\\b(fly|flyctl)\\s+apps\\s+(destroy|delete)\\b|\\bheroku\\s+apps:destroy\\b|\\bvercel\\s+(remove|rm)\\b|\\brailway\\s+delete\\b",
           "reason": "borra la aplicación entera del proveedor, con su historial de despliegues."
+        },
+        {
+          "pattern": "\\baws\\s+eks\\s+delete-(cluster|nodegroup|fargate-profile)\\b|\\beksctl\\s+delete\\s+(cluster|nodegroup|fargateprofile)\\b|\\bgcloud\\s+container\\s+(clusters|node-pools)\\s+delete\\b|\\baz\\s+aks\\s+(delete|nodepool\\s+delete)\\b|\\baws\\s+ecs\\s+delete-cluster\\b|\\baws\\s+dynamodb\\s+delete-table\\b",
+          "reason": "borra un clúster administrado (EKS, GKE, AKS, ECS) o una tabla: todo lo que corre o vive ahí se va con él."
         }
       ],
       "ask": [
@@ -954,6 +969,10 @@
         {
           "pattern": "\\bgcloud\\s+(app\\s+deploy|run\\s+(deploy|services\\s+update)|functions\\s+deploy|builds\\s+submit)\\b|\\bfirebase\\s+deploy\\b",
           "reason": "despliega en Google Cloud o Firebase por fuera del camino declarado: sin gate, sin rama verificada y sin registro."
+        },
+        {
+          "pattern": "\\baws\\s+eks\\s+(create|update|associate|tag)-(?!kubeconfig)[a-z-]+|\\beksctl\\s+(create|upgrade|scale|update|set|utils\\s+update-[a-z-]+)\\b|\\bgcloud\\s+container\\s+(clusters|node-pools)\\s+(create|update|upgrade|resize)\\b|\\baz\\s+aks\\s+(upgrade|start|stop|nodepool\\s+(add|update|upgrade|scale))\\b|\\bgcloud\\s+deploy\\s+(releases\\s+(create|promote)|rollouts\\s+(approve|advance|retry|cancel))\\b",
+          "reason": "crea o cambia un clúster administrado (EKS, GKE, AKS) o promueve un release de Cloud Deploy por fuera del camino declarado."
         },
         {
           "pattern": "\\bkubectl\\s+(apply|create|replace|patch|scale|set\\s+image|rollout\\s+(restart|undo)|delete)\\b|\\bhelm\\s+(install|upgrade|rollback|uninstall)\\b|\\bargocd\\s+app\\s+(sync|rollback|set|delete)\\b|\\bskaffold\\s+(run|deploy)\\b",
@@ -971,6 +990,11 @@
           "pattern": "\\baws\\s+secretsmanager\\s+get-secret-value\\b|\\baws\\s+ssm\\s+get-parameters?\\b.*--with-decryption|\\baz\\s+keyvault\\s+secret\\s+show\\b|\\bgcloud\\s+secrets\\s+versions\\s+access\\b|\\bkubectl\\s+get\\s+secrets?\\b.*-o\\s*=?\\s*(yaml|json|jsonpath)|\\brailway\\s+variables\\b|\\bheroku\\s+config\\s*$|\\bvercel\\s+env\\s+pull\\b|^\\s*(printenv|env)\\s*$",
           "reason": "imprime secretos en el transcript, que queda guardado y puede viajar en un log o un resumen. Si hace falta un valor, que el humano lo pase al proceso por variable de entorno.",
           "hint": false
+        },
+        {
+          "$comment": "LA RED, y va ÚLTIMA: ninguna lista de comandos de nube está completa. Cualquier verbo destructivo de un CLI de nube que no casó una regla específica pregunta. Sin esta regla, 11 de 22 comandos probados (EKS, GKE, AKS, EC2) pasaban callados. Las lecturas no traen estos verbos; `passExamples` lo prueba.",
+          "pattern": "\\b(aws|az|gcloud|eksctl|azd|doctl|oci|ibmcloud)\\s[^|;&]*\\b[a-z-]*(delete|terminate|destroy|purge|deregister|remove|disable)[a-z-]*\\b",
+          "reason": "borra, termina o deshabilita algo en la nube, y ninguna regla específica lo reconoce. Si es lo pedido, que lo confirme el humano."
         }
       ]
     },

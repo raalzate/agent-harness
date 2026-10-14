@@ -32,7 +32,10 @@ que importa, y dejar el permiso humano donde de verdad decide algo.
 | `kubectl apply`, `az webapp deploy`, `railway up`… | **pregunta**, y nombra el camino seguro | desplegar por fuera: sin gate, sin rama verificada y sin registro |
 | `aws secretsmanager get-secret-value`, `railway variables`… | **pregunta** | imprime secretos al transcript |
 | `terraform destroy`, `az group delete`, `kubectl delete ns`… | **bloquea** | destruye un entorno entero: lo hace el humano |
-| `kubectl get pods`, `terraform plan`, `railway logs`… | **no opina** | leer no pide permiso (`deploy.passExamples` lo prueba) |
+| `aws eks delete-cluster`, `eksctl delete cluster`, `az aks delete`, `gcloud container clusters delete` | **bloquea** | borrar un clúster administrado se lleva todo lo que corre ahí |
+| `eksctl create/upgrade`, `aws eks update-*`, `az aks upgrade`, `gcloud container clusters upgrade`, Cloud Deploy | **pregunta** | cambia el clúster o promueve un release por fuera del camino |
+| cualquier verbo destructivo (`delete`, `terminate`, `destroy`, `purge`…) de `aws`, `az`, `gcloud` o `eksctl` que ninguna regla reconoce | **pregunta** | la red: ninguna lista de comandos de nube está completa |
+| `kubectl get pods`, `terraform plan`, `railway logs`, `aws eks describe-cluster`, `az aks get-credentials`… | **no opina** | leer no pide permiso (`deploy.passExamples` lo prueba) |
 | Herramientas MCP (`mcp__<servidor>__deploy`, `…__delete-volume`) | pregunta / bloquea | `deploy.mcp`: el mismo criterio por nombre de herramienta |
 | MCP que recibe un comando de CLI como texto (`cli_command`) | reglas de bash | si no, el mismo `aws … delete-stack` pasaba por MCP |
 
@@ -95,6 +98,14 @@ prueba, una preview). Empezá todo en `human` y pasá a `agent` con evidencia, n
       "approval": "human",
       "branch": "main"
     },
+    "prod-eks": {
+      "description": "EKS: el contexto se nombra, no se hereda del kubeconfig del turno",
+      "command": ["kubectl", "--context", "arn:aws:eks:us-east-1:123456789012:cluster/prod", "apply", "-k", "deploy/overlays/prod"],
+      "planCommand": ["kubectl", "--context", "arn:aws:eks:us-east-1:123456789012:cluster/prod", "diff", "-k", "deploy/overlays/prod"],
+      "approval": "human",
+      "branch": "main",
+      "env": ["AWS_PROFILE"]
+    },
     "k8s": {
       "description": "clúster, con kustomize",
       "command": ["kubectl", "apply", "-k", "deploy/overlays/prod"],
@@ -114,6 +125,9 @@ prueba, una preview). Empezá todo en `human` y pasá a `agent` con evidencia, n
 }
 ```
 
+- En un clúster administrado (EKS, AKS, GKE) el `--context` va **en el comando**. Si se hereda
+  del kubeconfig, el mismo destino despliega a donde haya quedado apuntando el último
+  `get-credentials`.
 - `command` es un **array**: se ejecuta sin shell, así que nada del config se interpola ni se
   inyecta. Si el despliegue necesita un pipe, va en un script del repo, y ese script es el comando.
 - `planCommand` corre en el dry-run, y **tiene que ser de sólo lectura** (`plan`, `diff`,
