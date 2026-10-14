@@ -1497,7 +1497,9 @@ if (!corre("registro")) {
     // casos, sobre una copia del repo con una tarea abierta: lo roto era el self-test, no el hook.
     const copia = fs.mkdtempSync(path.join(os.tmpdir(), "harness-tarea-abierta-"));
     try {
-      const versionados = (spawnSync("git", ["ls-files", "-z"], { cwd: REPO_ROOT, encoding: "utf8" }).stdout ?? "").split("\0").filter(Boolean);
+      // Versionados Y nuevos sin ignorar: en un repo recién portado el arnés todavía no está
+      // commiteado, y copiar sólo lo versionado dejaba la copia sin scripts (lo cazó el taller).
+      const versionados = (spawnSync("git", ["ls-files", "-z", "--cached", "--others", "--exclude-standard"], { cwd: REPO_ROOT, encoding: "utf8" }).stdout ?? "").split("\0").filter(Boolean);
       for (const rel of versionados) {
         if (!fs.existsSync(abs(rel))) continue;
         fs.mkdirSync(path.join(copia, path.dirname(rel)), { recursive: true });
