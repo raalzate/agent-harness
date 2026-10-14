@@ -35,8 +35,9 @@ Lo que no es detalle de implementación:
 
 - **El grupo es la frontera del estado compartido.** Los casos que leen o escriben los
   marcadores de sesión de ESTE repo (`gate.marker`, `askFirst.marker`, `loop.*`) van en la
-  parte `estado`, y §9 (`hooks-timing`, que respalda y restaura esos mismos archivos) en la
-  parte `costo`, del **mismo grupo**: corren en serie, en el mismo turno del pool. Todo lo
+  parte `estado`, y §9 (`hooks-timing`, que respalda y restaura esos mismos archivos — `loop.*`
+  recién desde la revisión de esta rama: el cebo no declaraba `loop` y medir borraba la escalada
+  real, un bug anterior al abanico que destapó el `reviewer`) en la parte `costo`, del **mismo grupo**: corren en serie, en el mismo turno del pool. Todo lo
   demás opera por stdin o en temporales propios. Un caso nuevo que toque esos marcadores
   fuera del grupo es el bug, y el reviewer lo tiene que ver.
 - **Apartar el estado del ciclo acotado ocurre en un solo proceso.** Hecho en cada hijo a la
@@ -46,11 +47,13 @@ Lo que no es detalle de implementación:
   así que el padre repite el barrido de residuos con todas terminadas.
 - **`--parallel=1` no es un modo degradado:** es el mismo código, en un proceso, en vivo.
   Las dos formas dan el mismo conjunto de comprobaciones (diff ordenado idéntico).
-- **Tres maneras nuevas de reportar verde sin probar nada**, con caso propio (P2): una parte
-  que no existe, `--parts=` sin valor, y una parte que falla o no entrega —esta con dos
-  costuras, `--fail-part` y `--mute-part`, que sólo pueden poner el resultado más rojo—. El
-  mismo caso verifica que la salida sale en el orden declarado aunque las partes se pidan al
-  revés.
+- **Cuatro maneras nuevas de reportar verde sin probar nada**, con caso propio (P2): una parte
+  que no existe, `--parts=` sin valor, una parte que falla o no entrega —con dos costuras,
+  `--fail-part` y `--mute-part`, que sólo pueden poner el resultado más rojo—, y un `bad()`
+  dentro de `if (corre(x))` escrito debajo de una sección de otra parte (costura
+  `--guarded-fail`): corría en el hijo `x` y se descartaba sin contarse. Por eso `corre` fija la
+  dueña: un bloque que corre, reporta. La salida sale en el orden declarado **de las partes**;
+  dentro de §3 un caso puede imprimirse después que en serie porque su parte es otra.
 
 ## Consecuencias
 

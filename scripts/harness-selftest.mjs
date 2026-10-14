@@ -87,16 +87,22 @@ if (PARTE !== undefined && !PARTES.some((p) => p.id === PARTE)) {
   process.exit(1);
 }
 const SERIE = PARTE === undefined && PARALELO === 1;
-/** ¿Este proceso corre los casos de la parte `id`? En serie, todas; en un hijo, sólo la suya. */
-const corre = (id) => SERIE || PARTE === id;
 // Dueño de lo que se imprime: los casos baratos y sin efectos (compilar un regex) corren en
 // cualquier proceso, pero sólo el dueño los reporta y los cuenta. Lo caro o con estado va
-// además detrás de `if (enParte(…))`, para no correrlo de más ni a la vez.
+// además detrás de `if (corre(…))`, para no correrlo de más ni a la vez.
 let parteActual = "base";
-const enParte = (id) => {
+/**
+ * ¿Este proceso corre los casos de la parte `id`? En serie, todas; en un hijo, sólo la suya.
+ * Y fija la dueña: un bloque que CORRE tiene que REPORTAR. Sin esto, un `bad()` dentro de
+ * `if (corre("frenos"))` escrito debajo de una sección de otra parte corría en el hijo `frenos`
+ * y `reporta()` lo descartaba sin contarlo — SELF-TEST VERDE con un caso rojo adentro (lo
+ * reprodujo el `reviewer`; lo prueba la costura `--guarded-fail`).
+ */
+const corre = (id) => {
   parteActual = id;
-  return corre(id);
+  return SERIE || PARTE === id;
 };
+const enParte = corre;
 const reporta = () => SERIE || PARTE === parteActual;
 
 let failures = 0;
@@ -275,6 +281,8 @@ const analizarComando = parseHookCommand;
 // Costuras para el propio self-test (sólo pueden poner el resultado MÁS rojo, nunca más verde):
 // `--mute-part=<id>` hace que ese hijo no entregue su resultado, y `--fail-part=<id>` le suma un
 // fallo. Son la única forma de ejercitar los caminos del padre que no se provocan a mano.
+// `--guarded-fail=<id>` mete un `bad()` dentro de un `if (corre(id))` mientras la dueña vigente es
+// OTRA parte: es el falso verde que el abanico tiene que impedir (un fallo que corre y no se cuenta).
 /**
  * Temporales que el self-test dejó dentro del árbol de fuentes (P7). La raíz NO alcanza: los
  * casos operan sobre `scripts/`, `plantillas/perfiles/` y `.claude/hooks/` por stdin, y un
@@ -311,6 +319,7 @@ async function salir(code) {
 
 const PARTE_MUDA = argValor("mute-part");
 const PARTE_FALLA = argValor("fail-part");
+const PARTE_GUARDA = argValor("guarded-fail");
 
 if (PARTE === undefined && !SERIE) {
   const crudo = argValor("parts");
@@ -327,6 +336,7 @@ if (PARTE === undefined && !SERIE) {
       const args = [fileURLToPath(import.meta.url), `--part=${id}`];
       if (PARTE_MUDA) args.push(`--mute-part=${PARTE_MUDA}`);
       if (PARTE_FALLA) args.push(`--fail-part=${PARTE_FALLA}`);
+      if (PARTE_GUARDA) args.push(`--guarded-fail=${PARTE_GUARDA}`);
       const hijo = spawn(process.execPath, args, { stdio: ["ignore", "pipe", "pipe"] });
       let out = "";
       let err = "";
@@ -2285,6 +2295,21 @@ if (corre("reglas")) {
       });
       if (cita.status !== 0 && /gitignored/.test(cita.stderr ?? "")) ok(`link-check es rojo al citar un archivo dentro de \`${derivado}/\` (existe en disco, no en el clon)`);
       else bad("link-check caza la cita a un archivo gitignored", `exit ${cita.status}: ${(cita.stderr || cita.stdout || "").trim().split("\n")[0]}`);
+      // …también con OTRA capitalización. En un disco que no distingue mayúsculas (macOS, Windows)
+      // `Dist/` existe, y comparar contra el conjunto de `ls-files` con `Set.has` la daba por
+      // versionada: verde acá, rojo en el Linux de CI. Sólo tiene sentido donde el disco no distingue.
+      const otraCapitalizacion = derivado[0].toUpperCase() + derivado.slice(1);
+      if (!fs.existsSync(path.join(REPO_ROOT, otraCapitalizacion, "puntero-selftest.md"))) {
+        skip("link-check con otra capitalización", "este disco distingue mayúsculas: la cita no existe y sale «falta» sola");
+      } else {
+        const mayus = spawnSync("node", [abs("scripts/docs-linkcheck.mjs"), "--file", path.join("docs", "cebo.md"), "--stdin"], {
+          cwd: REPO_ROOT,
+          encoding: "utf8",
+          input: `Ver [el cebo](${["..", otraCapitalizacion, "puntero-selftest.md"].join("/")}).\n`,
+        });
+        if (mayus.status !== 0) ok(`link-check es rojo al citar \`${otraCapitalizacion}/\` con otra capitalización (el disco no distingue, CI sí)`);
+        else bad("link-check caza la cita a lo ignorado con otra capitalización", "salió verde: verde en macOS/Windows, rojo en el Linux de CI");
+      }
     } finally {
       fs.rmSync(cebo, { force: true });
       if (!existia) fs.rmSync(dir, { recursive: true, force: true });
@@ -2814,6 +2839,12 @@ for (const dir of [".claude/agents", ".claude/commands"]) {
   ].filter(Boolean);
   if (!problemas.length) ok("el abanico del self-test: una parte roja o muda es ROJO con su nombre, y la salida sale en el orden declarado");
   else bad("el abanico del self-test reporta lo que pasó", `${problemas.join(" · ")} (exit ${costuras.status})`);
+
+  // Un `bad()` dentro de `if (corre(x))` corre en el hijo `x`, pero si la dueña vigente era otra
+  // parte, `reporta()` lo descartaba sin contarlo: SELF-TEST VERDE con un caso rojo adentro.
+  const guarda = correrYo("--parts=base", "--parallel=2", "--guarded-fail=base");
+  if (guarda.status !== 0 && /costura `--guarded-fail`/.test(guarda.salida)) ok("un fallo dentro de un bloque con guarda de otra parte se cuenta (no hay falso verde)");
+  else bad("un fallo dentro de un bloque con guarda se cuenta", `exit ${guarda.status}: el abanico descartó un caso rojo que sí corrió`);
 }
 
 // ── 7. Kit SDD declarado ─────────────────────────────────────────────────────
@@ -3253,7 +3284,10 @@ if (enParte("costo")) {
       fs.writeFileSync(
         ruta,
         JSON.stringify(
-          { gate: { marker: config.gate?.marker }, askFirst: { marker: config.askFirst?.marker }, observability },
+          // `loop` también: `ask-first` (que se mide corriéndolo de verdad) repone el presupuesto
+          // borrando su marcador y su libro, y sin la clave en el cebo nadie los respaldaba — medir
+          // le borraba al desarrollador la escalada real (lo destapó el `reviewer` en #32).
+          { gate: { marker: config.gate?.marker }, askFirst: { marker: config.askFirst?.marker }, loop: config.loop, observability },
           null,
           2,
         ),
@@ -3301,11 +3335,25 @@ if (enParte("costo")) {
     // medición bloquea el turno siguiente sin que nadie entienda por qué.
     const marcadores = [config.gate?.marker, config.askFirst?.marker].filter(Boolean).map(rutaDeEstado);
     const antes = marcadores.map((f) => fs.existsSync(f));
+    // Los del ciclo acotado se SIEMBRAN con un contenido conocido: el hook que los borra corre
+    // siempre, así que comparar sólo «existía / existe» con el repo limpio no veía nada.
+    const sembrados = [config.loop?.marker, config.loop?.ledger].filter(Boolean).map((rel) => {
+      const ruta = rutaDeEstado(rel);
+      const real = fs.existsSync(ruta) ? fs.readFileSync(ruta) : null;
+      fs.mkdirSync(path.dirname(ruta), { recursive: true });
+      fs.writeFileSync(ruta, `selftest-sembrado ${rel}\n`);
+      return { rel, ruta, real };
+    });
     correr(escribirCebo("estado.json", { budgetMs: 60000, runs: 1, probe }));
     const despues = marcadores.map((f) => fs.existsSync(f));
-    if (JSON.stringify(antes) === JSON.stringify(despues))
-      ok("medir no deja marcadores de sesión fabricados (el estado se restaura)");
-    else bad("medir no cambia el estado de la sesión", `marcadores antes=${antes} después=${despues}`);
+    const perdidos = sembrados.filter(({ rel, ruta }) => !fs.existsSync(ruta) || fs.readFileSync(ruta, "utf8") !== `selftest-sembrado ${rel}\n`);
+    for (const { ruta, real } of sembrados) {
+      if (real === null) fs.rmSync(ruta, { force: true });
+      else fs.writeFileSync(ruta, real);
+    }
+    if (JSON.stringify(antes) === JSON.stringify(despues) && !perdidos.length)
+      ok("medir no deja marcadores de sesión fabricados ni borra los del ciclo acotado (el estado se restaura)");
+    else bad("medir no cambia el estado de la sesión", `marcadores antes=${antes} después=${despues}; del ciclo acotado alterados: ${perdidos.map((p) => p.rel).join(", ") || "ninguno"}`);
 
     // Un equipo que sólo quiere acotar el hook caro declara `budgets` y ningún `budgetMs`. Con el
     // 0 de default, TODOS los demás hooks salían rojos contra un presupuesto imposible: el freno
@@ -4157,6 +4205,11 @@ if (PARTE !== undefined) {
     parteActual = PARTE;
     titulo = null; // el fallo forzado no es de la última sección que pasó por acá
     bad("costura `--fail-part`", "fallo forzado: el padre tiene que reportarlo y salir en ROJO");
+  }
+  if (PARTE === PARTE_GUARDA) {
+    parteActual = PARTES.find((p) => p.id !== PARTE).id; // la dueña vigente es otra
+    titulo = null;
+    if (corre(PARTE)) bad("costura `--guarded-fail`", "un fallo dentro de un bloque con guarda: tiene que contarse");
   }
   if (PARTE === PARTE_MUDA) await salir(0); // costura: este hijo no entrega
   console.log(`${MARCA_PARTE}${failures}`);
