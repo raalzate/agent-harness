@@ -2903,7 +2903,9 @@ for (const dir of [".claude/agents", ".claude/commands"]) {
   const iFuera = s.search(/^1[01]\. /m);
   const problemas = [
     costuras.status === 0 && "salió en verde",
-    !/SELF-TEST ROJO — 2 freno/.test(s) && "no contó los dos fallos (el forzado y la parte muda)",
+    // «Al menos 2», no «exactamente 2»: en un repo recién portado la parte `base` ya trae sus
+    // rojos de placeholders, y el número exacto sumaba un rojo falso al mapa (lo cazó el taller).
+    !(Number(s.match(/SELF-TEST ROJO — (\d+) freno/)?.[1] ?? 0) >= 2) && "no contó los dos fallos (el forzado y la parte muda)",
     !/✗ costura `--fail-part`/.test(s) && "no imprimió el ✗ que reportó el hijo",
     !/la parte `fuera` entregó su resultado/.test(s) && "la parte que no entregó no aparece nombrada",
     !(iBase !== -1 && iFuera !== -1 && iBase < iFuera) && "la salida no sigue el orden declarado (`base` antes que `fuera`)",
