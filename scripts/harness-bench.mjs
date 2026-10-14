@@ -305,6 +305,17 @@ const correr = (cmd, args, opts = {}) => {
   return { status: r.status, salida: `${r.stdout ?? ""}${r.stderr ?? ""}` };
 };
 
+/** `correr` sin bloquear: para lanzar a la vez lo que no depende entre sí. Nunca rechaza. */
+const correrAsync = (cmd, args, opts = {}) =>
+  new Promise((resolve) => {
+    const hijo = spawn(cmd, args, { ...opts, stdio: ["ignore", "pipe", "pipe"] });
+    let salida = "";
+    hijo.stdout.on("data", (d) => { salida += d; });
+    hijo.stderr.on("data", (d) => { salida += d; });
+    hijo.on("error", (e) => resolve({ status: null, salida: `${salida}${e.message}` }));
+    hijo.on("close", (status) => resolve({ status, salida }));
+  });
+
 const hook = (repo, archivo, payload) =>
   correr("node", [path.join(repo, ".claude/hooks", archivo)], { input: JSON.stringify(payload), cwd: repo });
 
@@ -498,7 +509,7 @@ function archivosDelDocumento(md) {
   return archivos;
 }
 
-function probarQuickStart() {
+async function probarQuickStart() {
   console.log(`\n── quick start ${"─".repeat(48)}`);
   const stack = "quickstart";
   const doc = path.join(ARNES, "docs/quickstart.md");
@@ -583,8 +594,20 @@ function probarQuickStart() {
       tool_input: { file_path: path.join(repo, "src/cli.mjs"), content: 'const t = JSON.parse(readFileSync("tareas.json"));' },
     }));
 
-    // El gate verde, y el rojo a propósito que el documento muestra al final.
-    const verde = correr("bash", [path.join(repo, "scripts/gate.sh")], { cwd: repo });
+    // El gate verde, y el rojo a propósito que el documento muestra al final. Son dos gates
+    // completos (~30s cada uno, casi todo el self-test anidado) y no dependen uno del otro, así
+    // que corren A LA VEZ, cada uno en su propia copia del repo: el rojo rompe la capa pura en
+    // la copia, y el verde no puede ver ese cambio. Sobre el MISMO repo sería una carrera —el
+    // verde leyendo el archivo roto, los dos escribiendo `.git/`— y un falso verde por carrera
+    // es peor que lento. Era el 39% del gate entero en serie (#32).
+    const repoRojo = path.join(base, "mi-todo-roto");
+    fs.cpSync(repo, repoRojo, { recursive: true });
+    const puro = path.join(repoRojo, "src/lib/puntaje.mjs");
+    fs.writeFileSync(puro, `import { readFileSync } from "node:fs";\n${fs.readFileSync(puro, "utf8")}`);
+    const [verde, rojo] = await Promise.all([
+      correrAsync("bash", [path.join(repo, "scripts/gate.sh")], { cwd: repo }),
+      correrAsync("bash", [path.join(repoRojo, "scripts/gate.sh")], { cwd: repoRojo }),
+    ]);
     registrar(
       stack,
       "el gate del quick start sale VERDE (self-test, link-check, lint y tests del ejemplo)",
@@ -592,13 +615,10 @@ function probarQuickStart() {
       [...verde.salida.split("\n").filter((l) => l.includes("✗")), ...verde.salida.split("\n").slice(-2)].join("\n").slice(0, 400),
     );
 
-    const puro = path.join(repo, "src/lib/puntaje.mjs");
-    fs.writeFileSync(puro, `import { readFileSync } from "node:fs";\n${fs.readFileSync(puro, "utf8")}`);
-    const rojo = correr("bash", [path.join(repo, "scripts/gate.sh")], { cwd: repo });
     const dice = /\[PUREZA\]/.test(rojo.salida) && /GATE ROJO/.test(rojo.salida);
     registrar(stack, "romper la capa pura pone el gate ROJO con archivo, línea y regla", rojo.status !== 0 && dice, rojo.salida.split("\n").slice(-4).join("\n"));
 
-    if (CONSERVAR) console.log(`   · repo conservado en ${repo}`);
+    if (CONSERVAR) console.log(`   · repos conservados en ${repo} (verde) y ${repoRojo} (capa pura rota)`);
   } finally {
     if (!CONSERVAR) fs.rmSync(base, { recursive: true, force: true });
   }
@@ -734,7 +754,7 @@ if (!SOLO && PARALELO > 1) {
     if (!PEDIDOS.includes(stack)) continue;
     probar(stack, fx);
   }
-  if (PEDIDOS.includes("quickstart")) probarQuickStart();
+  if (PEDIDOS.includes("quickstart")) await probarQuickStart();
 }
 
 // El hijo no resume: entrega. El resumen lo imprime el padre una sola vez.

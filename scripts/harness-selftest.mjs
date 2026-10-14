@@ -31,7 +31,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 // El mismo helper que usan el hook y el lint: comparar contra la lista DECLARADA dejaba pasar
 // justo el caso del incidente (el gate declara una extensión que el default agnóstico no tiene).
@@ -43,14 +43,94 @@ const config = JSON.parse(fs.readFileSync(abs(".claude/harness.config.json"), "u
 const settings = JSON.parse(fs.readFileSync(abs(".claude/settings.json"), "utf8"));
 const EN_CI = Boolean(process.env.CI);
 
-let failures = 0;
-const ok = (name) => console.log(`  ✓ ${name}`);
-const bad = (name, detail) => {
-  failures += 1;
-  console.error(`  ✗ ${name}\n      ${detail}`);
+// ── El self-test en abanico (#32) ────────────────────────────────────────────
+//
+// Casi todo el self-test es arrancar procesos (~70ms cada `node`), cientos, en serie: 70s con
+// un núcleo ocupado y nueve mirando. Las PARTES son grupos de casos que no comparten estado y
+// corren cada una en su propio proceso, a la vez. El padre no prueba nada: junta, e imprime
+// por bloques en el orden declarado acá — no en el orden en que terminan, o la salida cambia
+// entre corridas y no se puede leer en un diff de CI. Es el mismo contrato que el banco.
+//
+// El `grupo` es la frontera del estado compartido: las partes de un mismo grupo corren EN SERIE
+// en el mismo turno del pool. `estado` y `costo` tocan los marcadores de sesión de ESTE repo
+// (`gate.marker`, `askFirst.marker`, `loop.*`: los apartan, los fabrican, los restauran), y dos
+// procesos haciendo eso a la vez se pisan el respaldo — un falso verde, o peor, el marcador
+// real del desarrollador perdido. Todo caso que lea o escriba esos marcadores va en ese grupo;
+// el resto opera por stdin o en temporales propios.
+//
+//   node scripts/harness-selftest.mjs               abanico (por defecto, tantos como núcleos)
+//   node scripts/harness-selftest.mjs --parallel=1  todo en este proceso, en vivo (para depurar)
+//   node scripts/harness-selftest.mjs --part=<id>   una parte sola (lo que corre cada hijo)
+//   node scripts/harness-selftest.mjs --parts=a,b   el abanico, sólo con esas partes
+const PARTES = [
+  { id: "base", grupo: "base" }, //         §1–§2: hooks y scripts parsean, el config resuelve
+  { id: "frenos", grupo: "frenos" }, //     §3 sin estado: protected-paths, bash/deploy/reuse-guard
+  { id: "estado", grupo: "estado" }, //     §3 con los marcadores de sesión: Stop, ask-first, loop
+  { id: "registro", grupo: "registro" }, // §3f: commit-msg y ciclo XP, en repos git temporales
+  { id: "reglas", grupo: "reglas" }, //     §3g–§7: artefactos, link-check, lint, ruteo, gate, SDD
+  { id: "perfiles", grupo: "perfiles" }, // §8: perfiles y ejemplos instalados en temporales
+  { id: "costo", grupo: "estado" }, //      §9: mide hooks reales → mismo grupo que `estado`
+  { id: "fuera", grupo: "fuera" }, //       §10–§11: deriva, revisor, mapa, panel
+];
+const MARCA_PARTE = "__SELFTEST_PARTE__ ";
+const argValor = (nombre) => process.argv.find((a) => a.startsWith(`--${nombre}=`))?.slice(nombre.length + 3);
+const PARTE = argValor("part");
+const PARALELO = (() => {
+  const flag = argValor("parallel");
+  const n = flag !== undefined ? Number(flag) : (os.availableParallelism?.() ?? os.cpus().length);
+  return Number.isFinite(n) && n >= 1 ? Math.trunc(n) : 1;
+})();
+// Un nombre de parte que no existe es ROJO, no un self-test vacío en verde: el padre invoca a
+// los hijos por nombre, y ahí adentro un nombre mal escrito no lo vería nadie.
+if (PARTE !== undefined && !PARTES.some((p) => p.id === PARTE)) {
+  console.error(`SELF-TEST ROJO — no existe la parte \`${PARTE}\`. Partes: ${PARTES.map((p) => p.id).join(" ")}`);
+  process.exit(1);
+}
+const SERIE = PARTE === undefined && PARALELO === 1;
+// Dueño de lo que se imprime: los casos baratos y sin efectos (compilar un regex) corren en
+// cualquier proceso, pero sólo el dueño los reporta y los cuenta. Lo caro o con estado va
+// además detrás de `if (corre(…))`, para no correrlo de más ni a la vez.
+let parteActual = "base";
+/**
+ * ¿Este proceso corre los casos de la parte `id`? En serie, todas; en un hijo, sólo la suya.
+ * Y fija la dueña: un bloque que CORRE tiene que REPORTAR. Sin esto, un `bad()` dentro de
+ * `if (corre("frenos"))` escrito debajo de una sección de otra parte corría en el hijo `frenos`
+ * y `reporta()` lo descartaba sin contarlo — SELF-TEST VERDE con un caso rojo adentro (lo
+ * reprodujo el `reviewer`; lo prueba la costura `--guarded-fail`).
+ */
+const corre = (id) => {
+  parteActual = id;
+  return SERIE || PARTE === id;
 };
-const skip = (name, detail) => console.log(`  – ${name} (omitido: ${detail})`);
-const section = (title) => console.log(`\n${title}`);
+const enParte = corre;
+const reporta = () => SERIE || PARTE === parteActual;
+
+let failures = 0;
+let titulo = null; // el título de la sección se imprime con su primera línea (un hijo sólo ve parte)
+const emitir = (linea, error = false) => {
+  if (titulo !== null) {
+    console.log(`\n${titulo}`);
+    titulo = null;
+  }
+  // En un hijo todo va a stdout: dos pipes no se pueden volver a intercalar en orden.
+  if (error && !PARTE) console.error(linea);
+  else console.log(linea);
+};
+const ok = (name) => {
+  if (reporta()) emitir(`  ✓ ${name}`);
+};
+const bad = (name, detail) => {
+  if (!reporta()) return;
+  failures += 1;
+  emitir(`  ✗ ${name}\n      ${detail}`, true);
+};
+const skip = (name, detail) => {
+  if (reporta()) emitir(`  – ${name} (omitido: ${detail})`);
+};
+const section = (title) => {
+  if (SERIE) console.log(`\n${title}`);
+  else titulo = title;
+};
 
 /**
  * ¿Hay bash en esta máquina? Los hooks de git SON scripts de shell y está bien que lo sean:
@@ -196,7 +276,148 @@ const analizarComando = parseHookCommand;
 // acá había una copia sin la búsqueda de Windows (PATHEXT), la misma falla que tenían
 // `--verify-red` y el eval del revisor. Dos versiones de la misma pregunta son dos verdades.
 
+// ── El padre del abanico: lanza las partes, junta, imprime en orden ─────────
+//
+// Costuras para el propio self-test (sólo pueden poner el resultado MÁS rojo, nunca más verde):
+// `--mute-part=<id>` hace que ese hijo no entregue su resultado, y `--fail-part=<id>` le suma un
+// fallo. Son la única forma de ejercitar los caminos del padre que no se provocan a mano.
+// `--guarded-fail=<id>` mete un `bad()` dentro de un `if (corre(id))` mientras la dueña vigente es
+// OTRA parte: es el falso verde que el abanico tiene que impedir (un fallo que corre y no se cuenta).
+/**
+ * Temporales que el self-test dejó dentro del árbol de fuentes (P7). La raíz NO alcanza: los
+ * casos operan sobre `scripts/`, `plantillas/perfiles/` y `.claude/hooks/` por stdin, y un
+ * temporal ahí adentro es igual de dañino (un watcher lo ve aparecer y el build muere con un
+ * error que nadie puede reproducir).
+ */
+function residuosEnElArbol() {
+  const dondeBuscar = [".", "scripts", ".claude/hooks", config.profiles?.dir, config.examples?.dir].filter(Boolean);
+  const sospechosos = [];
+  for (const dir of dondeBuscar) {
+    let entradas = [];
+    try {
+      entradas = fs.readdirSync(abs(dir));
+    } catch {
+      continue;
+    }
+    for (const f of entradas) {
+      if (/selftest|cebo|tmp-|\.tmp$/.test(f)) sospechosos.push(dir === "." ? f : `${dir}/${f}`);
+    }
+  }
+  // `harness-selftest.mjs` es el script, no un residuo.
+  return { dondeBuscar, residuos: sospechosos.filter((f) => f !== "scripts/harness-selftest.mjs") };
+}
+
+/**
+ * Salir sin cortar lo último que se escribió: stdout a un pipe es asíncrono en macOS, y el
+ * padre (o el gate, que reenvía por pipe) leería una salida truncada justo en el veredicto.
+ */
+async function salir(code) {
+  await new Promise((r) => process.stdout.write("", r));
+  await new Promise((r) => process.stderr.write("", r));
+  process.exit(code);
+}
+
+const PARTE_MUDA = argValor("mute-part");
+const PARTE_FALLA = argValor("fail-part");
+const PARTE_GUARDA = argValor("guarded-fail");
+
+if (PARTE === undefined && !SERIE) {
+  const crudo = argValor("parts");
+  const pedidas = crudo === undefined ? PARTES.map((p) => p.id) : crudo.split(",").map((x) => x.trim()).filter(Boolean);
+  const malas = pedidas.filter((id) => !PARTES.some((p) => p.id === id));
+  if (!pedidas.length || malas.length) {
+    console.error(`SELF-TEST ROJO — ${malas.length ? `no existe la parte \`${malas[0]}\`` : "`--parts=` sin valor"}. Partes: ${PARTES.map((p) => p.id).join(" ")}`);
+    process.exit(1);
+  }
+  const partes = PARTES.filter((p) => pedidas.includes(p.id)); // orden declarado, no el pedido
+
+  const correrParte = (id) =>
+    new Promise((resolve) => {
+      const args = [fileURLToPath(import.meta.url), `--part=${id}`];
+      if (PARTE_MUDA) args.push(`--mute-part=${PARTE_MUDA}`);
+      if (PARTE_FALLA) args.push(`--fail-part=${PARTE_FALLA}`);
+      if (PARTE_GUARDA) args.push(`--guarded-fail=${PARTE_GUARDA}`);
+      const hijo = spawn(process.execPath, args, { stdio: ["ignore", "pipe", "pipe"] });
+      let out = "";
+      let err = "";
+      hijo.stdout.on("data", (d) => { out += d; });
+      hijo.stderr.on("data", (d) => { err += d; });
+      hijo.on("error", (e) => resolve({ id, code: null, out, err: `${err}${e.message}` }));
+      hijo.on("close", (code) => resolve({ id, code, out, err }));
+    });
+
+  // Un turno del pool por GRUPO: las partes de un grupo, una detrás de otra.
+  const grupos = [...new Set(partes.map((p) => p.grupo))].map((g) => partes.filter((p) => p.grupo === g));
+  const resultados = new Map();
+  let siguiente = 0;
+  const obrero = async () => {
+    while (siguiente < grupos.length) {
+      const grupo = grupos[siguiente];
+      siguiente += 1;
+      for (const p of grupo) resultados.set(p.id, await correrParte(p.id));
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(PARALELO, grupos.length) }, obrero));
+
+  let fallas = 0;
+  let ultimoTitulo = null;
+  const esTitulo = (l) => /^\d+[a-z]?\. /.test(l);
+  for (const p of partes) {
+    const r = resultados.get(p.id);
+    const lineas = r.out.split("\n");
+    const marca = lineas.find((l) => l.startsWith(MARCA_PARTE));
+    // Las partes de una misma sección (la 3 está repartida en cuatro) no repiten el título.
+    const visibles = lineas.filter((l) => !l.startsWith(MARCA_PARTE));
+    const salida = [];
+    for (let i = 0; i < visibles.length; i += 1) {
+      const l = visibles[i];
+      if (esTitulo(l)) {
+        if (l === ultimoTitulo) {
+          if (salida.at(-1) === "") salida.pop();
+          continue;
+        }
+        ultimoTitulo = l;
+      }
+      salida.push(l);
+    }
+    const texto = salida.join("\n").replace(/\n+$/, "");
+    if (texto) console.log(texto);
+    if (r.err.trim()) console.error(r.err.trim());
+
+    // Una parte que se murió sin entregar es ROJO: sin esto, un caso que revienta por una
+    // excepción del propio self-test desaparecería del total y el veredicto daría verde.
+    if (!marca) {
+      fallas += 1;
+      console.error(`  ✗ la parte \`${p.id}\` entregó su resultado\n      el proceso terminó con exit ${r.code} sin resultado`);
+      continue;
+    }
+    const n = Number(marca.slice(MARCA_PARTE.length));
+    fallas += Number.isFinite(n) ? n : 1;
+    // El exit code y el número tienen que contar la misma historia.
+    if (r.code !== 0 && !(n > 0)) {
+      fallas += 1;
+      console.error(`  ✗ la parte \`${p.id}\` terminó como dice\n      entregó 0 fallos pero el proceso salió con exit ${r.code}`);
+    }
+  }
+
+  // P7 con todas las partes terminadas: el 4f de `reglas` corrió con las demás todavía andando.
+  const { residuos } = residuosEnElArbol();
+  if (residuos.length) {
+    fallas += 1;
+    console.error(`  ✗ el self-test no dejó temporales (con todas las partes terminadas)\n      sobraron: ${residuos.join(", ")}`);
+  }
+
+  console.log("");
+  if (fallas) {
+    console.error(`SELF-TEST ROJO — ${fallas} freno(s) del arnés no hacen lo que dicen hacer.`);
+    await salir(1);
+  }
+  console.log(`SELF-TEST VERDE — cada regla del config tiene un comando que falla si se la viola. (${partes.length} parte(s), hasta ${Math.min(PARALELO, grupos.length)} a la vez)`);
+  await salir(0);
+}
+
 // ── 1. Hooks declarados vs. hooks que existen ────────────────────────────────
+enParte("base");
 section("1. settings.json → hooks declarados");
 const declared = [];
 for (const [event, groups] of Object.entries(settings.hooks ?? {})) {
@@ -211,7 +432,8 @@ for (const [event, groups] of Object.entries(settings.hooks ?? {})) {
 if (!declared.length) {
   bad("hay hooks declarados", "settings.json no declara ninguno: el arnés está instalado y muerto");
 }
-for (const d of declared) {
+// `hookFiles` (arriba) lo usan todas las partes y es barato; parsear cada hook, sólo la dueña.
+if (corre("base")) for (const d of declared) {
   if (!d.file) {
     bad(`${d.event} → ${d.command}`, "el hook no declara ningún comando");
     continue;
@@ -238,7 +460,7 @@ for (const d of declared) {
 //     backtick sin escapar dentro de un template literal. Nadie lo notó porque el
 //     instalador no corre en el gate — sólo lo corre quien porta el arnés, una vez.
 section("1b. scripts del arnés");
-{
+if (corre("base")) {
   const dir = abs("scripts");
   const scripts = fs.existsSync(dir) ? fs.readdirSync(dir).filter((f) => f.endsWith(".mjs")) : [];
   if (!scripts.length) bad("scripts/", "no hay scripts: el arnés no tiene con qué verificar nada");
@@ -389,7 +611,7 @@ if (!rutasMalas) ok(`${rutasDelConfig.filter(([, r]) => r).length} rutas del con
 section("3. los frenos muerden");
 
 // 3a. Rutas protegidas: una muestra por regla.
-for (const regla of config.protectedPaths ?? []) {
+if (enParte("frenos")) for (const regla of config.protectedPaths ?? []) {
   let muestra = sampleFromPattern(regla.pattern);
   if (!muestra) {
     skip(`protectedPaths \`${regla.pattern}\``, "el patrón no se puede reducir a un ejemplo; probalo a mano");
@@ -402,7 +624,7 @@ for (const regla of config.protectedPaths ?? []) {
 }
 
 // 3b. Un archivo cualquiera NO protegido tiene que pasar: un freno que bloquea todo se desactiva.
-{
+if (corre("frenos")) {
   const r = runHook("protected-paths.mjs", writeInput("archivo-normal-selftest.md"));
   if (r.status === 0) ok("protected-paths deja pasar un archivo normal");
   else bad("protected-paths deja pasar un archivo normal", `exit ${r.status}: el freno bloquea de más`);
@@ -412,7 +634,9 @@ for (const regla of config.protectedPaths ?? []) {
 //     el matcher era `Write|Edit|…` y un `replace_symbol_body` editaba `.env` sin que nadie lo
 //     viera. El nombre de la herramienta se deriva de `writeTools.pattern`, y se prueba también
 //     que el matcher de settings la deje llegar: un freno al que el evento no llega está muerto.
-{
+//     Es de la parte `estado`: `action-guard` LEE los marcadores de sesión, y la parte `estado`
+//     los fabrica a la vez — juntos en el mismo grupo, nunca se cruzan.
+if (enParte("estado")) {
   const wt = writeTools(config);
   const nombreMcp = nombresMcp().escritura ?? "";
   let reEscribe = null;
@@ -490,7 +714,7 @@ for (const regla of config.protectedPaths ?? []) {
 }
 
 // 3c. Comandos denegados: una muestra por regla.
-if (hookFiles.has("bash-guard.mjs")) {
+if (enParte("frenos") && hookFiles.has("bash-guard.mjs")) {
   for (const regla of config.bash?.deny ?? []) {
     const muestra = sampleFromPattern(regla.pattern);
     if (!muestra) {
@@ -578,7 +802,7 @@ if (hookFiles.has("bash-guard.mjs")) {
 //     sobre el punto de entrada dependen de `targets`, que este repo deja vacío: se prueban con
 //     el hook COPIADO a un repo temporal con un config cebo, porque `REPO_ROOT` sale de la
 //     ubicación del hook y así nada se escribe en el árbol (P7).
-if (config.deploy && hookFiles.has("deploy-guard.mjs")) {
+if (corre("frenos") && config.deploy && hookFiles.has("deploy-guard.mjs")) {
   const spec = config.deploy;
   const bash = (command) => ({ hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command } });
   const decision = (r) => {
@@ -695,7 +919,7 @@ if (config.deploy && hookFiles.has("deploy-guard.mjs")) {
 //     repo donde VIVE (no acepta `--config`: era un agujero, ver deploy-guard), así que se copia
 //     con `harness.mjs` a un repo git temporal con un `origin` bare y un config cebo COMMITEADO.
 //     El «despliegue» del destino cebo es escribir un archivo testigo dentro de `.git/`.
-{
+if (corre("frenos")) {
   const script = abs("scripts/deploy.mjs");
   if (!fs.existsSync(script)) skip("deploy: el script", "el repo no trae scripts/deploy.mjs");
   else {
@@ -798,7 +1022,7 @@ if (config.deploy && hookFiles.has("deploy-guard.mjs")) {
 }
 
 // 3d. Catálogo de reuso: el boilerplate que ya tiene abstracción se frena.
-if (hookFiles.has("reuse-guard.mjs")) {
+if (corre("frenos") && hookFiles.has("reuse-guard.mjs")) {
   for (const regla of config.reuse ?? []) {
     const muestraRuta = sampleFromPattern(regla.appliesTo);
     const muestraTexto = sampleFromPattern(regla.pattern);
@@ -820,7 +1044,11 @@ if (hookFiles.has("reuse-guard.mjs")) {
  * los casos de `ask-first` le borraban la escalada real: medir no puede cambiar la sesión.
  */
 // `rutaDeEstado`: en un worktree `.git` es un archivo, y `abs(".git/x")` reventaba con ENOTDIR.
-const estadoLoop = [config.loop?.marker, config.loop?.ledger].filter(Boolean).map((rel) => {
+//
+// SÓLO en el proceso de la parte `estado`: apartar es leer-borrar-reescribir, y si cada hijo del
+// abanico lo hiciera a la vez, el segundo respaldaría el «vacío» que dejó el primero y al
+// devolverlo BORRARÍA la escalada real.
+const estadoLoop = (enParte("estado") ? [config.loop?.marker, config.loop?.ledger] : []).filter(Boolean).map((rel) => {
   const f = rutaDeEstado(rel);
   const contenido = fs.existsSync(f) ? fs.readFileSync(f) : null;
   fs.rmSync(f, { force: true });
@@ -839,7 +1067,7 @@ const devolverEstadoLoop = () => {
 process.on("exit", devolverEstadoLoop);
 
 // 3e. El hook Stop no deja cerrar con el gate pendiente.
-if (hookFiles.has("gate-stop.mjs") && config.gate?.marker) {
+if (corre("estado") && hookFiles.has("gate-stop.mjs") && config.gate?.marker) {
   const marker = rutaDeEstado(config.gate.marker);
   const existia = fs.existsSync(marker);
   try {
@@ -861,7 +1089,7 @@ if (hookFiles.has("gate-stop.mjs") && config.gate?.marker) {
 //     devuelve una opinión al agente principal, que la toma por aprobación. Se prueba en las dos
 //     direcciones con muestras derivadas de `mustMatch`, y que el agente del contrato EXISTA:
 //     un contrato para un agente que no está es un freno que nunca corre.
-if (hookFiles.has("subagent-contract.mjs")) {
+if (corre("estado") && hookFiles.has("subagent-contract.mjs")) {
   const contratos = Object.entries(config.subagentOutput?.contracts ?? {});
   if (!contratos.length) skip("contrato de salida de subagentes", "`subagentOutput.contracts` está vacío");
   const evento = (agente, mensaje, extra = {}) =>
@@ -912,7 +1140,7 @@ if (hookFiles.has("subagent-contract.mjs")) {
 // 3e-bis. «Una pregunta se contesta; una acción se pide». El clasificador de intención es
 //     lo único que separa a este freno de un estorbo, así que se prueba en las dos
 //     direcciones con pedidos REALES, no con muestras derivadas de sus propios patrones.
-if (config.askFirst?.marker && hookFiles.has("ask-first.mjs") && hookFiles.has("action-guard.mjs")) {
+if (corre("estado") && config.askFirst?.marker && hookFiles.has("ask-first.mjs") && hookFiles.has("action-guard.mjs")) {
   const marker = rutaDeEstado(config.askFirst.marker);
   const existia = fs.existsSync(marker);
   const respaldo = existia ? fs.readFileSync(marker, "utf8") : null;
@@ -973,7 +1201,8 @@ devolverEstadoLoop();
 //     copiados de verdad, porque lo que importa es la cadena entera: el gate deja el marcador,
 //     `action-guard` frena, `gate-stop` deja cerrar y el pedido del humano repone. Un eslabón
 //     que no lee la clave que el otro escribe es un freno instalado y muerto.
-if (config.loop && fs.existsSync(abs("scripts/gate.mjs")) && ["action-guard.mjs", "ask-first.mjs", "gate-stop.mjs"].every((h) => hookFiles.has(h))) {
+//     Todo en su temporal (hooks y gate copiados): no toca la sesión, así que va con `registro`.
+if (enParte("registro") && config.loop && fs.existsSync(abs("scripts/gate.mjs")) && ["action-guard.mjs", "ask-first.mjs", "gate-stop.mjs"].every((h) => hookFiles.has(h))) {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "harness-loop-"));
   try {
     fs.mkdirSync(path.join(tmp, "scripts"), { recursive: true });
@@ -1088,7 +1317,11 @@ if (config.loop && fs.existsSync(abs("scripts/gate.mjs")) && ["action-guard.mjs"
 //     escribir, no salirse de lo planificado, y que «terminado» lo demuestre el arnés corriendo
 //     la evidencia, no el agente diciéndolo. Repo git temporal con el script y los hooks
 //     copiados: lo que importa es la cadena (el script escribe la tarea, el hook la lee).
-if (config.task?.file && !fs.existsSync(abs("scripts/task.mjs"))) {
+//     En su temporal: no toca la sesión de este repo → parte `registro`.
+enParte("registro");
+if (!corre("registro")) {
+  /* otra parte */
+} else if (config.task?.file && !fs.existsSync(abs("scripts/task.mjs"))) {
   bad("tarea declarada", "el config declara `task` y no existe scripts/task.mjs: freno instalado y muerto");
 } else if (config.task?.file && fs.existsSync(abs("scripts/task.mjs")) && hookFiles.has("protected-paths.mjs")) {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "harness-tarea-"));
@@ -1243,7 +1476,10 @@ function tareaActivaEn(raiz, rel) {
 
 // 3e-ter. El trabajo entra a las ramas protegidas por PR. Se prueba con la entrada que git
 //     le pasa de verdad al hook: «<ref local> <sha> <ref remoto> <sha>».
-if ((config.branches?.protected ?? []).length && fs.existsSync(abs(".githooks/pre-push")) && !HAY_BASH) {
+enParte("registro");
+if (!corre("registro")) {
+  /* otra parte */
+} else if ((config.branches?.protected ?? []).length && fs.existsSync(abs(".githooks/pre-push")) && !HAY_BASH) {
   skip("pre-push frena el empujón directo", "no hay bash en esta máquina (en Windows lo trae Git for Windows)");
 } else if ((config.branches?.protected ?? []).length && fs.existsSync(abs(".githooks/pre-push"))) {
   const empujar = (rama) =>
@@ -1265,7 +1501,7 @@ if ((config.branches?.protected ?? []).length && fs.existsSync(abs(".githooks/pr
 // 3e-quater. Qué cuenta como CÓDIGO sale del config, no del hook. Las extensiones estaban
 //     cableadas en `post-edit-check.mjs` y por eso el freno de mayor retorno estaba MUERTO
 //     en todo repo que no fuera JS/TS: un `.cs` editado no marcaba el gate ni corría el lint.
-if (hookFiles.has("post-edit-check.mjs") && config.gate?.marker && (config.gate?.codeGlobs ?? []).length) {
+if (enParte("estado") && hookFiles.has("post-edit-check.mjs") && config.gate?.marker && (config.gate?.codeGlobs ?? []).length) {
   const marker = rutaDeEstado(config.gate.marker);
   const existia = fs.existsSync(marker);
   const respaldo = existia ? fs.readFileSync(marker, "utf8") : null;
@@ -1322,8 +1558,8 @@ if (hookFiles.has("post-edit-check.mjs") && config.gate?.marker && (config.gate?
 //     es el código que más se ejecuta en el mundo real — y era la rama donde vivía el bug.
 //     Se prueba en un repo TEMPORAL: el hook resuelve su raíz desde su propia ruta, así que
 //     copiarlo a /tmp con otro config es la única forma de ejercitar otra configuración sin
-//     escribir en el árbol de fuentes (P7).
-if (hookFiles.has("post-edit-check.mjs")) {
+//     escribir en el árbol de fuentes (P7). En su temporal: no toca la sesión → `frenos`.
+if (enParte("frenos") && hookFiles.has("post-edit-check.mjs")) {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "harness-default-ext-"));
   try {
     fs.mkdirSync(path.join(tmp, ".claude/hooks"), { recursive: true });
@@ -1373,7 +1609,7 @@ if (hookFiles.has("post-edit-check.mjs")) {
 //     hook resuelve siempre, esa ruta cae fuera de la raíz y los frenos se apagan **hacia
 //     abajo**: se puede escribir en dependencias y derivados en silencio. Es la dirección que
 //     nadie nota, así que es la que necesita el caso.
-if (hookFiles.has("protected-paths.mjs")) {
+if (corre("frenos") && hookFiles.has("protected-paths.mjs")) {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "harness-symlink-"));
   try {
     const repo = path.join(tmp, "repo");
@@ -1508,7 +1744,7 @@ const huerfanasDe = (cfg) => {
 //     El hook lee `git diff --cached`, así que probarlo con payloads falsos no probaría
 //     nada. Los casos se derivan del config: la ruta de código sale de `commitMsg.codePattern`
 //     y la referencia de ejemplo, de `tracker.issuePattern`.
-{
+if (enParte("registro")) {
   const hook = abs(".githooks/commit-msg");
   const cm = config.commitMsg;
   const tr = config.tracker;
@@ -1579,7 +1815,7 @@ const huerfanasDe = (cfg) => {
 //     El freno entra por `node scripts/cycle-check.mjs`, así que estos casos NO necesitan
 //     bash: corren igual en Windows, que es donde un freno de sólo-shell no falla sino que
 //     desaparece. Las muestras salen del config: el self-test no sabe qué modelo usa el repo.
-{
+if (corre("registro")) {
   const script = abs("scripts/cycle-check.mjs");
   const wf = config.workflow ?? {};
   const reglasXp = config.xp ?? {};
@@ -1739,7 +1975,7 @@ const huerfanasDe = (cfg) => {
 //     (roja sobre la base → pasa), una donde la prueba es un espejo (verde sobre la base →
 //     bloquea), la fuga declarada y la rama sin cambio de producción. El mecanismo es el mismo
 //     en cualquier stack; lo que cambia por repo es `command`, y eso es config.
-{
+if (corre("registro")) {
   const script = abs("scripts/cycle-check.mjs");
   if (!fs.existsSync(script)) {
     skip("ciclo: rojo sin el cambio", "el repo no trae scripts/cycle-check.mjs");
@@ -1818,7 +2054,7 @@ const huerfanasDe = (cfg) => {
 //     la avanza OTRO clon: así el `origin/main` local queda viejo y el caso sólo pasa si el freno
 //     hace `fetch` antes de medir — medir contra refs viejas es el error que el freno existe para
 //     cazar. El config del cebo trae sólo `sync`, para que nombre y edad no tapen el veredicto.
-{
+if (corre("registro")) {
   const script = abs("scripts/cycle-check.mjs");
   const sync = config.workflow?.sync;
   if (!fs.existsSync(script)) {
@@ -1920,7 +2156,7 @@ const huerfanasDe = (cfg) => {
 // 3f-quater. Los frenos propios del repo sobre el commit entero (`preCommit.extra`) corren
 //     desde el pre-commit genérico y un exit distinto de 0 aborta el commit. Se prueba en un
 //     repo git DE VERDAD con un config mínimo: lint que pasa y una entrada extra por caso.
-{
+if (corre("registro")) {
   const hook = abs(".githooks/pre-commit");
   if (!fs.existsSync(hook)) {
     skip("pre-commit corre preCommit.extra", "no hay .githooks/pre-commit");
@@ -1970,7 +2206,7 @@ const huerfanasDe = (cfg) => {
 
 // 3g. Los artefactos de trabajo, donde el equipo decidió. Se prueba con un CEBO en un
 //     directorio temporal: `--dir` existe justamente para no escribir en el repo.
-if (config.tracker?.artifactsIn === "tracker" && fs.existsSync(abs("scripts/artifacts-check.mjs"))) {
+if (enParte("reglas") && config.tracker?.artifactsIn === "tracker" && fs.existsSync(abs("scripts/artifacts-check.mjs"))) {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "harness-artifacts-"));
   try {
     const dir = path.join(tmp, config.tracker.specsDir ?? "specs");
@@ -1987,7 +2223,7 @@ if (config.tracker?.artifactsIn === "tracker" && fs.existsSync(abs("scripts/arti
 // 3g-bis. Un índice de documentación al que le falta un documento es rojo. El cebo es un
 //     CONFIG temporal cuyo índice apunta a un archivo que no enlaza nada: no se escribe
 //     en el árbol.
-if ((config.docs?.mustLinkAll ?? []).length) {
+if (corre("reglas") && (config.docs?.mustLinkAll ?? []).length) {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "harness-indice-"));
   try {
     const cebo = JSON.parse(JSON.stringify(config));
@@ -2009,7 +2245,7 @@ if ((config.docs?.mustLinkAll ?? []).length) {
 
 // 3h. Un documento que enumera las señales del gate y se queda corto es rojo. El cebo es
 //     un CONFIG temporal que declara un doc que no las nombra: no se escribe en el árbol.
-if ((config.docs?.mentionSignals ?? []).length && (config.gate?.signals ?? []).length) {
+if (corre("reglas") && (config.docs?.mentionSignals ?? []).length && (config.gate?.signals ?? []).length) {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "harness-docsync-"));
   try {
     const cebo = JSON.parse(JSON.stringify(config));
@@ -2031,8 +2267,8 @@ if ((config.docs?.mentionSignals ?? []).length && (config.gate?.signals ?? []).l
 // 3i. El link-check no revisa lo que git IGNORA. Es la misma asimetría que ese script existe
 //     para evitar, al revés: un rojo que CI nunca ve, sobre un archivo que no está en el repo.
 //     El cebo va en un directorio derivado (gitignored) para no escribir en el árbol de fuentes.
-{
-  const derivado = ["coverage", "dist", "build", "out"].find((d) => {
+if (corre("reglas")) {
+  const derivado =["coverage", "dist", "build", "out"].find((d) => {
     const r = spawnSync("git", ["check-ignore", "-q", "--", `${d}/`], { cwd: REPO_ROOT });
     return r.status === 0;
   });
@@ -2049,6 +2285,31 @@ if ((config.docs?.mentionSignals ?? []).length && (config.gate?.signals ?? []).l
       const r = spawnSync("node", [abs("scripts/docs-linkcheck.mjs")], { cwd: REPO_ROOT, encoding: "utf8" });
       if (r.status === 0) ok(`link-check no revisa \`${derivado}/\` (git lo ignora)`);
       else bad("link-check ignora lo que git ignora", `salió rojo por un archivo gitignored: ${(r.stdout ?? "").trim().split("\n")[0]}`);
+      // …y el otro lado: CITAR ese archivo es rojo, aunque esté en el disco (el clon no lo tiene).
+      // Lo ignorado se pregunta una vez para todo el árbol (`ls-files --directory`): el archivo
+      // vive DENTRO de un directorio ignorado, que es justo el caso que colapsa en una línea.
+      const cita = spawnSync("node", [abs("scripts/docs-linkcheck.mjs"), "--file", "docs/cebo.md", "--stdin"], { // linkcheck:ignore — ruta virtual del cebo
+        cwd: REPO_ROOT,
+        encoding: "utf8",
+        input: `Ver [el cebo](../${derivado}/puntero-selftest.md).\n`, // linkcheck:ignore — apunta a lo ignorado a propósito
+      });
+      if (cita.status !== 0 && /gitignored/.test(cita.stderr ?? "")) ok(`link-check es rojo al citar un archivo dentro de \`${derivado}/\` (existe en disco, no en el clon)`);
+      else bad("link-check caza la cita a un archivo gitignored", `exit ${cita.status}: ${(cita.stderr || cita.stdout || "").trim().split("\n")[0]}`);
+      // …también con OTRA capitalización. En un disco que no distingue mayúsculas (macOS, Windows)
+      // `Dist/` existe, y comparar contra el conjunto de `ls-files` con `Set.has` la daba por
+      // versionada: verde acá, rojo en el Linux de CI. Sólo tiene sentido donde el disco no distingue.
+      const otraCapitalizacion = derivado[0].toUpperCase() + derivado.slice(1);
+      if (!fs.existsSync(path.join(REPO_ROOT, otraCapitalizacion, "puntero-selftest.md"))) {
+        skip("link-check con otra capitalización", "este disco distingue mayúsculas: la cita no existe y sale «falta» sola");
+      } else {
+        const mayus = spawnSync("node", [abs("scripts/docs-linkcheck.mjs"), "--file", path.join("docs", "cebo.md"), "--stdin"], {
+          cwd: REPO_ROOT,
+          encoding: "utf8",
+          input: `Ver [el cebo](${["..", otraCapitalizacion, "puntero-selftest.md"].join("/")}).\n`,
+        });
+        if (mayus.status !== 0) ok(`link-check es rojo al citar \`${otraCapitalizacion}/\` con otra capitalización (el disco no distingue, CI sí)`);
+        else bad("link-check caza la cita a lo ignorado con otra capitalización", "salió verde: verde en macOS/Windows, rojo en el Linux de CI");
+      }
     } finally {
       fs.rmSync(cebo, { force: true });
       if (!existia) fs.rmSync(dir, { recursive: true, force: true });
@@ -2057,6 +2318,9 @@ if ((config.docs?.mentionSignals ?? []).length && (config.gate?.signals ?? []).l
 }
 
 // ── 4. Las reglas del lint muerden (por stdin: no escribe archivos) ──────────
+// §4–§7 son una sola parte (`reglas`): el bloque que abre acá cierra antes de §8. Sin sangría
+// extra a propósito: el diff de meterlas en el abanico es una línea, no trescientas.
+if (enParte("reglas")) {
 section("4. reglas del lint");
 
 /** Corre el lint contra una ruta virtual con contenido por stdin. */
@@ -2353,26 +2617,11 @@ if (config.profiles?.dir) {
   }
 }
 
-// 4f. El arnés no escribe temporales dentro del árbol de fuentes.
+// 4f. El arnés no escribe temporales dentro del árbol de fuentes. En el abanico esto corre
+//     mientras las otras partes siguen trabajando, así que el padre lo repite al final, con
+//     todas terminadas: es la única pasada que ve lo que dejó CUALQUIER parte (P7).
 {
-  // La raíz NO alcanza: los casos nuevos operan sobre `scripts/`, `plantillas/perfiles/` y
-  // `.claude/hooks/` por stdin, y un temporal ahí adentro es igual de dañino (un watcher lo
-  // ve aparecer y el build muere con un error que nadie puede reproducir).
-  const dondeBuscar = [".", "scripts", ".claude/hooks", config.profiles?.dir, config.examples?.dir].filter(Boolean);
-  const sospechosos = [];
-  for (const dir of dondeBuscar) {
-    let entradas = [];
-    try {
-      entradas = fs.readdirSync(abs(dir));
-    } catch {
-      continue;
-    }
-    for (const f of entradas) {
-      if (/selftest|cebo|tmp-|\.tmp$/.test(f)) sospechosos.push(dir === "." ? f : `${dir}/${f}`);
-    }
-  }
-  // `harness-selftest.mjs` es el script, no un residuo.
-  const residuos = sospechosos.filter((f) => f !== "scripts/harness-selftest.mjs");
+  const { dondeBuscar, residuos } = residuosEnElArbol();
   if (!residuos.length) ok(`el self-test no dejó temporales (${dondeBuscar.length} directorios revisados)`);
   else bad("el self-test no dejó temporales", `sobraron: ${residuos.join(", ")}`);
 }
@@ -2555,6 +2804,49 @@ for (const dir of [".claude/agents", ".claude/commands"]) {
   }
 }
 
+// 6c. Este mismo self-test corre en abanico (#32): las mismas tres maneras de reportar VERDE sin
+//     haber probado nada que el banco, más una cuarta — la salida en otro orden que el declarado,
+//     que no se puede leer en un diff de CI. La corrida cara pide DOS partes al revés (`fuera`
+//     antes que `base`) y les pone las dos costuras: `base` suma un fallo forzado y `fuera` no
+//     entrega. El padre tiene que contar los dos, imprimir el ✗ del hijo y respetar el orden
+//     declarado. Ninguna de las dos partes es `reglas`, que es donde vive este caso: pedirla
+//     acá sería un self-test que se llama a sí mismo para siempre.
+{
+  const yo = fileURLToPath(import.meta.url);
+  const correrYo = (...args) => {
+    const r = spawnSync(process.execPath, [yo, ...args], { cwd: REPO_ROOT, encoding: "utf8" });
+    return { status: r.status, salida: `${r.stdout ?? ""}${r.stderr ?? ""}` };
+  };
+
+  const inexistente = correrYo("--part=no-existe-esta-parte");
+  if (inexistente.status !== 0 && /no existe la parte/.test(inexistente.salida)) ok("el self-test es ROJO con una parte que no existe (no verde vacío)");
+  else bad("el self-test es ROJO con una parte que no existe", `exit ${inexistente.status}: un nombre mal escrito daría un hijo sin casos y en verde`);
+
+  const vacio = correrYo("--parts=");
+  if (vacio.status !== 0 && /sin valor/.test(vacio.salida)) ok("el self-test es ROJO con `--parts=` sin valor");
+  else bad("el self-test es ROJO con `--parts=` sin valor", `exit ${vacio.status}: pedir partes y no nombrar ninguna corrió otra cosa`);
+
+  const costuras = correrYo("--parts=fuera,base", "--parallel=2", "--fail-part=base", "--mute-part=fuera");
+  const s = costuras.salida;
+  const iBase = s.indexOf("1. settings.json");
+  const iFuera = s.search(/^1[01]\. /m);
+  const problemas = [
+    costuras.status === 0 && "salió en verde",
+    !/SELF-TEST ROJO — 2 freno/.test(s) && "no contó los dos fallos (el forzado y la parte muda)",
+    !/✗ costura `--fail-part`/.test(s) && "no imprimió el ✗ que reportó el hijo",
+    !/la parte `fuera` entregó su resultado/.test(s) && "la parte que no entregó no aparece nombrada",
+    !(iBase !== -1 && iFuera !== -1 && iBase < iFuera) && "la salida no sigue el orden declarado (`base` antes que `fuera`)",
+  ].filter(Boolean);
+  if (!problemas.length) ok("el abanico del self-test: una parte roja o muda es ROJO con su nombre, y la salida sale en el orden declarado");
+  else bad("el abanico del self-test reporta lo que pasó", `${problemas.join(" · ")} (exit ${costuras.status})`);
+
+  // Un `bad()` dentro de `if (corre(x))` corre en el hijo `x`, pero si la dueña vigente era otra
+  // parte, `reporta()` lo descartaba sin contarlo: SELF-TEST VERDE con un caso rojo adentro.
+  const guarda = correrYo("--parts=base", "--parallel=2", "--guarded-fail=base");
+  if (guarda.status !== 0 && /costura `--guarded-fail`/.test(guarda.salida)) ok("un fallo dentro de un bloque con guarda de otra parte se cuenta (no hay falso verde)");
+  else bad("un fallo dentro de un bloque con guarda se cuenta", `exit ${guarda.status}: el abanico descartó un caso rojo que sí corrió`);
+}
+
 // ── 7. Kit SDD declarado ─────────────────────────────────────────────────────
 section("7. kit SDD");
 const fases = config.sdd?.phases ?? [];
@@ -2576,12 +2868,13 @@ if (puntero && !fs.existsSync(abs(puntero))) {
 } else if (puntero) {
   ok(`puntero de feature activa \`${puntero}\``);
 }
+} // fin de la parte `reglas` (§4–§7)
 
 // ── 8. Perfiles de stack: el portado a un repo que no es de este lenguaje ────
 //    El instalador viajó roto dos releases porque nadie lo corría; un perfil que no se
 //    puede fusionar o que se lleva puestas las señales del gate rompe el portado igual.
 section("8. perfiles y ejemplos por stack");
-{
+if (enParte("perfiles")) {
   const dirPerfiles = config.profiles?.dir;
   const init = abs("scripts/harness-init.mjs");
   if (!dirPerfiles || !fs.existsSync(init)) {
@@ -2679,7 +2972,7 @@ section("8. perfiles y ejemplos por stack");
 //     eslabón activador que nunca corre — el anti-patrón que este arnés existe para evitar,
 //     cometido por el propio instalador (viajaron `ask-first`, `action-guard` y `pre-push` con la
 //     plantilla sin `askFirst` ni `branches`).
-{
+if (corre("perfiles")) {
   const activadores = config.install?.activators ?? {};
   const init = abs("scripts/harness-init.mjs");
   if (!Object.keys(activadores).length) {
@@ -2717,7 +3010,7 @@ section("8. perfiles y ejemplos por stack");
 //     script roto, y nadie las corría. Lo verificable sin el repo destino: que parseen, que
 //     sus regex compilen, que cada señal declare su `why` y que un manifiesto que NO es
 //     clave-valor traiga su `matcher` (sin eso, DEPS sale verde con la dependencia puesta).
-if (config.examples?.dir) {
+if (corre("perfiles") && config.examples?.dir) {
   const dirEjemplos = config.examples.dir.replace(/\/$/, "");
   // Qué manifiestos entiende el `matcher` por default sale del CONFIG: es una lista de
   // literales de formato, o sea exactamente lo que no va cableado en un script (P4).
@@ -2978,7 +3271,7 @@ if (config.examples?.dir) {
 //    escribe a mano (P2). Los cebos van por `--config` a un temporal FUERA del repo: medir
 //    no puede escribir en el árbol de fuentes (P7).
 section("9. costo del arnés (hooks-timing)");
-{
+if (enParte("costo")) {
   const script = abs("scripts/hooks-timing.mjs");
   if (!fs.existsSync(script)) {
     bad("scripts/hooks-timing.mjs", "no existe: el costo del arnés vuelve a ser una intuición");
@@ -2991,7 +3284,10 @@ section("9. costo del arnés (hooks-timing)");
       fs.writeFileSync(
         ruta,
         JSON.stringify(
-          { gate: { marker: config.gate?.marker }, askFirst: { marker: config.askFirst?.marker }, observability },
+          // `loop` también: `ask-first` (que se mide corriéndolo de verdad) repone el presupuesto
+          // borrando su marcador y su libro, y sin la clave en el cebo nadie los respaldaba — medir
+          // le borraba al desarrollador la escalada real (lo destapó el `reviewer` en #32).
+          { gate: { marker: config.gate?.marker }, askFirst: { marker: config.askFirst?.marker }, loop: config.loop, observability },
           null,
           2,
         ),
@@ -3039,11 +3335,25 @@ section("9. costo del arnés (hooks-timing)");
     // medición bloquea el turno siguiente sin que nadie entienda por qué.
     const marcadores = [config.gate?.marker, config.askFirst?.marker].filter(Boolean).map(rutaDeEstado);
     const antes = marcadores.map((f) => fs.existsSync(f));
+    // Los del ciclo acotado se SIEMBRAN con un contenido conocido: el hook que los borra corre
+    // siempre, así que comparar sólo «existía / existe» con el repo limpio no veía nada.
+    const sembrados = [config.loop?.marker, config.loop?.ledger].filter(Boolean).map((rel) => {
+      const ruta = rutaDeEstado(rel);
+      const real = fs.existsSync(ruta) ? fs.readFileSync(ruta) : null;
+      fs.mkdirSync(path.dirname(ruta), { recursive: true });
+      fs.writeFileSync(ruta, `selftest-sembrado ${rel}\n`);
+      return { rel, ruta, real };
+    });
     correr(escribirCebo("estado.json", { budgetMs: 60000, runs: 1, probe }));
     const despues = marcadores.map((f) => fs.existsSync(f));
-    if (JSON.stringify(antes) === JSON.stringify(despues))
-      ok("medir no deja marcadores de sesión fabricados (el estado se restaura)");
-    else bad("medir no cambia el estado de la sesión", `marcadores antes=${antes} después=${despues}`);
+    const perdidos = sembrados.filter(({ rel, ruta }) => !fs.existsSync(ruta) || fs.readFileSync(ruta, "utf8") !== `selftest-sembrado ${rel}\n`);
+    for (const { ruta, real } of sembrados) {
+      if (real === null) fs.rmSync(ruta, { force: true });
+      else fs.writeFileSync(ruta, real);
+    }
+    if (JSON.stringify(antes) === JSON.stringify(despues) && !perdidos.length)
+      ok("medir no deja marcadores de sesión fabricados ni borra los del ciclo acotado (el estado se restaura)");
+    else bad("medir no cambia el estado de la sesión", `marcadores antes=${antes} después=${despues}; del ciclo acotado alterados: ${perdidos.map((p) => p.rel).join(", ") || "ninguno"}`);
 
     // Un equipo que sólo quiere acotar el hook caro declara `budgets` y ningún `budgetMs`. Con el
     // 0 de default, TODOS los demás hooks salían rojos contra un presupuesto imposible: el freno
@@ -3150,7 +3460,7 @@ section("10. controles fuera del gate (deriva, revisor e investigador de CI)");
 // 10a. La deriva. Un repo git temporal con un cebo propio: un STATUS viejo es rojo, uno de hoy
 //      pasa, uno sin fecha es rojo, y de dos reglas de contenido sólo la que nunca casó en el
 //      historial sale como aviso. Corre con `cwd` en el repo temporal: nada toca este árbol (P7).
-{
+if (enParte("fuera")) {
   const script = abs("scripts/drift-check.mjs");
   if (!fs.existsSync(script)) {
     skip("deriva", "el repo no trae scripts/drift-check.mjs");
@@ -3224,7 +3534,7 @@ section("10. controles fuera del gate (deriva, revisor e investigador de CI)");
 //      desde el self-test (caro, no determinista, sin red en CI), así que se prueba la
 //      MÁQUINA del eval con revisores de mentira: uno que acierta pasa, uno que aprueba todo
 //      queda bajo el umbral, y un comando que no existe sale OMITIDO — nunca verde.
-{
+if (corre("fuera")) {
   const script = abs("scripts/reviewer-eval.mjs");
   if (!fs.existsSync(script)) {
     skip("prueba de vida del revisor", "el repo no trae scripts/reviewer-eval.mjs");
@@ -3317,7 +3627,7 @@ section("10. controles fuera del gate (deriva, revisor e investigador de CI)");
 //      Muerde (un fallo → exit 1 con el job, la línea y el cruce con el gate local), no muerde de
 //      más (una corrida verde → exit 0 sin log), y un CLI ausente o sin credenciales es OMITIDO,
 //      nunca verde. Corre con `cwd` en un temporal: nada toca este árbol (P7).
-{
+if (corre("fuera")) {
   const script = abs("scripts/ci-investigate.mjs");
   if (!fs.existsSync(script)) {
     bad("investigador de CI", "no existe scripts/ci-investigate.mjs: el fallo remoto sólo lo puede contar el agente de memoria");
@@ -3439,7 +3749,7 @@ section("10. controles fuera del gate (deriva, revisor e investigador de CI)");
 // 10c. El mapa del arnés. Con el config real: completo, y cada hook declarado aparece en él.
 //      Con un cebo de settings que agrega un evento que la taxonomía no conoce: rojo, porque
 //      un control que nadie ubicó en el mapa es uno del que nadie sabe qué cubre.
-{
+if (corre("fuera")) {
   const script = abs("scripts/harness-map.mjs");
   if (!fs.existsSync(script) || !config.taxonomy) {
     skip("mapa del arnés", "el repo no trae scripts/harness-map.mjs o no declara `taxonomy`");
@@ -3470,7 +3780,7 @@ section("10. controles fuera del gate (deriva, revisor e investigador de CI)");
 // verde sobre un arnés con piezas muertas, es peor que no tenerlo — se le cree. Todo corre en
 // directorios temporales FUERA del repo (P7) y la memoria se prueba sin la capa en vivo.
 section("11. el panel del arnés");
-{
+if (corre("fuera")) {
   const dirPanel = abs("scripts/panel");
   if (!fs.existsSync(path.join(dirPanel, "generar.mjs"))) {
     skip("panel", "el repo no trae scripts/panel/");
@@ -3889,6 +4199,22 @@ section("11. el panel del arnés");
 }
 
 // ── Veredicto ────────────────────────────────────────────────────────────────
+// Un hijo no resume: entrega su número de fallos. El veredicto lo da el padre, una sola vez.
+if (PARTE !== undefined) {
+  if (PARTE === PARTE_FALLA) {
+    parteActual = PARTE;
+    titulo = null; // el fallo forzado no es de la última sección que pasó por acá
+    bad("costura `--fail-part`", "fallo forzado: el padre tiene que reportarlo y salir en ROJO");
+  }
+  if (PARTE === PARTE_GUARDA) {
+    parteActual = PARTES.find((p) => p.id !== PARTE).id; // la dueña vigente es otra
+    titulo = null;
+    if (corre(PARTE)) bad("costura `--guarded-fail`", "un fallo dentro de un bloque con guarda: tiene que contarse");
+  }
+  if (PARTE === PARTE_MUDA) await salir(0); // costura: este hijo no entrega
+  console.log(`${MARCA_PARTE}${failures}`);
+  await salir(failures ? 1 : 0);
+}
 console.log("");
 if (failures) {
   console.error(`SELF-TEST ROJO — ${failures} freno(s) del arnés no hacen lo que dicen hacer.`);
