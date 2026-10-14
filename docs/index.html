@@ -1799,6 +1799,7 @@ DRY-RUN: 38 archivo(s) a copiar, 0 conservado(s).</code></pre>
             <tr><td><a href="https://github.com/raalzate/agent-harness/blob/main/docs/decisions/0011-ciclo-acotado.md">0011</a></td><td>El ciclo acotado lo cuenta el gate y lo destraba el humano: agotado el presupuesto sobre el mismo error, se frena la edición y se deja cerrar para escalar.</td></tr>
             <tr><td><a href="https://github.com/raalzate/agent-harness/blob/main/docs/decisions/0012-el-arnes-autoriza-un-camino.md">0012</a></td><td>El arnés autoriza un camino de despliegue, y sólo en su forma exacta; el script exige el config commiteado.</td></tr>
             <tr><td><a href="https://github.com/raalzate/agent-harness/blob/main/docs/decisions/0013-tarea-declarada.md">0013</a></td><td>La tarea declarada: el agente planifica alcance y criterios; <code>protected-paths</code> frena fuera del alcance y el gate re-ejecuta la evidencia antes de dar por terminado.</td></tr>
+            <tr><td><a href="https://github.com/raalzate/agent-harness/blob/main/docs/decisions/0014-selftest-en-abanico.md">0014</a></td><td>El self-test corre en partes paralelas; las que tocan los marcadores de sesión van en serie en el mismo grupo. El gate, en serie.</td></tr>
           </tbody>
         </table>
       </div>
