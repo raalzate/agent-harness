@@ -95,6 +95,13 @@ Después: **Settings → Branches → Branch protection rule** sobre `main`, con
 como *required* y "Require a pull request before merging". Sin eso, el workflow es un semáforo que
 nadie mira.
 
+Y que esté activada **se verifica**, no se recuerda: con `branches.serverProtection` en el config,
+`node scripts/drift-check.mjs` (el barrido programado) le pregunta a la forja por cada rama
+protegida y es rojo si no la protege o no exige los checks declarados. Este párrafo solo no
+alcanzó: un PR entró con un check en rojo y otro corriendo porque la regla no estaba activada
+(docs/gotchas.md). Mientras tanto, mezclá esperando el CI en el mismo comando:
+`gh pr checks <n> --watch && gh pr merge <n> --merge`, o `gh pr merge <n> --auto`.
+
 ### GitLab CI
 
 ```yaml

@@ -360,6 +360,14 @@ Lo lee `.githooks/pre-push`, que falla antes de la red si empujás directo a una
 da el comando para mover los commits. Es el **complemento local** de la protección de rama de la
 forja, no su reemplazo: el freno fuerte vive en el servidor. Sin esta clave, el hook no hace nada.
 
+`serverProtection` verifica que el freno del servidor **exista**: `scripts/drift-check.mjs` corre
+`command` por cada rama de `protected` (`{branch}` sustituido) y exige que el JSON de respuesta
+tenga, en `requiredChecksPath`, cada uno de `requiredChecks` — los nombres de los jobs de tu CI.
+Una salida que casa `notProtectedPattern` es DERIVA (se puede mergear en rojo); una que casa
+`missingBranchPattern` es una rama que la forja no tiene y no cuenta; cualquier otro error (sin
+CLI, sin credenciales) es un aviso OMITIDO, nunca verde. Necesita red y una cuenta con permiso de
+leer la protección: por eso vive en el barrido programado y no en el gate.
+
 ---
 
 ## `workflow` — el modelo de ramas
@@ -1026,6 +1034,7 @@ sin control se informa como hueco. Ver [guias-y-sensores.md](guias-y-sensores.md
 | `task` | `scripts/task.mjs` (la escribe, la verifica: la señal «task» del gate), `protected-paths.mjs` (frena fuera del alcance, vía `tareaActiva`/`dentroDelAlcance` de `harness.mjs`), `bash.deny` (no se reescribe a mano), self-test (3e-tarea) |
 | `loop` | `scripts/gate.mjs` (cuenta y deja el marcador), `action-guard.mjs` (frena editar), `gate-stop.mjs` (deja cerrar), `ask-first.mjs` (repone), `scripts/hooks-timing.mjs` (estado a restaurar), self-test (3e-loop) |
 | `branches` | `.githooks/pre-push`, self-test |
+| `branches.serverProtection` | `scripts/drift-check.mjs` (sección 3, lo corre `drift.yml`), self-test (10a) |
 | `workflow` | `scripts/cycle-check.mjs` (lo invoca `.githooks/pre-push`), la ruta `cycle` del router, self-test |
 | `workflow.sync` | `scripts/cycle-check.mjs` (`--push` desde `.githooks/pre-push`, y `--sync` = `npm run sync`), `session-start.mjs` (aviso sin red), self-test (3f-ter-bis) |
 | `xp` | `scripts/cycle-check.mjs` (lo invoca `.githooks/commit-msg`), self-test (una práctica por cebo) |

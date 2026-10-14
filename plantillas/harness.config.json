@@ -304,7 +304,15 @@
       "main",
       "master"
     ],
-    "reason": "el trabajo entra por pull request, con su revisión y su gate en verde. Un push directo entra sin que nadie lo mire."
+    "reason": "el trabajo entra por pull request, con su revisión y su gate en verde. Un push directo entra sin que nadie lo mire.",
+    "serverProtection": {
+      "$comment": "Lo verifica `scripts/drift-check.mjs`: que la forja proteja cada rama de `protected` y exija `requiredChecks` (los nombres de los jobs de TU CI). Sin esto, \"no se mergea en rojo\" es una promesa que la forja no cumple. `command` es de GitHub (`{owner}/{repo}` los resuelve gh); en otra forja, el comando que devuelva la protección como JSON y su `requiredChecksPath`.",
+      "command": ["gh", "api", "repos/{owner}/{repo}/branches/{branch}/protection"],
+      "requiredChecksPath": "required_status_checks.contexts",
+      "requiredChecks": ["gate"],
+      "notProtectedPattern": "Branch not protected",
+      "missingBranchPattern": "Branch not found"
+    }
   },
   "panel": {
     "$comment": "El panel del arnés (docs/panel.md): sale con defaults sin esta clave. `memory.runSessionHooks` queda en false a propósito: el panel EJECUTA los hooks de SessionStart para medir lo que inyectan, y eso se enciende recién cuando el equipo revisó que su hook de sesión no escribe estado. `promptSources` mide lo que inyecta `sdd-router` leyendo sus rutas del config, sin ejecutarlo.",

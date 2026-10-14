@@ -25,6 +25,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
+import { resolverEjecutable } from "../.claude/hooks/harness.mjs";
 
 const args = process.argv.slice(2);
 const i = args.indexOf("--config");
@@ -124,6 +125,46 @@ const compila = (p) => {
           `la regla \`${r.nombre}\` no casó con ninguna línea en los últimos ${n} commits. ¿Tiene cicatriz detrás (P14), o ya ganó? Decidilo y dejalo escrito. (Se compara línea por línea: un patrón que cruza líneas puede salir acá sin serlo.)`,
         );
       if (!nunca.length) console.log(`  ✓ las ${reglas.length} reglas de contenido cazaron algo en los últimos ${n} commits`);
+    }
+  }
+}
+
+// ── 3. La protección de las ramas en la FORJA ───────────────────────────────
+// «No se mergea en rojo» lo hace cumplir el servidor (required status checks), no el repo: el
+// `pre-push` sólo frena el push directo. docs/cicd.md lo pedía en prosa y nadie lo verificaba,
+// así que `main` quedó sin protección y entró un PR con un check rojo y otro corriendo (#58).
+// Depende de la red y de una cuenta con permiso: por eso vive acá y no en el gate.
+{
+  const proteccion = config.branches?.serverProtection;
+  const ramas = config.branches?.protected ?? [];
+  if (proteccion?.command?.length && ramas.length) {
+    const casa = (p, texto) => Boolean(p) && compila(p)?.test(texto);
+    const enRuta = (obj, ruta) => String(ruta ?? "").split(".").filter(Boolean).reduce((o, k) => (o == null ? o : o[k]), obj);
+    for (const rama of ramas) {
+      const argv = proteccion.command.map((a) => String(a).split("{branch}").join(rama));
+      // Sin shell: el comando sale del config y la rama, del config. En Windows, sólo un `.cmd`
+      // pasa por cmd.exe (resolverEjecutable lo encuentra con su extensión real).
+      const r = spawnSync(resolverEjecutable(argv[0]), argv.slice(1), { encoding: "utf8", windowsHide: true, timeout: 60000 });
+      const salida = `${r.stdout ?? ""}${r.stderr ?? ""}`;
+      if (r.error || r.status !== 0) {
+        if (casa(proteccion.missingBranchPattern, salida)) continue; // la rama no existe en la forja
+        if (casa(proteccion.notProtectedPattern, salida))
+          rojos.push(`la rama \`${rama}\` está en \`branches.protected\` y la forja NO la protege: se puede mergear en rojo. Activá la protección con los checks requeridos (docs/cicd.md).`);
+        else
+          avisos.push(`no pude preguntarle a la forja por \`${rama}\` (\`${argv[0]}\`: ${(r.error?.message ?? salida).trim().split("\n")[0].slice(0, 120)}) — protección OMITIDA, no verde.`);
+        continue;
+      }
+      let datos;
+      try {
+        datos = JSON.parse(r.stdout);
+      } catch {
+        avisos.push(`la forja respondió por \`${rama}\` algo que no es JSON — protección OMITIDA, no verde.`);
+        continue;
+      }
+      const exigidos = enRuta(datos, proteccion.requiredChecksPath);
+      const faltan = (proteccion.requiredChecks ?? []).filter((c) => !(Array.isArray(exigidos) && exigidos.includes(c)));
+      if (faltan.length) rojos.push(`la forja protege \`${rama}\` pero no exige estos checks: ${faltan.map((c) => `«${c}»`).join(", ")}. Con uno de ellos en rojo, el merge pasa.`);
+      else console.log(`  ✓ la forja protege \`${rama}\` y exige sus ${proteccion.requiredChecks?.length ?? 0} check(s)`);
     }
   }
 }
