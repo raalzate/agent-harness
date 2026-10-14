@@ -2049,6 +2049,16 @@ if ((config.docs?.mentionSignals ?? []).length && (config.gate?.signals ?? []).l
       const r = spawnSync("node", [abs("scripts/docs-linkcheck.mjs")], { cwd: REPO_ROOT, encoding: "utf8" });
       if (r.status === 0) ok(`link-check no revisa \`${derivado}/\` (git lo ignora)`);
       else bad("link-check ignora lo que git ignora", `salió rojo por un archivo gitignored: ${(r.stdout ?? "").trim().split("\n")[0]}`);
+      // …y el otro lado: CITAR ese archivo es rojo, aunque esté en el disco (el clon no lo tiene).
+      // Lo ignorado se pregunta una vez para todo el árbol (`ls-files --directory`): el archivo
+      // vive DENTRO de un directorio ignorado, que es justo el caso que colapsa en una línea.
+      const cita = spawnSync("node", [abs("scripts/docs-linkcheck.mjs"), "--file", "docs/cebo.md", "--stdin"], { // linkcheck:ignore — ruta virtual del cebo
+        cwd: REPO_ROOT,
+        encoding: "utf8",
+        input: `Ver [el cebo](../${derivado}/puntero-selftest.md).\n`, // linkcheck:ignore — apunta a lo ignorado a propósito
+      });
+      if (cita.status !== 0 && /gitignored/.test(cita.stderr ?? "")) ok(`link-check es rojo al citar un archivo dentro de \`${derivado}/\` (existe en disco, no en el clon)`);
+      else bad("link-check caza la cita a un archivo gitignored", `exit ${cita.status}: ${(cita.stderr || cita.stdout || "").trim().split("\n")[0]}`);
     } finally {
       fs.rmSync(cebo, { force: true });
       if (!existia) fs.rmSync(dir, { recursive: true, force: true });
