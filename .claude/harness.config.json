@@ -137,6 +137,10 @@
         "reason": "el marcador y el libro del ciclo acotado (`loop`) los escribe el gate y los levanta el pedido del humano, y la tarea declarada (`task`) la escribe `scripts/task.mjs`. Reescribirlos a mano es saltarse la escalada o el alcance: para la tarea usá `node scripts/task.mjs` (scope --why, done, abandon --why); para el presupuesto, pará y contale al humano qué falla."
       },
       {
+        "pattern": "^(?!.*\\bgh\\s+pr\\s+checks\\b[^;|&]*--watch[^;|&]*&&).*\\bgh\\s+pr\\s+merge\\b(?![^;|&]*--auto)",
+        "reason": "mezclar sin esperar el CI deja entrar un rojo: #58 se mezcló con un check en rojo y Windows todavía corriendo. Esperalo en el mismo comando (`gh pr checks <n> --watch && gh pr merge <n> …`) o dejá que la forja espere (`gh pr merge <n> --auto …`)."
+      },
+      {
         "pattern": "git\\s+reset\\s+--hard",
         "reason": "`reset --hard` destruye trabajo sin commitear. Usá `git stash` o pedí confirmación."
       },
@@ -679,7 +683,24 @@
       "main",
       "master"
     ],
-    "reason": "el trabajo entra por pull request, con su revisión y su gate en verde. Un push directo entra sin que nadie lo mire."
+    "reason": "el trabajo entra por pull request, con su revisión y su gate en verde. Un push directo entra sin que nadie lo mire.",
+    "serverProtection": {
+      "$comment": "«No se mergea en rojo» lo hace cumplir la FORJA (required status checks), no el repo. docs/cicd.md lo pedía en prosa y nadie lo verificaba: `main` sin protección dejó entrar #58 con un check rojo y Windows corriendo. `scripts/drift-check.mjs` le pregunta a la forja por cada rama de `protected` (`{branch}`; `{owner}/{repo}` los resuelve gh) y exige que `requiredChecksPath` contenga cada uno de `requiredChecks`. `notProtectedPattern` → ROJO; `missingBranchPattern` → la rama no existe en la forja, no cuenta; cualquier otro error (sin CLI, sin credenciales) → AVISO OMITIDO, nunca verde.",
+      "command": [
+        "gh",
+        "api",
+        "repos/{owner}/{repo}/branches/{branch}/protection"
+      ],
+      "requiredChecksPath": "required_status_checks.contexts",
+      "requiredChecks": [
+        "gate (ubuntu-latest)",
+        "gate (macos-latest)",
+        "gate (windows-latest)",
+        "rojo-sin-el-cambio"
+      ],
+      "notProtectedPattern": "Branch not protected",
+      "missingBranchPattern": "Branch not found"
+    }
   },
   "workflow": {
     "$comment": "EL CICLO DE DESARROLLO, declarado. `model` es informativo (trunk-based, github-flow, git-flow, gitlab-flow) y es lo que el router le dice al agente antes de que abra una rama. Lo que las máquinas leen: `branchPattern` (nombre válido de rama de trabajo), `longLived` (las ramas del modelo, exentas del patrón), `baseBranch` (de dónde sale y contra qué se mide la edad) y `maxAgeDays` + `staleAction` (rama vieja = lote grande esperando). `mergeInto` se DECLARA y no se finge verificado: a qué rama entra el cambio lo decide el pull request, que el hook no ve. Mecanismo: `.githooks/pre-push` → `node scripts/cycle-check.mjs --push`. Sin `branchPattern` ni `maxAgeDays`, el freno no corre. Ver docs/ciclo-desarrollo.md.",

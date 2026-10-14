@@ -394,6 +394,25 @@ Mecanismo: `existeEjecutable` en `.claude/hooks/harness.mjs`, usada por `scripts
          `scripts/reviewer-eval.mjs` y el self-test (que tenía su propia copia sin PATHEXT). Caso
          1d del self-test, más los casos de `--verify-red` y del eval que corren en la matriz.
 
+### GOTCHA: se mezcló un PR con un check en rojo y el CI todavía corriendo
+
+Síntoma: #58 entró a `main` con `rojo-sin-el-cambio` en ROJO y `gate (windows-latest)` todavía
+         corriendo. GitHub no puso ningún reparo: el merge lo lanzó un `gh pr merge` suelto, sin
+         esperar los checks, que el propio agente le había pasado al humano para copiar.
+Causa:   `main` NO tenía branch protection en la forja (`404 Branch not protected`). La regla
+         existía —`docs/cicd.md` pide el check del gate como *required*— pero era prosa y nadie la
+         verificaba; `branches.protected` sólo alimenta al `pre-push`, que frena el push directo,
+         no el merge. El rojo en sí era legítimo: un cambio de rendimiento sin prueba que falle
+         sin él tenía que declarar `no-red:`, y el CI lo cazó; lo que falló fue que nadie lo esperó.
+Regla:   «no se mergea en rojo» lo hace cumplir la forja, y que la forja lo haga se verifica con
+         un comando. Mientras tanto, un merge espera su CI en el mismo comando.
+Mecanismo: `branches.serverProtection` + sección 3 de `scripts/drift-check.mjs` (lo corre
+         `drift.yml`, programado, y `npm run drift`): una rama protegida en el config y no en la
+         forja, o sin uno de sus `requiredChecks`, es DERIVA; sin credenciales sale OMITIDO, nunca
+         verde. Y `bash.deny` frena `gh pr merge` sin `gh pr checks <n> --watch &&` delante ni
+         `--auto`. Casos: 10a (cuatro, con una forja de mentira) y 3c (a mano: el patrón lleva
+         lookahead y no se reduce a una muestra).
+
 ### GOTCHA: un servidor MCP que edita código pasaba por al lado de las rutas protegidas
 
 Síntoma: con un índice de símbolos por MCP instalado (`replace_symbol_body`, `replace_in_files`),

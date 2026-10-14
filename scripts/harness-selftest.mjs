@@ -714,6 +714,16 @@ if (enParte("estado")) {
 }
 
 // 3c. Comandos denegados: una muestra por regla.
+// Mezclar sin esperar el CI: el patrón lleva lookahead y no se reduce a una muestra, así que va
+// a mano (P2). Lo destapó #58: mezclado con un check rojo y Windows todavía corriendo.
+if (enParte("frenos") && hookFiles.has("bash-guard.mjs") && (config.bash?.deny ?? []).some((r) => /gh\\s\+pr\\s\+merge/.test(r.pattern))) {
+  const merge = (command) => runHook("bash-guard.mjs", { hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command } }).status;
+  if (merge("gh pr merge 58 --merge --delete-branch") === 2) ok("bash-guard frena `gh pr merge` sin esperar el CI");
+  else bad("bash-guard frena el merge sin CI", "`gh pr merge 58` pasó sin `gh pr checks --watch` ni `--auto`");
+  if (merge("gh pr checks 58 --watch && gh pr merge 58 --merge --delete-branch") === 0 && merge("gh pr merge 58 --auto --merge") === 0)
+    ok("bash-guard deja mezclar esperando el CI (`checks --watch &&`) o con `--auto`");
+  else bad("bash-guard no muerde de más con el merge", "frenó un merge que espera el CI o usa `--auto`");
+}
 if (enParte("frenos") && hookFiles.has("bash-guard.mjs")) {
   for (const regla of config.bash?.deny ?? []) {
     const muestra = sampleFromPattern(regla.pattern);
@@ -3526,6 +3536,55 @@ if (enParte("fuera")) {
     if (/SIN_CICATRIZ/.test(fresca.out) && !/CON_CICATRIZ|CICATRIZ_SQL|SIN_AMBITO/.test(fresca.out))
       ok("deriva: sólo la regla que nunca casó en el historial sale como aviso (y un `-- comentario` quitado no confunde al parser)");
     else bad("deriva: avisa la regla sin cicatriz y sólo ésa", fresca.out.trim().slice(0, 300));
+
+    // La protección de la rama del lado de la FORJA. «No se mergea en rojo» lo hace cumplir el
+    // servidor (required status checks), no el repo; docs/cicd.md lo pedía en prosa y nadie lo
+    // verificaba: `main` sin protección dejó entrar un PR con un check rojo y otro corriendo.
+    // La forja de mentira es un `node -e` que imprime lo que respondería según la rama.
+    const forja = (respuesta) => {
+      const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "harness-forja-"));
+      try {
+        spawnSync("git", ["init", "-q"], { cwd: tmp });
+        fs.mkdirSync(path.join(tmp, ".claude"));
+        fs.writeFileSync(path.join(tmp, "STATUS.md"), `Fecha: ${hoy}\n`);
+        fs.writeFileSync(path.join(tmp, "respuestas.json"), JSON.stringify(respuesta));
+        fs.writeFileSync(
+          path.join(tmp, ".claude/harness.config.json"),
+          JSON.stringify({
+            status: { file: "STATUS.md" },
+            drift: { statusDatePattern: "Fecha:\\s*(\\d{4}-\\d{2}-\\d{2})", statusMaxAgeDays: 14, historyCommits: 5 },
+            branches: {
+              protected: ["main", "master"],
+              serverProtection: {
+                command: ["node", "-e", "const r=require('./respuestas.json')[process.argv[1]];process.stdout.write(r.out);process.exit(r.code)", "{branch}"],
+                requiredChecksPath: "required_status_checks.contexts",
+                requiredChecks: ["gate", "rojo-sin-el-cambio"],
+                notProtectedPattern: "Branch not protected",
+                missingBranchPattern: "Branch not found",
+              },
+            },
+          }),
+        );
+        const r = spawnSync("node", [script], { cwd: tmp, encoding: "utf8" });
+        return { status: r.status, out: `${r.stdout ?? ""}${r.stderr ?? ""}` };
+      } finally {
+        fs.rmSync(tmp, { recursive: true, force: true });
+      }
+    };
+    const noExiste = { out: '{"message":"Branch not found"}', code: 1 };
+    const protegida = { out: JSON.stringify({ required_status_checks: { contexts: ["gate", "rojo-sin-el-cambio"] } }), code: 0 };
+    const sinProteger = forja({ main: { out: '{"message":"Branch not protected"}', code: 1 }, master: noExiste });
+    if (sinProteger.status === 1 && /main/.test(sinProteger.out) && /protec/i.test(sinProteger.out)) ok("deriva: una rama protegida en el config y sin protección en la forja es rojo");
+    else bad("deriva: rama sin protección en la forja", `exit ${sinProteger.status}: ${sinProteger.out.trim().slice(0, 200)}`);
+    const sinCheck = forja({ main: { out: JSON.stringify({ required_status_checks: { contexts: ["gate"] } }), code: 0 }, master: noExiste });
+    if (sinCheck.status === 1 && /rojo-sin-el-cambio/.test(sinCheck.out)) ok("deriva: un check requerido que la forja no exige es rojo y se nombra");
+    else bad("deriva: check requerido faltante", `exit ${sinCheck.status}: ${sinCheck.out.trim().slice(0, 200)}`);
+    const bien = forja({ main: protegida, master: noExiste });
+    if (bien.status === 0) ok("deriva: con la rama protegida y sus checks exigidos pasa (una rama que no existe en la forja no cuenta)");
+    else bad("deriva: protección completa pasa", `exit ${bien.status}: ${bien.out.trim().slice(0, 200)}`);
+    const sinCredenciales = forja({ main: { out: "HTTP 401: Bad credentials", code: 1 }, master: noExiste });
+    if (sinCredenciales.status === 0 && /omitid/i.test(sinCredenciales.out)) ok("deriva: sin credenciales para preguntarle a la forja sale OMITIDO (aviso), no verde ni rojo");
+    else bad("deriva: forja sin credenciales", `exit ${sinCredenciales.status}: ${sinCredenciales.out.trim().slice(0, 200)}`);
   }
   if (config.drift) corredorDeclarado("el barrido de deriva", config.drift.runner, "scripts/drift-check.mjs");
 }
