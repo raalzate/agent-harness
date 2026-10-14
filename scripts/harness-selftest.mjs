@@ -35,7 +35,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 // El mismo helper que usan el hook y el lint: comparar contra la lista DECLARADA dejaba pasar
 // justo el caso del incidente (el gate declara una extensión que el default agnóstico no tiene).
-import { codeExtensions, depsMatcher, importSyntax, segmentosDeRuta, relativaDesdeRaiz, esUnidadPelada, parseHookCommand, firstMatch, existeEjecutable, writeTools, escribe , rutaDeEstado } from "../.claude/hooks/harness.mjs";
+import { codeExtensions, depsMatcher, importSyntax, segmentosDeRuta, relativaDesdeRaiz, esUnidadPelada, parseHookCommand, firstMatch, existeEjecutable, writeTools, escribe , rutaDeEstado , tareaActiva } from "../.claude/hooks/harness.mjs";
 
 const REPO_ROOT = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
 const abs = (p) => path.join(REPO_ROOT, p);
@@ -623,9 +623,25 @@ if (enParte("frenos")) for (const regla of config.protectedPaths ?? []) {
   else bad(`protected-paths bloquea \`${muestra}\``, `exit ${r.status} — la ruta protegida NO frenó nada`);
 }
 
+/**
+ * El archivo «normal» con que se prueba que un freno NO muerde de más. Con una tarea declarada
+ * abierta, lo normal es lo que está DENTRO de su alcance: afuera, `protected-paths` frena y hace
+ * bien. Elegirlo siempre en la raíz dejaba el gate rojo con cualquier tarea en curso, y el hook
+ * `Stop` no dejaba terminarla nunca (lo cazó el taller). null si el alcance es sólo globs.
+ */
+const archivoNormal = (() => {
+  const tarea = tareaActiva(config);
+  if (!tarea) return "archivo-normal-selftest.md";
+  const prefijo = (tarea.alcance ?? []).map((a) => String(a.ruta ?? "")).find((p) => p && !p.includes("*"));
+  if (!prefijo) return null;
+  return prefijo.endsWith("/") ? `${prefijo}archivo-normal-selftest.md` : prefijo;
+})();
+
 // 3b. Un archivo cualquiera NO protegido tiene que pasar: un freno que bloquea todo se desactiva.
-if (corre("frenos")) {
-  const r = runHook("protected-paths.mjs", writeInput("archivo-normal-selftest.md"));
+if (corre("frenos") && !archivoNormal) {
+  skip("protected-paths deja pasar un archivo normal", "hay una tarea abierta con alcance sólo de globs: no hay un archivo «normal» que elegir");
+} else if (corre("frenos")) {
+  const r = runHook("protected-paths.mjs", writeInput(archivoNormal));
   if (r.status === 0) ok("protected-paths deja pasar un archivo normal");
   else bad("protected-paths deja pasar un archivo normal", `exit ${r.status}: el freno bloquea de más`);
 }
@@ -685,9 +701,11 @@ if (enParte("estado")) {
         else bad("protected-paths deja leer vía MCP", `exit ${l.status}: el freno bloquea lecturas`);
       }
     }
-    const normal = runHook("protected-paths.mjs", mcp(nombreMcp, "archivo-normal-selftest.md"));
-    if (normal.status === 0) ok("protected-paths deja pasar una escritura MCP normal");
-    else bad("protected-paths deja pasar una escritura MCP normal", `exit ${normal.status}: el freno bloquea de más`);
+    if (archivoNormal) {
+      const normal = runHook("protected-paths.mjs", mcp(nombreMcp, archivoNormal));
+      if (normal.status === 0) ok("protected-paths deja pasar una escritura MCP normal");
+      else bad("protected-paths deja pasar una escritura MCP normal", `exit ${normal.status}: el freno bloquea de más`);
+    }
 
     // Un `move` trae DOS rutas: desde afuera del repo HACIA una protegida tiene que frenar.
     //     Antes se miraba sólo la primera, y la de afuera dejaba pasar todo.
@@ -990,6 +1008,11 @@ if (corre("frenos")) {
       fs.writeFileSync(path.join(work, "suelto.txt"), "x");
       casos.push(["con el árbol sucio (aunque sea un archivo suelto) no se despliega", deploy(["--apply"]), (r) => r.status === 1 && !r.corrio && /limpio/.test(r.out)]);
       fs.rmSync(path.join(work, "suelto.txt"));
+      // Un archivo MODIFICADO sale en `git status --porcelain` como « M app.txt»: el recorte de la
+      // salida se comía ese espacio y el nombre llegaba sin su primera letra («pp.txt»). Lo cazó el taller.
+      fs.writeFileSync(path.join(work, "app.txt"), "v2\n");
+      casos.push(["el árbol sucio nombra el archivo entero (un modificado no pierde la primera letra)", deploy([]), (r) => /: app\.txt\b/.test(r.out)]);
+      g(work, "checkout", "-q", "--", "app.txt");
       g(work, "checkout", "-q", "-b", "feat/otra");
       casos.push(["desde otra rama no se despliega", deploy(["--apply"]), (r) => r.status === 1 && !r.corrio && /rama/.test(r.out)]);
       g(work, "checkout", "-q", "main");
@@ -1267,6 +1290,14 @@ if (enParte("registro") && config.loop && fs.existsSync(abs("scripts/gate.mjs"))
       ok("ciclo acotado: el mismo error en otra línea y con otra duración sigue contando");
     else bad("ciclo acotado: normalización", "cambiar línea:columna o duración reinició la cuenta: el freno nunca muerde");
 
+    // La duración con la unidad ANTES del número, como la imprime `node:test` (`ℹ duration_ms
+    // 108.15`) y otros runners (`Time: 3.2`, `elapsed=0.4`). Sin normalizarla, el runner por
+    // defecto de Node cambiaba la huella en cada corrida y el freno no mordía (lo cazó el taller).
+    const conRunner = (ms) => `✖ roto a propósito\nℹ tests 1\nℹ fail 1\nℹ duration_ms ${ms}`;
+    if (secuencia([conRunner("108.15625"), conRunner("97.3"), conRunner("131.0041")]).agotado)
+      ok("ciclo acotado: la duración del runner (`duration_ms 108.1`) no reinicia la cuenta");
+    else bad("ciclo acotado: duración con la unidad antes", "`duration_ms N` cambió la huella en cada corrida: con node:test el freno nunca muerde");
+
     // La ruta temporal de ESTA máquina (en macOS, `/var/folders/…/T`, sin «tmp» en el nombre) cambia
     // en cada corrida: una herramienta que la imprime al fallar reiniciaba la cuenta siempre.
     // Bajo `tmp` (que vive en os.tmpdir()), para que el `finally` se lleve los directorios.
@@ -1465,6 +1496,36 @@ if (!corre("registro")) {
     } finally {
       gitT("worktree", "remove", "--force", wt);
       fs.rmSync(wt, { recursive: true, force: true });
+    }
+
+    // Con una tarea ABIERTA el self-test tiene que seguir verde. No lo estaba: sus casos de «deja
+    // pasar un archivo normal» escribían fuera del alcance, `protected-paths` los frenaba —bien—
+    // y el gate quedaba rojo con cualquier tarea en curso, así que el hook `Stop` no dejaba
+    // terminarla nunca. Lo cazó el taller. Se corre el self-test de verdad, las partes con esos
+    // casos, sobre una copia del repo con una tarea abierta: lo roto era el self-test, no el hook.
+    const copia = fs.mkdtempSync(path.join(os.tmpdir(), "harness-tarea-abierta-"));
+    try {
+      // Versionados Y nuevos sin ignorar: en un repo recién portado el arnés todavía no está
+      // commiteado, y copiar sólo lo versionado dejaba la copia sin scripts (lo cazó el taller).
+      const versionados = (spawnSync("git", ["ls-files", "-z", "--cached", "--others", "--exclude-standard"], { cwd: REPO_ROOT, encoding: "utf8" }).stdout ?? "").split("\0").filter(Boolean);
+      for (const rel of versionados) {
+        if (!fs.existsSync(abs(rel))) continue;
+        fs.mkdirSync(path.join(copia, path.dirname(rel)), { recursive: true });
+        fs.copyFileSync(abs(rel), path.join(copia, rel));
+      }
+      spawnSync("git", ["init", "-q"], { cwd: copia });
+      fs.writeFileSync(
+        path.join(copia, config.task.file),
+        JSON.stringify({ item: "selftest", base: null, alcance: [{ ruta: "scripts/", motivo: "selftest" }], criterios: [] }),
+      );
+      const abierta = spawnSync(process.execPath, [path.join(copia, "scripts", "harness-selftest.mjs"), "--parts=frenos,estado", "--parallel=2"], {
+        cwd: copia,
+        encoding: "utf8",
+      });
+      const rojos = `${abierta.stdout ?? ""}`.split("\n").filter((l) => /^\s+✗/.test(l)).slice(0, 3).join(" · ");
+      caso(abierta.status === 0, "con una tarea abierta el self-test sigue verde (el gate no queda rojo por la tarea)", `exit ${abierta.status}: ${rojos}`);
+    } finally {
+      fs.rmSync(copia, { recursive: true, force: true });
     }
 
     // Los criterios salen de las casillas del ítem del gestor.
@@ -2842,7 +2903,9 @@ for (const dir of [".claude/agents", ".claude/commands"]) {
   const iFuera = s.search(/^1[01]\. /m);
   const problemas = [
     costuras.status === 0 && "salió en verde",
-    !/SELF-TEST ROJO — 2 freno/.test(s) && "no contó los dos fallos (el forzado y la parte muda)",
+    // «Al menos 2», no «exactamente 2»: en un repo recién portado la parte `base` ya trae sus
+    // rojos de placeholders, y el número exacto sumaba un rojo falso al mapa (lo cazó el taller).
+    !(Number(s.match(/SELF-TEST ROJO — (\d+) freno/)?.[1] ?? 0) >= 2) && "no contó los dos fallos (el forzado y la parte muda)",
     !/✗ costura `--fail-part`/.test(s) && "no imprimió el ✗ que reportó el hijo",
     !/la parte `fuera` entregó su resultado/.test(s) && "la parte que no entregó no aparece nombrada",
     !(iBase !== -1 && iFuera !== -1 && iBase < iFuera) && "la salida no sigue el orden declarado (`base` antes que `fuera`)",

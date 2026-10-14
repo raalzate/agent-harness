@@ -96,7 +96,11 @@ const chequeos = [];
 if (requiere.has("cleanTree")) {
   // Sin ignorar los no rastreados: muchos CLIs suben el DIRECTORIO, no el commit.
   const sucio = git("status", "--porcelain").split("\n").filter(Boolean);
-  chequeos.push(["árbol limpio", !sucio.length, sucio.length ? `${sucio.length} archivo(s): ${sucio.slice(0, 3).map((l) => l.slice(3)).join(", ")}${sucio.length > 3 ? ", …" : ""}` : "", "commiteá o descartá; lo que se despliega es un commit"]);
+  // El estado (`XY`) se saca con un regex y no con `slice(3)`: `git()` recorta la salida, y en
+  // la primera línea de un modificado (« M app.txt») el espacio inicial ya no está — el nombre
+  // perdía su primera letra («pp.txt»). Lo cazó el taller.
+  const nombreDe = (l) => l.replace(/^\s*\S{1,2}\s+/, "");
+  chequeos.push(["árbol limpio", !sucio.length, sucio.length ? `${sucio.length} archivo(s): ${sucio.slice(0, 3).map(nombreDe).join(", ")}${sucio.length > 3 ? ", …" : ""}` : "", "commiteá o descartá; lo que se despliega es un commit"]);
 }
 if (requiere.has("branch") && target.branch) {
   chequeos.push([`rama \`${target.branch}\``, rama === target.branch, `estás en \`${rama}\``, `\`git switch ${target.branch}\`: a \`${nombre}\` se despliega desde ahí`]);
