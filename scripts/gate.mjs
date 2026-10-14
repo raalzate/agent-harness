@@ -96,6 +96,10 @@ const RUIDO_POR_DEFECTO = [
   "\\x1b\\[[0-9;]*[A-Za-z]", //                                   colores ANSI
   "\\d{4}-\\d{2}-\\d{2}[T ]\\d{2}:\\d{2}(:\\d{2}(\\.\\d+)?)?(Z|[+-]\\d{2}:?\\d{2})?", // fechas ISO
   "\\b\\d+(\\.\\d+)?\\s?(ms|s|sec|segundos|seconds)\\b", //            duraciones
+  // …y con el nombre ANTES del número, como las imprime el runner: `duration_ms 108.15` (node:test),
+  // `Time: 3.2`, `elapsed=0.4`. Sin esto, el runner por defecto de Node cambiaba la huella en cada
+  // corrida y el ciclo acotado no mordía nunca (lo cazó el taller).
+  "\\b\\w*(duration|elapsed|time|took)\\w*[\\s:=]+\\d+(\\.\\d+)?", // duraciones con el nombre delante
   ":\\d+(:\\d+)?\\b", //                                          línea:columna
   "\\b[0-9a-f]{7,64}\\b", //                                         hashes
   "\\S*(tmp|temp|Temp|TEMP)[\\\\/]\\S*", //                             rutas temporales con nombre

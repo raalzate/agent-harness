@@ -1290,6 +1290,14 @@ if (enParte("registro") && config.loop && fs.existsSync(abs("scripts/gate.mjs"))
       ok("ciclo acotado: el mismo error en otra línea y con otra duración sigue contando");
     else bad("ciclo acotado: normalización", "cambiar línea:columna o duración reinició la cuenta: el freno nunca muerde");
 
+    // La duración con la unidad ANTES del número, como la imprime `node:test` (`ℹ duration_ms
+    // 108.15`) y otros runners (`Time: 3.2`, `elapsed=0.4`). Sin normalizarla, el runner por
+    // defecto de Node cambiaba la huella en cada corrida y el freno no mordía (lo cazó el taller).
+    const conRunner = (ms) => `✖ roto a propósito\nℹ tests 1\nℹ fail 1\nℹ duration_ms ${ms}`;
+    if (secuencia([conRunner("108.15625"), conRunner("97.3"), conRunner("131.0041")]).agotado)
+      ok("ciclo acotado: la duración del runner (`duration_ms 108.1`) no reinicia la cuenta");
+    else bad("ciclo acotado: duración con la unidad antes", "`duration_ms N` cambió la huella en cada corrida: con node:test el freno nunca muerde");
+
     // La ruta temporal de ESTA máquina (en macOS, `/var/folders/…/T`, sin «tmp» en el nombre) cambia
     // en cada corrida: una herramienta que la imprime al fallar reiniciaba la cuenta siempre.
     // Bajo `tmp` (que vive en os.tmpdir()), para que el `finally` se lleve los directorios.
