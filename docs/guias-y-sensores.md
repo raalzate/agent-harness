@@ -63,7 +63,7 @@ disfrazar un control inferencial de determinista.
 | Tipo | Guía | Sensor |
 |---|---|---|
 | **Computacional** | los perfiles de stack del instalador (`plantillas/perfiles/`); el ruteo por regex de `sdd.routes` | `repo-lint` (ocho clases de regla), `harness-selftest`, `docs-linkcheck`, `artifacts-check`, los hooks de git |
-| **Inferencial** | `CLAUDE.md`, las skills, los comandos (`/lesson`, `/harness-port`) | `reviewer`; P12 y P14 de la constitución |
+| **Inferencial** | `CLAUDE.md`, las skills, los comandos (`/lesson`, `/harness-port`) | `reviewer`; P14 de la constitución (y la calidad del diagnóstico de P12, cuyo presupuesto ya cuenta el gate) |
 
 El sesgo es deliberado: **todo lo que se pueda volver computacional, se vuelve** (P13: test >
 hook/lint > comando > markdown). El control inferencial queda para lo que de verdad necesita
