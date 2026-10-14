@@ -35,7 +35,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 // El mismo helper que usan el hook y el lint: comparar contra la lista DECLARADA dejaba pasar
 // justo el caso del incidente (el gate declara una extensión que el default agnóstico no tiene).
-import { codeExtensions, depsMatcher, importSyntax, segmentosDeRuta, relativaDesdeRaiz, esUnidadPelada, parseHookCommand, firstMatch, existeEjecutable, writeTools, escribe , rutaDeEstado } from "../.claude/hooks/harness.mjs";
+import { codeExtensions, depsMatcher, importSyntax, segmentosDeRuta, relativaDesdeRaiz, esUnidadPelada, parseHookCommand, firstMatch, existeEjecutable, writeTools, escribe , rutaDeEstado , tareaActiva } from "../.claude/hooks/harness.mjs";
 
 const REPO_ROOT = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
 const abs = (p) => path.join(REPO_ROOT, p);
@@ -623,9 +623,25 @@ if (enParte("frenos")) for (const regla of config.protectedPaths ?? []) {
   else bad(`protected-paths bloquea \`${muestra}\``, `exit ${r.status} — la ruta protegida NO frenó nada`);
 }
 
+/**
+ * El archivo «normal» con que se prueba que un freno NO muerde de más. Con una tarea declarada
+ * abierta, lo normal es lo que está DENTRO de su alcance: afuera, `protected-paths` frena y hace
+ * bien. Elegirlo siempre en la raíz dejaba el gate rojo con cualquier tarea en curso, y el hook
+ * `Stop` no dejaba terminarla nunca (lo cazó el taller). null si el alcance es sólo globs.
+ */
+const archivoNormal = (() => {
+  const tarea = tareaActiva(config);
+  if (!tarea) return "archivo-normal-selftest.md";
+  const prefijo = (tarea.alcance ?? []).map((a) => String(a.ruta ?? "")).find((p) => p && !p.includes("*"));
+  if (!prefijo) return null;
+  return prefijo.endsWith("/") ? `${prefijo}archivo-normal-selftest.md` : prefijo;
+})();
+
 // 3b. Un archivo cualquiera NO protegido tiene que pasar: un freno que bloquea todo se desactiva.
-if (corre("frenos")) {
-  const r = runHook("protected-paths.mjs", writeInput("archivo-normal-selftest.md"));
+if (corre("frenos") && !archivoNormal) {
+  skip("protected-paths deja pasar un archivo normal", "hay una tarea abierta con alcance sólo de globs: no hay un archivo «normal» que elegir");
+} else if (corre("frenos")) {
+  const r = runHook("protected-paths.mjs", writeInput(archivoNormal));
   if (r.status === 0) ok("protected-paths deja pasar un archivo normal");
   else bad("protected-paths deja pasar un archivo normal", `exit ${r.status}: el freno bloquea de más`);
 }
@@ -685,9 +701,11 @@ if (enParte("estado")) {
         else bad("protected-paths deja leer vía MCP", `exit ${l.status}: el freno bloquea lecturas`);
       }
     }
-    const normal = runHook("protected-paths.mjs", mcp(nombreMcp, "archivo-normal-selftest.md"));
-    if (normal.status === 0) ok("protected-paths deja pasar una escritura MCP normal");
-    else bad("protected-paths deja pasar una escritura MCP normal", `exit ${normal.status}: el freno bloquea de más`);
+    if (archivoNormal) {
+      const normal = runHook("protected-paths.mjs", mcp(nombreMcp, archivoNormal));
+      if (normal.status === 0) ok("protected-paths deja pasar una escritura MCP normal");
+      else bad("protected-paths deja pasar una escritura MCP normal", `exit ${normal.status}: el freno bloquea de más`);
+    }
 
     // Un `move` trae DOS rutas: desde afuera del repo HACIA una protegida tiene que frenar.
     //     Antes se miraba sólo la primera, y la de afuera dejaba pasar todo.
@@ -990,6 +1008,11 @@ if (corre("frenos")) {
       fs.writeFileSync(path.join(work, "suelto.txt"), "x");
       casos.push(["con el árbol sucio (aunque sea un archivo suelto) no se despliega", deploy(["--apply"]), (r) => r.status === 1 && !r.corrio && /limpio/.test(r.out)]);
       fs.rmSync(path.join(work, "suelto.txt"));
+      // Un archivo MODIFICADO sale en `git status --porcelain` como « M app.txt»: el recorte de la
+      // salida se comía ese espacio y el nombre llegaba sin su primera letra («pp.txt»). Lo cazó el taller.
+      fs.writeFileSync(path.join(work, "app.txt"), "v2\n");
+      casos.push(["el árbol sucio nombra el archivo entero (un modificado no pierde la primera letra)", deploy([]), (r) => /: app\.txt\b/.test(r.out)]);
+      g(work, "checkout", "-q", "--", "app.txt");
       g(work, "checkout", "-q", "-b", "feat/otra");
       casos.push(["desde otra rama no se despliega", deploy(["--apply"]), (r) => r.status === 1 && !r.corrio && /rama/.test(r.out)]);
       g(work, "checkout", "-q", "main");
@@ -1465,6 +1488,34 @@ if (!corre("registro")) {
     } finally {
       gitT("worktree", "remove", "--force", wt);
       fs.rmSync(wt, { recursive: true, force: true });
+    }
+
+    // Con una tarea ABIERTA el self-test tiene que seguir verde. No lo estaba: sus casos de «deja
+    // pasar un archivo normal» escribían fuera del alcance, `protected-paths` los frenaba —bien—
+    // y el gate quedaba rojo con cualquier tarea en curso, así que el hook `Stop` no dejaba
+    // terminarla nunca. Lo cazó el taller. Se corre el self-test de verdad, las partes con esos
+    // casos, sobre una copia del repo con una tarea abierta: lo roto era el self-test, no el hook.
+    const copia = fs.mkdtempSync(path.join(os.tmpdir(), "harness-tarea-abierta-"));
+    try {
+      const versionados = (spawnSync("git", ["ls-files", "-z"], { cwd: REPO_ROOT, encoding: "utf8" }).stdout ?? "").split("\0").filter(Boolean);
+      for (const rel of versionados) {
+        if (!fs.existsSync(abs(rel))) continue;
+        fs.mkdirSync(path.join(copia, path.dirname(rel)), { recursive: true });
+        fs.copyFileSync(abs(rel), path.join(copia, rel));
+      }
+      spawnSync("git", ["init", "-q"], { cwd: copia });
+      fs.writeFileSync(
+        path.join(copia, config.task.file),
+        JSON.stringify({ item: "selftest", base: null, alcance: [{ ruta: "scripts/", motivo: "selftest" }], criterios: [] }),
+      );
+      const abierta = spawnSync(process.execPath, [path.join(copia, "scripts", "harness-selftest.mjs"), "--parts=frenos,estado", "--parallel=2"], {
+        cwd: copia,
+        encoding: "utf8",
+      });
+      const rojos = `${abierta.stdout ?? ""}`.split("\n").filter((l) => /^\s+✗/.test(l)).slice(0, 3).join(" · ");
+      caso(abierta.status === 0, "con una tarea abierta el self-test sigue verde (el gate no queda rojo por la tarea)", `exit ${abierta.status}: ${rojos}`);
+    } finally {
+      fs.rmSync(copia, { recursive: true, force: true });
     }
 
     // Los criterios salen de las casillas del ítem del gestor.
