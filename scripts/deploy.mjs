@@ -34,7 +34,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
-import { existeEjecutable, REPO_ROOT } from "../.claude/hooks/harness.mjs";
+import { existeEjecutable, resolverEjecutable, REPO_ROOT } from "../.claude/hooks/harness.mjs";
 
 const args = process.argv.slice(2);
 const RUTA_CONFIG_REL = ".claude/harness.config.json";
@@ -127,12 +127,20 @@ if (requiere.has("env")) {
   chequeos.push(["variables de entorno", !faltan.length, faltan.length ? `faltan: ${faltan.join(", ")}` : "", "exportalas en tu shell o en el secreto del CI; nunca en el repo ni en el config"]);
 }
 
-// En Windows los comandos corren por `cmd.exe` (Node no lanza un `.cmd` sin shell), y ahí
-// `& | < > ^ % !` y las comillas se interpretan: el array dejaría de ser «sin shell». Se rechazan.
+// En Windows, SÓLO un `.cmd`/`.bat` corre por `cmd.exe` (Node no lo lanza sin shell). Todo lo
+// demás va sin shell, igual que el gate: con `shell: true` para todo, cmd.exe partía cualquier
+// argumento con espacios (un `node -e "…"` llegaba roto) — lo destapó la matriz de CI. Por
+// cmd.exe, `& | < > ^ % !` y las comillas se interpretan: ahí, y sólo ahí, se rechazan.
 const META_CMD = /[&|<>^%!"\r\n]/;
 const enWindows = process.platform === "win32";
+const porCmd = (bin) => enWindows && /\.(cmd|bat)$/i.test(resolverEjecutable(String(bin ?? "")));
+/** Lanza un comando del config: sin shell, salvo el `.cmd`/`.bat` de Windows que no hay otra forma. */
+const lanzar = (bin, args, opts) => {
+  const shell = porCmd(bin);
+  return spawnSync(shell ? bin : resolverEjecutable(bin), args, { ...opts, shell });
+};
 for (const [campo, lista] of [["command", target.command], ["planCommand", target.planCommand ?? []]]) {
-  const malos = enWindows ? lista.filter((a) => META_CMD.test(String(a))) : [];
+  const malos = porCmd(lista[0]) ? lista.filter((a) => META_CMD.test(String(a))) : [];
   if (malos.length) chequeos.push([`\`${campo}\` sin metacaracteres de cmd.exe`, false, malos.join(" "), "pasalo a un script del repo y que el comando sea ese script"]);
 }
 
@@ -150,7 +158,7 @@ if (!aplicar) {
     console.log(`\nplan del proveedor: ${target.planCommand.join(" ")}`);
     const [p, ...pArgs] = target.planCommand;
     if (!existeEjecutable(p)) console.log(`  (no encuentro \`${p}\` en el PATH: plan omitido)`);
-    else spawnSync(p, pArgs, { cwd: REPO_ROOT, stdio: "inherit", shell: enWindows });
+    else lanzar(p, pArgs, { cwd: REPO_ROOT, stdio: "inherit" });
   }
   console.log(
     fallan.length
@@ -180,7 +188,7 @@ if (!existeEjecutable(bin)) {
   process.exit(1);
 }
 const inicio = Date.now();
-const r = spawnSync(bin, binArgs, { cwd: REPO_ROOT, stdio: "inherit", timeout: target.timeoutMs ?? 1800000, shell: enWindows });
+const r = lanzar(bin, binArgs, { cwd: REPO_ROOT, stdio: "inherit", timeout: target.timeoutMs ?? 1800000 });
 const estado = r.status === 0 ? "ok" : `falló (exit ${r.status ?? r.error?.code ?? "?"})`;
 
 // El registro vive en `.git/` (P7: nada nuevo en el árbol de fuentes). Una ruta afuera se ignora.

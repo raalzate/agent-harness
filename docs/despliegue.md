@@ -137,8 +137,9 @@ prueba, una preview). Empezá todo en `human` y pasá a `agent` con evidencia, n
 - Los secretos **nunca** van en el config ni en el repo: `env` sólo nombra las variables, y las
   pone el humano en su shell o el CI en su almacén de secretos. Un token escrito dentro de
   `command` se imprimiría en el plan y llegaría al transcript.
-- En Windows los comandos corren por `cmd.exe` (Node no lanza un `.cmd` sin shell): un argumento
-  con `& | < > ^ % !` o comillas se rechaza. Si hace falta, va en un script del repo.
+- En Windows, sólo un `.cmd`/`.bat` (`npm`, `az`, `gcloud`…) corre por `cmd.exe`, porque Node no lo
+  lanza sin shell; el resto va sin shell, como el gate. Por `cmd.exe`, un argumento con
+  `& | < > ^ % !` o comillas se rechaza. Si hace falta, va en un script del repo.
 - `ledger` tiene que estar bajo `.git/`; si no, se usa el default.
 
 ## Del lado de Claude Code
