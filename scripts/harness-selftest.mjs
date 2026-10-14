@@ -835,7 +835,7 @@ process.on("exit", devolverEstadoLoop);
 
 // 3e. El hook Stop no deja cerrar con el gate pendiente.
 if (hookFiles.has("gate-stop.mjs") && config.gate?.marker) {
-  const marker = abs(config.gate.marker);
+  const marker = rutaDeEstado(config.gate.marker);
   const existia = fs.existsSync(marker);
   try {
     fs.mkdirSync(path.dirname(marker), { recursive: true });
@@ -908,7 +908,7 @@ if (hookFiles.has("subagent-contract.mjs")) {
 //     lo único que separa a este freno de un estorbo, así que se prueba en las dos
 //     direcciones con pedidos REALES, no con muestras derivadas de sus propios patrones.
 if (config.askFirst?.marker && hookFiles.has("ask-first.mjs") && hookFiles.has("action-guard.mjs")) {
-  const marker = abs(config.askFirst.marker);
+  const marker = rutaDeEstado(config.askFirst.marker);
   const existia = fs.existsSync(marker);
   const respaldo = existia ? fs.readFileSync(marker, "utf8") : null;
 
@@ -1261,7 +1261,7 @@ if ((config.branches?.protected ?? []).length && fs.existsSync(abs(".githooks/pr
 //     cableadas en `post-edit-check.mjs` y por eso el freno de mayor retorno estaba MUERTO
 //     en todo repo que no fuera JS/TS: un `.cs` editado no marcaba el gate ni corría el lint.
 if (hookFiles.has("post-edit-check.mjs") && config.gate?.marker && (config.gate?.codeGlobs ?? []).length) {
-  const marker = abs(config.gate.marker);
+  const marker = rutaDeEstado(config.gate.marker);
   const existia = fs.existsSync(marker);
   const respaldo = existia ? fs.readFileSync(marker, "utf8") : null;
   const glob = config.gate.codeGlobs[0].replace(/\/$/, "");
@@ -3032,7 +3032,7 @@ section("9. costo del arnés (hooks-timing)");
     // Medir NO puede cambiar el estado de la sesión: los hooks que escriben marcadores
     // (el del gate, el de ask-first) se corren de verdad, y un marcador fabricado por la
     // medición bloquea el turno siguiente sin que nadie entienda por qué.
-    const marcadores = [config.gate?.marker, config.askFirst?.marker].filter(Boolean).map(abs);
+    const marcadores = [config.gate?.marker, config.askFirst?.marker].filter(Boolean).map(rutaDeEstado);
     const antes = marcadores.map((f) => fs.existsSync(f));
     correr(escribirCebo("estado.json", { budgetMs: 60000, runs: 1, probe }));
     const despues = marcadores.map((f) => fs.existsSync(f));
