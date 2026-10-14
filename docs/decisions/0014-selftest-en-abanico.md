@@ -67,10 +67,13 @@ Lo que no es detalle de implementación:
   | docs link-check | 3.0s · 1.8s | 0.2s · 0.2s |
 
   Con menos carga el `main` medía 98–129s ([0006](0006-banco-en-paralelo.md), #32); la
-  proporción es la que importa: **~4×**.
-- El self-test pasó de 535 a **538** comprobaciones (las tres del abanico) y el link-check
-  ganó una (citar un archivo dentro de un directorio ignorado es rojo): **ningún caso se
-  perdió** — el diff ordenado de las comprobaciones en serie y en abanico es idéntico.
+  proporción es la que importa: **~4×**. Rebasada sobre el `main` que trajo la tarea
+  declarada y el investigador de CI, otra vez alternando: `main` 180.1s · 224.5s, esta rama
+  45.6s (y 87.1s en una corrida que cayó en un pico de load 32).
+- El self-test ganó cuatro comprobaciones (573 → **577** sobre el `main` rebasado): las tres
+  del abanico y una del link-check (citar un archivo dentro de un directorio ignorado es
+  rojo). **Ningún caso se perdió**: el diff ordenado de las comprobaciones en serie
+  (`--parallel=1`) y en abanico es idéntico.
 - El camino crítico del self-test es ahora el grupo `estado` + `costo` (~16s): es el precio
   de no cruzar los marcadores de sesión, y es deliberado.
 - Como en [0006](0006-banco-en-paralelo.md), **la ganancia depende de los núcleos**: con dos,
