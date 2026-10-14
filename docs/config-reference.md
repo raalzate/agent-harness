@@ -690,6 +690,39 @@ que no se declara se deduce de claves que ya existen antes que de un literal. Ve
 
 ---
 
+## `deploy` — desplegar por un camino, a cualquier nube (opcional)
+
+```json
+"deploy": {
+  "entry": ["node scripts/deploy.mjs", "npm run deploy --"],
+  "targets": { "staging": { "command": ["railway", "up", "--ci"], "approval": "agent", "branch": "main", "env": ["RAILWAY_TOKEN"] } },
+  "bash": { "deny": [{ "pattern": "…", "reason": "…" }], "ask": [{ "pattern": "…", "reason": "…", "hint": false }] },
+  "mcp": { "commandFields": ["cli_command"], "deny": [], "ask": [] },
+  "passExamples": ["kubectl get pods", "terraform plan"]
+}
+```
+
+| Clave | Qué hace |
+|---|---|
+| `entry` | las formas **exactas** del punto de entrada. `deploy-guard` autoriza el dry-run y el `--apply` a un destino `agent` sólo si el comando entero es una de estas formas, con argumentos que son nombres y banderas: nada encadenado hereda la autorización |
+| `targets.<n>.command` | array, sin shell: nada se interpola |
+| `targets.<n>.approval` | `agent` (se autoriza; el script verifica) o `human` (default: Claude Code pregunta) |
+| `targets.<n>.branch`, `.remote` | de dónde se despliega, y contra qué remoto se mide `synced` |
+| `targets.<n>.requires` | `cleanTree` · `branch` · `synced` · `gate` · `env`. Sin la clave, rigen todas. Además, siempre: el config commiteado y sin cambios ([ADR 0011](decisions/0011-el-arnes-autoriza-un-camino.md)) |
+| `targets.<n>.env` | NOMBRES de variables requeridas. Nunca valores |
+| `targets.<n>.planCommand` | de sólo lectura (`terraform plan`, `kubectl diff`); corre en el dry-run |
+| `targets.<n>.timeoutMs`, `.description` | límite del comando (default 30 min) y lo que se le muestra al humano |
+| `ledger` | registro de cada `--apply` (default `.git/harness-deploys.log`). Tiene que estar bajo `.git/`: si no, se usa el default (P7) |
+| `bash.deny` / `bash.ask` | destruir un entorno (bloquea) / desplegar por fuera o imprimir secretos (pregunta). `hint: false` = el motivo no sugiere el camino de despliegue |
+| `mcp.deny` / `mcp.ask` | lo mismo, por nombre de herramienta MCP |
+| `mcp.commandFields` | campos donde una herramienta MCP recibe un comando de CLI como texto: se miden con `bash.*` |
+| `passExamples` | comandos de lectura que **no** pueden pedir permiso; el self-test los corre (P3) |
+| `reason` | el porqué que se imprime cuando una precondición falla |
+
+Sin `deploy`, el hook no opina. Criterio completo y destinos por nube: [despliegue.md](despliegue.md).
+
+---
+
 ## `install` — qué clave activa cada freno que viaja
 
 ```json
@@ -834,6 +867,7 @@ sin control se informa como hueco. Ver [guias-y-sensores.md](guias-y-sensores.md
 | `writeTools` | `harness.mjs` (`escribe`, `targetPath`, `proposedContent`) → `protected-paths.mjs`, `action-guard.mjs`, `reuse-guard.mjs`, `post-edit-check.mjs`; self-test (3b-bis) |
 | `bash.deny` | `bash-guard.mjs`, self-test |
 | `bash.ask` | `bash-guard.mjs` (después de `deny`), self-test (3c-bis) |
+| `deploy` | `deploy-guard.mjs` (`bash`, `mcp`, `entry`, `targets.*.approval`), `scripts/deploy.mjs` (`targets`, `ledger`, `remote`, `reason`; y `gate.registry`/`gate.marker` para la precondición `gate`), self-test (3c-ter, 3c-quater) |
 | `reuse` | `reuse-guard.mjs`, self-test |
 | `lint` (incluye `sourceExtensions`) | `post-edit-check.mjs`, `scripts/repo-lint.mjs`, `.githooks/pre-commit`, self-test |
 | `purity`, `purityImportSyntax`, `forbiddenDeps`, `singleSource`, `invariants`, `patterns`, `tests`, `incidents` | `scripts/repo-lint.mjs`, self-test |

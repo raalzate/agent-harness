@@ -36,6 +36,7 @@ scripts/harness-selftest.mjs  prueba de vida: genera los casos DESDE el config
 scripts/harness-bench.mjs     el arnés instalado en un repo real de cada stack (el encaje)
 scripts/harness-init.mjs      instalador en otro repo (dry-run por defecto, con perfil de stack)
 scripts/hooks-timing.mjs      el costo del arnés: latencia de cada hook contra su presupuesto
+scripts/deploy.mjs            el único camino de despliegue: dry-run, precondiciones, registro
 scripts/panel/                el panel: salud del arnés + memoria + esta máquina (lo regenera el gate)
 plantillas/perfiles/          8 perfiles de stack: hechos del lenguaje, nunca reglas
 plantillas/ examples/ docs/   lo que se copia y lo que se lee
@@ -112,6 +113,7 @@ npm run eval:reviewer  # ¿el reviewer encuentra lo que dice encontrar? (caro: f
 | la teoría, agnóstica de stack | `docs/buenas-practicas.md` (**ruta protegida**: se enmienda en su propio commit) |
 | el índice del código (obligatorio) | `docs/codegraph.md` |
 | el pipeline y sus reglas (GitHub, GitLab, Azure, Bitbucket, Jenkins) | `docs/cicd.md` |
+| desplegar a cualquier nube por un camino seguro | `docs/despliegue.md` |
 | monorepo, varios repos, plataforma | `docs/multi-proyecto.md` |
 | que corra en Windows, macOS y Linux | `docs/multiplataforma.md` |
 | guías y sensores: el marco de *harness engineering* aplicado | `docs/guias-y-sensores.md` |

@@ -15,6 +15,7 @@
     "hooks:install": "node scripts/hooks-install.mjs",
     "harness:install": "node scripts/harness-init.mjs",
     "cycle": "node scripts/cycle-check.mjs --rules",
+    "deploy": "node scripts/deploy.mjs",
     "timing": "node scripts/hooks-timing.mjs",
     "timing:rules": "node scripts/hooks-timing.mjs --rules",
     "drift": "node scripts/drift-check.mjs",
