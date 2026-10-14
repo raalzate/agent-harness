@@ -473,6 +473,60 @@ Escribir **fuera** del repo nunca se bloquea: un borrador en el scratchpad es pa
 
 ---
 
+## `loop` — el ciclo acotado (opcional)
+
+```json
+{ "maxAttempts": 2,
+  "ledger": ".git/gate-attempts.json",
+  "marker": ".git/gate-escalate",
+  "tailLines": 40,
+  "normalize": [],
+  "message": "…" }
+```
+
+El presupuesto de intentos de P12, hecho freno. `scripts/gate.mjs` es el único que ve el resultado
+de cada intento, así que es el que cuenta: por señal roja calcula una **huella** (la señal + las
+últimas `tailLines` líneas de su salida, sin el ruido de `normalize`) y la anota en `ledger`.
+
+| Lo que pasa en la corrida | La cuenta de esa señal |
+|---|---|
+| roja con la misma huella que la anterior | +1 |
+| roja con otra huella (el error cambió: hubo hipótesis nueva) | vuelve a 1 |
+| verde | se borra |
+| omitida | no se toca: omitido no es verde |
+
+Cuando una cuenta pasa `maxAttempts`, el gate imprime **PRESUPUESTO AGOTADO** y deja `marker`:
+`action-guard.mjs` deniega toda edición dentro del repo, `gate-stop.mjs` **deja cerrar** el turno
+(obligar a seguir con el gate rojo es el bucle sin límite que esto corta), y el próximo pedido del
+humano —`ask-first.mjs`, sea cual sea el pedido— borra marcador y libro: la escalada está
+contestada y el presupuesto vuelve entero.
+
+`normalize` vacío usa el default agnóstico de `gate.mjs`: colores ANSI, fechas ISO, duraciones,
+`línea:columna`, hashes y rutas temporales. **No** borra cualquier número a propósito: «3 tests
+fallan» → «2 tests fallan» es progreso, y contarlo como el mismo error frenaría a quien avanza. Si
+tu herramienta imprime otro ruido entre corridas (un PID, un puerto aleatorio), declaralo acá: sin
+normalizarlo, la huella cambia sola, la cuenta vuelve a 1 cada vez y el freno no muerde nunca.
+El temporal de la máquina (`os.tmpdir()`, que en macOS es `/var/folders/…/T`) se borra siempre.
+
+`message` es lo que lee el agente cuando el humano repone el presupuesto. Un `loop` sin `ledger`,
+sin `marker` o con un `maxAttempts` que no es número ≥ 1 se trata como **ausente**: contar sin poder
+anotar imprimiría un presupuesto que no existe.
+
+Sin la clave, el gate corre las señales con `stdio: "inherit"` como siempre y no cuenta nada.
+Con ella, la salida se reenvía mientras sale y se guarda la cola para la huella — **por pipe**: la
+señal ya no ve una terminal, y las herramientas que lo detectan (vitest, jest, gradle, dotnet)
+cambian de reporter o pierden los colores. Cambia la presentación, no el veredicto. Marcador y libro
+van en `.git/` (P7) y en `observability.stateFiles`: medir no puede cambiar la sesión.
+
+Lo que **no** ve: los reintentos que nunca pasan por el gate (el agente corriendo `npm test` a
+mano diez veces). El gate es la definición de entregable; lo que no llega a él no cuenta como intento.
+Y el freno cubre las ediciones por Write/Edit/MCP: con el presupuesto agotado, una escritura por
+Bash (`node -e`, `cat >`) no la ve `action-guard` — el mismo hueco que tiene `askFirst`. Lo que
+sí frena `bash.deny` es borrar o reescribir el marcador y el libro. Decisión en
+[ADR 0011](decisions/0011-ciclo-acotado.md).
+
+---
+
 ## `tracker` — el gestor de trabajo, sea cual sea
 
 ```json
@@ -845,6 +899,7 @@ sin control se informa como hueco. Ver [guias-y-sensores.md](guias-y-sensores.md
 | `commitMsg` | `.githooks/commit-msg`, self-test |
 | `sdd` | `sdd-router.mjs`, self-test |
 | `askFirst` | `ask-first.mjs`, `action-guard.mjs`, self-test |
+| `loop` | `scripts/gate.mjs` (cuenta y deja el marcador), `action-guard.mjs` (frena editar), `gate-stop.mjs` (deja cerrar), `ask-first.mjs` (repone), `scripts/hooks-timing.mjs` (estado a restaurar), self-test (3e-loop) |
 | `branches` | `.githooks/pre-push`, self-test |
 | `workflow` | `scripts/cycle-check.mjs` (lo invoca `.githooks/pre-push`), la ruta `cycle` del router, self-test |
 | `xp` | `scripts/cycle-check.mjs` (lo invoca `.githooks/commit-msg`), self-test (una práctica por cebo) |

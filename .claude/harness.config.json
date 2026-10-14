@@ -122,6 +122,10 @@
         "reason": "`--force` reescribe historia remota. Usá --force-with-lease y pedí confirmación."
       },
       {
+        "pattern": "(\\b(rm|mv|cp|tee|truncate|unlink|del)\\b|>)[^|;&]*\\.git[\\\\/]gate-(escalate|attempts)",
+        "reason": "el marcador y el libro del ciclo acotado (`loop`) los escribe el gate y los levanta el pedido del humano. Borrarlos o reescribirlos desde el agente es saltarse la escalada: pará y contale al humano qué falla, qué probaste y tu próxima hipótesis."
+      },
+      {
         "pattern": "git\\s+reset\\s+--hard",
         "reason": "`reset --hard` destruye trabajo sin commitear. Usá `git stash` o pedí confirmación."
       },
@@ -599,6 +603,15 @@
     ],
     "doc": "docs/sdd.md"
   },
+  "loop": {
+    "$comment": "Ciclo acotado (P12): el gate cuenta los intentos sobre el MISMO error por señal y, al pasar `maxAttempts`, deja `marker`: `action-guard` frena editar dentro del repo, `gate-stop` deja cerrar para escalar, y el próximo pedido del humano (`ask-first`) repone el presupuesto. La huella es la señal + las últimas `tailLines` líneas de su salida, sin el ruido que cambia entre corridas aunque el error sea el mismo (`normalize`; vacío = el default agnóstico de scripts/gate.mjs: colores, fechas, duraciones, línea:columna, hashes, temporales). Sin esta clave no se cuenta nada. Todo en `.git/` (P7).",
+    "maxAttempts": 2,
+    "ledger": ".git/gate-attempts.json",
+    "marker": ".git/gate-escalate",
+    "tailLines": 40,
+    "normalize": [],
+    "message": "El gate había agotado los intentos sobre el mismo error y el humano contestó: seguí con SU indicación, no con la hipótesis que ya falló."
+  },
   "askFirst": {
     "$comment": "«Una pregunta se contesta; una acción se pide». `ask-first.mjs` marca el turno cuando el pedido es interrogativo Y no trae verbo de acción; `action-guard.mjs` deniega toda edición DENTRO del repo mientras el marcador esté puesto. Lo limpia el siguiente pedido del usuario: la fuga es humana a propósito. `pastPatterns` desempata el caso que originó el hook: un verbo de acción EN PASADO («¿aplicaste eso?») pregunta por lo hecho, no pide que se haga. La detección es ANGOSTA (interrogación explícita) porque un clasificador ancho bloquearía instrucciones legítimas — y un freno que muerde de más se desactiva a mano. Lo que NO caza está declarado en STATUS.md.",
     "marker": ".git/agent-answer-first",
@@ -744,7 +757,9 @@
     "$stateFiles": "Los archivos de ESTADO que un hook puede escribir al correr. Medir corre los hooks de verdad, así que se toman antes y se restauran después: un marcador fabricado por la medición bloquea el turno siguiente y nadie entiende por qué. Se declara en vez de deducirse de `gate.marker` + `askFirst.marker` porque deducirlo dejaba la prueba CIEGA al día en que entre un tercer hook con marcador propio.",
     "stateFiles": [
       ".git/gate-dirty",
-      ".git/agent-answer-first"
+      ".git/agent-answer-first",
+      ".git/gate-escalate",
+      ".git/gate-attempts.json"
     ]
   },
   "subagentOutput": {

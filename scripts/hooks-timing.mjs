@@ -185,7 +185,7 @@ const archivosDeEstado = () => {
   const declarados = obs.stateFiles;
   const lista = Array.isArray(declarados) && declarados.length
     ? declarados
-    : [config.gate?.marker, config.askFirst?.marker];
+    : [config.gate?.marker, config.askFirst?.marker, config.loop?.marker, config.loop?.ledger];
   return lista.filter(Boolean).map((p) => abs(p));
 };
 

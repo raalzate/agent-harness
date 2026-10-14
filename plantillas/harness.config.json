@@ -237,6 +237,14 @@
     "$reminder": "Lo último que el agente lee al abrir la sesión. Nombrá el comando de gate REAL de este repo: un recordatorio que cita el comando de otro stack es ruido.",
     "reminder": ""
   },
+  "loop": {
+    "$comment": "Ciclo acotado: el gate cuenta los intentos sobre el MISMO error por señal; pasado `maxAttempts` deja `marker`, `action-guard` frena editar, `gate-stop` deja cerrar para escalar y el próximo pedido del humano repone el presupuesto. `normalize` vacío = el default agnóstico (colores, fechas, duraciones, línea:columna, hashes, temporales). Sin esta clave no se cuenta nada.",
+    "maxAttempts": 2,
+    "ledger": ".git/gate-attempts.json",
+    "marker": ".git/gate-escalate",
+    "tailLines": 40,
+    "normalize": []
+  },
   "askFirst": {
     "$comment": "«Una pregunta se contesta; una acción se pide». Estas claves ACTIVAN `ask-first.mjs` + `action-guard.mjs`: sin ellas los dos hooks quedan instalados y muertos. Los patrones son del idioma (español), no de este repo — ajustalos si tu equipo trabaja en otro. La detección es ANGOSTA a propósito: un clasificador ancho bloquea instrucciones legítimas, y un freno que muerde de más se desactiva a mano en una semana.",
     "marker": ".git/agent-answer-first",
@@ -414,7 +422,7 @@
       "prompt": "¿cómo está el arnés?"
     },
     "reason": "un hook que tarda se paga en CADA turno; el presupuesto convierte «esto va a ser lento» en un comando que falla.",
-    "$stateFiles": "Opcional: los archivos de estado que un hook escribe al correr y que la medición restaura. Sin declararlos se usan `gate.marker` y `askFirst.marker`."
+    "$stateFiles": "Opcional: los archivos de estado que un hook escribe al correr y que la medición restaura. Sin declararlos se usan `gate.marker`, `askFirst.marker`, `loop.marker` y `loop.ledger`."
   },
   "commitMsg": {
     "$comment": "Qué commits piden registro. La documentación no: ES el registro, no el cambio. `escapeLine` exige motivo — un `no-issue:` pelado sería la misma omisión con otro nombre.",
