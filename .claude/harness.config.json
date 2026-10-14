@@ -926,6 +926,125 @@
     ],
     "reason": "una guía que recomienda lo que un freno prohíbe deja al agente en un bucle de reintentos."
   },
+  "deploy": {
+    "$comment": "DESPLEGAR POR UN CAMINO, A CUALQUIER NUBE. `targets` declara cada destino: `command` (array, sin shell), `approval` (`agent` = el agente lo corre sin pedir permiso porque el script verifica; `human` = Claude Code le pregunta al humano), `branch`, `requires` (cleanTree · branch · synced · gate · env; sin la clave rigen todas), `env` (NOMBRES de variables, nunca valores), `planCommand` opcional de sólo lectura (`terraform plan`, `kubectl diff`) que corre en el dry-run, `remote`, `timeoutMs`. `entry` son las formas exactas del punto de entrada que `deploy-guard` reconoce. `bash.deny`/`mcp.deny` = destruir un entorno entero (lo hace el humano); `bash.ask`/`mcp.ask` = desplegar por fuera del camino, o imprimir secretos al transcript (`hint: false`: ahí el camino seguro no aplica). Lo de leer (logs, estado, listar) no casa nada y decide el permiso normal. `mcp.commandFields` = los campos donde una herramienta MCP recibe un comando de CLI como texto: se miden con las reglas de bash. Este repo no despliega nada (`targets` vacío): las reglas igual protegen la sesión, y el self-test prueba el script con un destino cebo. Lo leen `.claude/hooks/deploy-guard.mjs` y `scripts/deploy.mjs`. Ver docs/despliegue.md.",
+    "entry": [
+      "node scripts/deploy.mjs",
+      "npm run deploy --"
+    ],
+    "ledger": ".git/harness-deploys.log",
+    "remote": "origin",
+    "reason": "lo que llega a un entorno tiene que ser un commit que pasó el gate y que el equipo ve en el remoto; si no, el incidente de producción no se puede reproducir.",
+    "targets": {},
+    "$passExamples": "Lo que NO puede pedir permiso: leer el estado de cada nube. Es la mitad del pedido original («Claude Code está bloqueando mucho»): un freno que pregunta por un `kubectl get pods` se contesta sin leer. El self-test corre cada uno contra el hook y exige que no opine (P3).",
+    "passExamples": [
+      "aws s3 ls",
+      "aws sts get-caller-identity",
+      "az account show",
+      "az webapp list",
+      "gcloud run services list",
+      "kubectl get pods -n web",
+      "kubectl logs deploy/web",
+      "helm list",
+      "terraform plan",
+      "pulumi preview",
+      "railway logs",
+      "railway status",
+      "vercel ls",
+      "fly status",
+      "docker build -t web .",
+      "gh run list",
+      "aws ec2 describe-instances",
+      "aws eks describe-cluster --name prod",
+      "aws eks list-clusters",
+      "aws eks update-kubeconfig --name prod",
+      "eksctl get cluster",
+      "az aks show -g rg -n k8s",
+      "az aks get-credentials -g rg -n k8s",
+      "gcloud container clusters list",
+      "gcloud container clusters get-credentials k8s",
+      "gcloud deploy releases list",
+      "az containerapp show -n web -g rg"
+    ],
+    "bash": {
+      "deny": [
+        {
+          "pattern": "\\b(terraform|tofu|terragrunt)\\s+destroy\\b|\\b(terraform|tofu)\\s+apply\\b.*\\s-destroy\\b|\\bpulumi\\s+(destroy|stack\\s+rm)\\b|\\bcdk\\s+destroy\\b|\\b(sam|serverless|sls)\\s+(delete|remove)\\b|\\bazd\\s+down\\b",
+          "reason": "destruye la infraestructura entera declarada por el IaC. No tiene ctrl-Z y no es una tarea de agente."
+        },
+        {
+          "pattern": "\\baz\\s+group\\s+delete\\b|\\baz\\s+sql\\s+(server|db)\\s+delete\\b|\\bgcloud\\s+projects\\s+delete\\b|\\bgcloud\\s+sql\\s+instances\\s+delete\\b|\\baws\\s+cloudformation\\s+delete-stack\\b|\\baws\\s+s3\\s+rb\\b|\\baws\\s+s3\\s+rm\\b.*--recursive|\\baws\\s+rds\\s+delete-db|\\bkubectl\\s+delete\\s+(ns|namespaces?)\\b",
+          "reason": "borra un entorno, una base de datos o un bucket entero: los datos no vuelven."
+        },
+        {
+          "pattern": "\\b(fly|flyctl)\\s+apps\\s+(destroy|delete)\\b|\\bheroku\\s+apps:destroy\\b|\\bvercel\\s+(remove|rm)\\b|\\brailway\\s+delete\\b",
+          "reason": "borra la aplicación entera del proveedor, con su historial de despliegues."
+        },
+        {
+          "pattern": "\\baws\\s+eks\\s+delete-(cluster|nodegroup|fargate-profile)\\b|\\beksctl\\s+delete\\s+(cluster|nodegroup|fargateprofile)\\b|\\bgcloud\\s+container\\s+(clusters|node-pools)\\s+delete\\b|\\baz\\s+aks\\s+(delete|nodepool\\s+delete)\\b|\\baws\\s+ecs\\s+delete-cluster\\b|\\baws\\s+dynamodb\\s+delete-table\\b",
+          "reason": "borra un clúster administrado (EKS, GKE, AKS, ECS) o una tabla: todo lo que corre o vive ahí se va con él."
+        }
+      ],
+      "ask": [
+        {
+          "pattern": "\\baws\\s+(cloudformation\\s+(deploy|create-stack|update-stack|execute-change-set)|ecs\\s+(update-service|run-task)|lambda\\s+(update-function-code|update-function-configuration|publish-version|update-alias)|s3\\s+(cp|sync|mv)|elasticbeanstalk\\s+(update-environment|create-application-version)|apprunner\\s+(start-deployment|update-service)|amplify\\s+start-job|deploy\\s+create-deployment)\\b|\\b(sam|cdk|eb|serverless|sls)\\s+deploy\\b|\\bcopilot\\s+\\w+\\s+deploy\\b",
+          "reason": "despliega o modifica recursos en AWS por fuera del camino declarado: sin gate, sin rama verificada y sin registro."
+        },
+        {
+          "pattern": "\\baz\\s+(webapp|functionapp|containerapp|staticwebapp|aks)\\s+(deploy|up|update|create|restart|scale)\\b|\\baz\\s+deployment\\s+(group|sub|mg|tenant)\\s+create\\b|\\baz\\s+acr\\s+build\\b|\\bazd\\s+(up|deploy|provision)\\b|\\bfunc\\s+azure\\s+functionapp\\s+publish\\b",
+          "reason": "despliega o modifica recursos en Azure por fuera del camino declarado: sin gate, sin rama verificada y sin registro."
+        },
+        {
+          "pattern": "\\bgcloud\\s+(app\\s+deploy|run\\s+(deploy|services\\s+update)|functions\\s+deploy|builds\\s+submit)\\b|\\bfirebase\\s+deploy\\b",
+          "reason": "despliega en Google Cloud o Firebase por fuera del camino declarado: sin gate, sin rama verificada y sin registro."
+        },
+        {
+          "pattern": "\\baws\\s+eks\\s+(create|update|associate|tag)-(?!kubeconfig)[a-z-]+|\\beksctl\\s+(create|upgrade|scale|update|set|utils\\s+update-[a-z-]+)\\b|\\bgcloud\\s+container\\s+(clusters|node-pools)\\s+(create|update|upgrade|resize)\\b|\\baz\\s+aks\\s+(upgrade|start|stop|nodepool\\s+(add|update|upgrade|scale))\\b|\\bgcloud\\s+deploy\\s+(releases\\s+(create|promote)|rollouts\\s+(approve|advance|retry|cancel))\\b",
+          "reason": "crea o cambia un clúster administrado (EKS, GKE, AKS) o promueve un release de Cloud Deploy por fuera del camino declarado."
+        },
+        {
+          "pattern": "\\bkubectl\\s+(apply|create|replace|patch|scale|set\\s+image|rollout\\s+(restart|undo)|delete)\\b|\\bhelm\\s+(install|upgrade|rollback|uninstall)\\b|\\bargocd\\s+app\\s+(sync|rollback|set|delete)\\b|\\bskaffold\\s+(run|deploy)\\b",
+          "reason": "cambia lo que corre en el clúster por fuera del camino declarado (GitOps o `deploy.targets`)."
+        },
+        {
+          "pattern": "\\b(terraform|tofu|terragrunt)\\s+(apply|import|taint|state\\s+(rm|mv|push))\\b|\\bpulumi\\s+(up|import|refresh)\\b|\\bansible-playbook\\b",
+          "reason": "aplica cambios de infraestructura. Mostrá primero el plan (`terraform plan`, `pulumi preview`) y que el humano lo lea."
+        },
+        {
+          "pattern": "\\brailway\\s+(up|redeploy|down)\\b|\\bvercel\\s+(deploy|promote|rollback)\\b|\\bvercel\\b.*\\s--prod\\b|\\bnetlify\\s+deploy\\b|\\b(fly|flyctl)\\s+(deploy|scale|secrets\\s+set)\\b|\\bheroku\\s+(container:release|releases:rollback|config:set|ps:scale)\\b|\\bgit\\s+push\\s+heroku\\b|\\bdocker\\s+push\\b|\\bgh\\s+workflow\\s+run\\b|\\bgh\\s+release\\s+create\\b",
+          "reason": "publica o despliega por fuera del camino declarado: sin gate, sin rama verificada y sin registro."
+        },
+        {
+          "pattern": "\\baws\\s+secretsmanager\\s+get-secret-value\\b|\\baws\\s+ssm\\s+get-parameters?\\b.*--with-decryption|\\baz\\s+keyvault\\s+secret\\s+show\\b|\\bgcloud\\s+secrets\\s+versions\\s+access\\b|\\bkubectl\\s+get\\s+secrets?\\b.*-o\\s*=?\\s*(yaml|json|jsonpath)|\\brailway\\s+variables\\b|\\bheroku\\s+config\\s*$|\\bvercel\\s+env\\s+pull\\b|^\\s*(printenv|env)\\s*$",
+          "reason": "imprime secretos en el transcript, que queda guardado y puede viajar en un log o un resumen. Si hace falta un valor, que el humano lo pase al proceso por variable de entorno.",
+          "hint": false
+        },
+        {
+          "$comment": "LA RED, y va ÚLTIMA: ninguna lista de comandos de nube está completa. Cualquier verbo destructivo de un CLI de nube que no casó una regla específica pregunta. Sin esta regla, 11 de 22 comandos probados (EKS, GKE, AKS, EC2) pasaban callados. Las lecturas no traen estos verbos; `passExamples` lo prueba.",
+          "pattern": "\\b(aws|az|gcloud|eksctl|azd|doctl|oci|ibmcloud)\\s[^|;&]*\\b[a-z-]*(delete|terminate|destroy|purge|deregister|remove|disable)[a-z-]*\\b",
+          "reason": "borra, termina o deshabilita algo en la nube, y ninguna regla específica lo reconoce. Si es lo pedido, que lo confirme el humano."
+        }
+      ]
+    },
+    "mcp": {
+      "commandFields": [
+        "cli_command",
+        "command"
+      ],
+      "deny": [
+        {
+          "pattern": "^mcp__.+__(delete[-_](volume|bucket|database|db|project|environment|stack|cluster)|destroy)",
+          "reason": "borra datos o un entorno entero del proveedor: no vuelve."
+        }
+      ],
+      "ask": [
+        {
+          "pattern": "^mcp__.+__(deploy|redeploy|create[-_]deployment|accept[-_]deploy|rollback|promote|deploy[-_]template|restart[-_]service|update[-_]service|create[-_]service|delete[-_]service|set[-_]variables|delete[-_]variables?|update[-_]function|scale)",
+          "reason": "cambia lo que corre en un entorno a través de un servidor MCP, por fuera del camino declarado."
+        }
+      ]
+    }
+  },
   "install": {
     "$comment": "Qué clave del config ACTIVA cada freno que el instalador copia. Un freno copiado sin su clave queda «instalado y muerto» en el repo destino — el anti-patrón que este arnés existe para evitar, cometido por el propio instalador: viajaron `ask-first`, `action-guard` y `pre-push` con la plantilla sin `askFirst` ni `branches`. El self-test verifica la plantilla contra esta tabla.",
     "activators": {
@@ -943,7 +1062,9 @@
       ".githooks/commit-msg": "commitMsg.codePattern",
       ".githooks/pre-push": "branches.protected",
       "scripts/cycle-check.mjs": "workflow.branchPattern",
-      "scripts/hooks-timing.mjs": "observability.budgetMs"
+      "scripts/hooks-timing.mjs": "observability.budgetMs",
+      ".claude/hooks/deploy-guard.mjs": "deploy.bash.ask",
+      "scripts/deploy.mjs": "deploy.entry"
     }
   }
 }

@@ -27,7 +27,14 @@
       },
       {
         "matcher": "Bash",
-        "hooks": [{ "type": "command", "command": "node .claude/hooks/bash-guard.mjs" }]
+        "hooks": [
+          { "type": "command", "command": "node .claude/hooks/bash-guard.mjs" },
+          { "type": "command", "command": "node .claude/hooks/deploy-guard.mjs" }
+        ]
+      },
+      {
+        "matcher": "mcp__.*",
+        "hooks": [{ "type": "command", "command": "node .claude/hooks/deploy-guard.mjs" }]
       }
     ],
     "PostToolUse": [

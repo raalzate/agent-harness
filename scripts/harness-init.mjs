@@ -185,6 +185,7 @@ const COPIAR = [
   ".claude/hooks/ask-first.mjs",
   ".claude/hooks/action-guard.mjs",
   ".claude/hooks/graph-first.mjs",
+  ".claude/hooks/deploy-guard.mjs",
   ".claude/settings.json",
   ".claude/agents/explorer.md",
   ".claude/agents/reviewer.md",
@@ -204,6 +205,9 @@ const COPIAR = [
   "scripts/artifacts-check.mjs",
   "scripts/cycle-check.mjs",
   "scripts/hooks-timing.mjs",
+  // El único camino de despliegue: `deploy-guard` lo autoriza, y sin el script el agente quedaría
+  // con un punto de entrada que no existe y sólo los CLIs crudos (que piden permiso).
+  "scripts/deploy.mjs",
   // Los que `/harness-audit` pide correr: el mapa (qué guía, freno o sensor actúa en cada etapa)
   // y la deriva. Genéricos: todo lo que saben sale de `taxonomy` y `drift` en el config.
   "scripts/harness-map.mjs",

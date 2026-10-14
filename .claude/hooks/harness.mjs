@@ -221,6 +221,22 @@ export function ask(motivo, input) {
   process.exit(0);
 }
 
+/**
+ * Autoriza SIN pedido de permiso: el camino que el config declaró seguro y verificable. Es lo
+ * opuesto de `ask`, y por eso se usa poco: sólo cuando el comando ENTERO es la forma declarada
+ * (el punto de entrada exacto, sin nada encadenado). Un `deny` de otro hook igual gana.
+ * Sin evento no hay a quién autorizar: deja pasar callado y decide el permiso normal.
+ */
+export function permitir(motivo, input) {
+  if (!input?.hook_event_name) allow();
+  process.stdout.write(
+    `${JSON.stringify({
+      hookSpecificOutput: { hookEventName: input.hook_event_name, permissionDecision: "allow", permissionDecisionReason: motivo },
+    })}\n`,
+  );
+  process.exit(0);
+}
+
 /** Deja pasar. */
 export function allow(message) {
   if (message) process.stdout.write(`${message}\n`);

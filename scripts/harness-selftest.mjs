@@ -565,6 +565,231 @@ if (hookFiles.has("bash-guard.mjs")) {
   }
 }
 
+// 3c-ter. Despliegue (`deploy`): un camino autorizado, el humano donde importa, y nada crudo.
+//     Las reglas de bash y MCP se prueban con una muestra derivada de cada una (P2), más lo
+//     inocente que tiene que pasar sin opinión (P3: leer logs no pide permiso). Las decisiones
+//     sobre el punto de entrada dependen de `targets`, que este repo deja vacío: se prueban con
+//     el hook COPIADO a un repo temporal con un config cebo, porque `REPO_ROOT` sale de la
+//     ubicación del hook y así nada se escribe en el árbol (P7).
+if (config.deploy && hookFiles.has("deploy-guard.mjs")) {
+  const spec = config.deploy;
+  const bash = (command) => ({ hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command } });
+  const decision = (r) => {
+    try {
+      return JSON.parse(r.stdout.trim()).hookSpecificOutput?.permissionDecision ?? null;
+    } catch {
+      return null;
+    }
+  };
+  // Una regla de despliegue es una ALTERNATIVA de CLIs (`aws …|az …|gcloud …`) y la muestra sale
+  // con los `|` adentro: probada entera, alcanza con que muerda UNA alternativa y las demás
+  // podrían estar mal escritas sin que nadie se entere. Se prueba cada pedazo que casa solo.
+  const muestras = (reglas) =>
+    (reglas ?? []).flatMap((r) => {
+      const cruda = sampleFromPattern(r.pattern);
+      if (!cruda) return [[r, null]];
+      const piezas = cruda.split("|").map((p) => p.trim()).filter((p) => p && firstMatch([r], p));
+      return (piezas.length ? piezas : [cruda]).map((p) => [r, p]);
+    });
+
+  for (const [regla, m] of muestras(spec.bash?.deny)) {
+    if (!m) skip(`deploy.bash.deny \`${regla.pattern.slice(0, 40)}…\``, "no se reduce a un ejemplo; probalo a mano");
+    else if (runHook("deploy-guard.mjs", bash(m)).status === 2) ok(`deploy-guard bloquea \`${m.trim()}\``);
+    else bad(`deploy-guard bloquea \`${m.trim()}\``, "destruir un entorno pasó");
+  }
+  for (const [regla, m] of muestras(spec.bash?.ask)) {
+    if (!m) skip(`deploy.bash.ask \`${regla.pattern.slice(0, 40)}…\``, "no se reduce a un ejemplo; probalo a mano");
+    else if (firstMatch(spec.bash?.deny, m)) skip(`deploy.bash.ask \`${m.trim()}\``, "la muestra también casa `deploy.bash.deny`, que gana");
+    else {
+      const r = runHook("deploy-guard.mjs", bash(m));
+      if (r.status === 0 && decision(r) === "ask") ok(`deploy-guard le pregunta al humano por \`${m.trim()}\``);
+      else bad(`deploy-guard pregunta por \`${m.trim()}\``, `exit ${r.status}, decisión ${decision(r)}`);
+    }
+  }
+  const mcpCall = (tool_name, tool_input = {}) => ({ hook_event_name: "PreToolUse", tool_name, tool_input });
+  for (const [regla, m] of muestras(spec.mcp?.deny)) {
+    if (!m) skip(`deploy.mcp.deny \`${regla.pattern}\``, "no se reduce a un ejemplo");
+    else if (runHook("deploy-guard.mjs", mcpCall(m)).status === 2) ok(`deploy-guard bloquea la herramienta \`${m}\``);
+    else bad(`deploy-guard bloquea \`${m}\``, "la herramienta destructiva pasó");
+  }
+  for (const [regla, m] of muestras(spec.mcp?.ask)) {
+    if (!m) skip(`deploy.mcp.ask \`${regla.pattern}\``, "no se reduce a un ejemplo");
+    else {
+      const r = runHook("deploy-guard.mjs", mcpCall(m));
+      if (r.status === 0 && decision(r) === "ask") ok(`deploy-guard le pregunta al humano por la herramienta \`${m}\``);
+      else bad(`deploy-guard pregunta por \`${m}\``, `exit ${r.status}, decisión ${decision(r)}`);
+    }
+  }
+  // Un servidor MCP que recibe el comando como texto no es un atajo alrededor de las reglas de bash.
+  const campo = (spec.mcp?.commandFields ?? [])[0];
+  const destructivo = muestras(spec.bash?.deny).find(([, m]) => m)?.[1];
+  if (campo && destructivo) {
+    const r = runHook("deploy-guard.mjs", mcpCall("mcp__selftest__call_cli", { [campo]: destructivo }));
+    if (r.status === 2) ok(`deploy-guard mide el comando que trae una herramienta MCP en \`${campo}\``);
+    else bad("deploy-guard vía MCP con comando", `exit ${r.status}: \`${destructivo}\` pasó por \`${campo}\``);
+  }
+  // P3: leer no pide permiso, ni por bash ni por MCP.
+  for (const [nombre, payload] of [
+    ["un `git status`", bash("git status")],
+    ["leer logs por MCP", mcpCall("mcp__selftest__get-logs", { service: "web" })],
+    ...(spec.passExamples ?? []).map((c) => [`\`${c}\` (passExamples)`, bash(c)]),
+  ]) {
+    const r = runHook("deploy-guard.mjs", payload);
+    if (r.status === 0 && !decision(r)) ok(`deploy-guard no opina sobre ${nombre}`);
+    else bad(`deploy-guard deja pasar ${nombre}`, `exit ${r.status}, decisión ${decision(r)}: muerde de más`);
+  }
+
+  // El punto de entrada, con destinos cebo: el hook copiado a un repo temporal.
+  const entrada = (spec.entry ?? [])[0];
+  if (!entrada) skip("deploy-guard: punto de entrada", "`deploy.entry` vacío");
+  else {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "harness-deploy-guard-"));
+    try {
+      fs.mkdirSync(path.join(tmp, ".claude", "hooks"), { recursive: true });
+      for (const h of ["harness.mjs", "deploy-guard.mjs"]) fs.copyFileSync(abs(`.claude/hooks/${h}`), path.join(tmp, ".claude", "hooks", h));
+      const cebo = { deploy: { ...spec, targets: { prueba: { command: ["echo", "x"], approval: "agent" }, prod: { command: ["echo", "x"], approval: "human" } } } };
+      fs.writeFileSync(path.join(tmp, ".claude", "harness.config.json"), JSON.stringify(cebo));
+      const correr = (command) => {
+        const r = spawnSync("node", [path.join(tmp, ".claude", "hooks", "deploy-guard.mjs")], { input: JSON.stringify(bash(command)), encoding: "utf8" });
+        return { status: r.status, stdout: r.stdout ?? "" };
+      };
+      const casos = [
+        ["el dry-run se autoriza solo", `${entrada} prod`, "allow"],
+        ["`--apply` a un destino `approval: agent` se autoriza solo", `${entrada} prueba --apply`, "allow"],
+        ["`--apply` a un destino `approval: human` le pregunta al humano", `${entrada} prod --apply`, "ask"],
+        ["`--apply` a un destino que nadie declaró le pregunta al humano", `${entrada} otro --apply`, "ask"],
+        ["encadenar algo detrás del punto de entrada no hereda la autorización", `${entrada} prueba --apply && echo hola`, null],
+        // Los vectores que cazó el reviewer, y sus vecinos: ninguno sale autorizado.
+        ["un salto de línea no separa un segundo comando autorizado", `${entrada}\nprintenv`, null],
+        ["un salto de línea detrás del destino tampoco", `${entrada} prueba\nprintenv`, null],
+        ["un retorno de carro tampoco", `${entrada} prueba\r\nprintenv`, null],
+        ["`--config <archivo>` no viaja con la autorización", `${entrada} prueba --config otro.json`, null],
+        ["una bandera cualquiera no viaja con la autorización", `${entrada} prueba --otra`, null],
+        ["`--apply` antes del destino no es la forma", `${entrada} --apply prueba`, null],
+        ["`;` detrás no hereda", `${entrada} prueba; echo hola`, null],
+        ["`|` detrás no hereda", `${entrada} prueba | cat`, null],
+        ["`$()` en el destino no hereda", `${entrada} $(echo prueba)`, null],
+        ["un espacio no-ASCII (NBSP) no pasa por separador", `${entrada} prueba`, null],
+        ["un separador de línea Unicode (U+2028) no pasa", `${entrada} prueba printenv`, null],
+      ];
+      for (const [nombre, comando, esperado] of casos) {
+        const r = correr(comando);
+        if (r.status === 0 && decision(r) === esperado) ok(`deploy-guard: ${nombre}`);
+        else bad(`deploy-guard: ${nombre}`, `exit ${r.status}, decisión ${decision(r)} (esperaba ${esperado})`);
+      }
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  }
+}
+
+// 3c-quater. `scripts/deploy.mjs`: las precondiciones muerden, el dry-run no ejecuta, ningún
+//     valor de secreto se imprime y cada `--apply` deja registro. El script lee el config del
+//     repo donde VIVE (no acepta `--config`: era un agujero, ver deploy-guard), así que se copia
+//     con `harness.mjs` a un repo git temporal con un `origin` bare y un config cebo COMMITEADO.
+//     El «despliegue» del destino cebo es escribir un archivo testigo dentro de `.git/`.
+{
+  const script = abs("scripts/deploy.mjs");
+  if (!fs.existsSync(script)) skip("deploy: el script", "el repo no trae scripts/deploy.mjs");
+  else {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "harness-deploy-"));
+    try {
+      const g = (cwd, ...a) => spawnSync("git", a, { cwd, encoding: "utf8" });
+      const origen = path.join(tmp, "origen.git");
+      const work = path.join(tmp, "work");
+      g(tmp, "init", "-q", "--bare", origen);
+      g(origen, "symbolic-ref", "HEAD", "refs/heads/main");
+      g(tmp, "init", "-q", work);
+      g(work, "config", "user.email", "selftest@example.com");
+      g(work, "config", "user.name", "selftest");
+      g(work, "checkout", "-q", "-b", "main");
+      g(work, "remote", "add", "origin", origen);
+      fs.mkdirSync(path.join(work, "scripts"), { recursive: true });
+      fs.mkdirSync(path.join(work, ".claude", "hooks"), { recursive: true });
+      fs.copyFileSync(script, path.join(work, "scripts", "deploy.mjs"));
+      fs.copyFileSync(abs(".claude/hooks/harness.mjs"), path.join(work, ".claude", "hooks", "harness.mjs"));
+      fs.writeFileSync(path.join(work, "app.txt"), "v1\n");
+
+      const copia = path.join(work, "scripts", "deploy.mjs");
+      const rutaCfg = path.join(work, ".claude", "harness.config.json");
+      const testigo = path.join(work, ".git", "desplegado");
+      const SECRETO = "valor-secreto-selftest-9f3";
+      const base = {
+        command: ["node", "-e", "require('fs').writeFileSync(process.argv[1], 'x')", testigo],
+        approval: "agent",
+        branch: "main",
+        env: ["SELFTEST_DEPLOY_TOKEN"],
+      };
+      const escribirCfg = (target) =>
+        fs.writeFileSync(rutaCfg, JSON.stringify({ gate: { registry: ".git/harness-gate.json" }, deploy: { ledger: ".git/deploys.log", targets: { cebo: target } } }));
+      const gateVerde = () =>
+        fs.writeFileSync(path.join(work, ".git", "harness-gate.json"), JSON.stringify({ veredicto: "verde", modo: "full", head: g(work, "rev-parse", "--short", "HEAD").stdout.trim() }));
+      // Cambiar el destino es un commit empujado: es exactamente lo que el script exige.
+      const fijarDestino = (target) => {
+        escribirCfg(target);
+        g(work, "add", "-A");
+        g(work, "commit", "-q", "-m", "config");
+        g(work, "push", "-q", "-u", "origin", "main");
+        gateVerde();
+      };
+      const correr = (args, env = { SELFTEST_DEPLOY_TOKEN: SECRETO }) => {
+        fs.rmSync(testigo, { force: true });
+        const r = spawnSync("node", [copia, ...args], { cwd: work, encoding: "utf8", env: { ...process.env, ...env } });
+        return { status: r.status, out: `${r.stdout ?? ""}${r.stderr ?? ""}`, corrio: fs.existsSync(testigo) };
+      };
+      const deploy = (extra, env) => correr(["cebo", ...extra], env);
+
+      fijarDestino(base);
+      fs.rmSync(path.join(work, ".git", "harness-gate.json"));
+      const casos = [];
+      casos.push(["sin gate verde sobre HEAD no se despliega", deploy(["--apply"]), (r) => r.status === 1 && !r.corrio && /gate/.test(r.out)]);
+      gateVerde();
+      casos.push(["el dry-run NO ejecuta el comando", deploy([]), (r) => r.status === 0 && !r.corrio && /DRY-RUN/.test(r.out)]);
+      casos.push(["sin la variable de entorno no se despliega, y se la nombra", deploy(["--apply"], { SELFTEST_DEPLOY_TOKEN: "" }), (r) => r.status === 1 && !r.corrio && r.out.includes("SELFTEST_DEPLOY_TOKEN")]);
+      fs.writeFileSync(path.join(work, "suelto.txt"), "x");
+      casos.push(["con el árbol sucio (aunque sea un archivo suelto) no se despliega", deploy(["--apply"]), (r) => r.status === 1 && !r.corrio && /limpio/.test(r.out)]);
+      fs.rmSync(path.join(work, "suelto.txt"));
+      g(work, "checkout", "-q", "-b", "feat/otra");
+      casos.push(["desde otra rama no se despliega", deploy(["--apply"]), (r) => r.status === 1 && !r.corrio && /rama/.test(r.out)]);
+      g(work, "checkout", "-q", "main");
+      fs.writeFileSync(path.join(work, "app.txt"), "v2\n");
+      g(work, "commit", "-q", "-am", "v2 sin empujar");
+      gateVerde();
+      casos.push(["un commit que el remoto no tiene no se despliega", deploy(["--apply"]), (r) => r.status === 1 && !r.corrio && /al día/.test(r.out)]);
+      g(work, "push", "-q", "origin", "main");
+      // El agente se pone a sí mismo un destino sin precondiciones, sin commitear: no alcanza.
+      escribirCfg({ ...base, requires: [] });
+      casos.push(["un config con cambios sin commitear no despliega, aunque `requires` esté vacío", deploy(["--apply"]), (r) => r.status === 1 && !r.corrio && /config/.test(r.out)]);
+      g(work, "checkout", "-q", "--", ".claude/harness.config.json");
+      casos.push(["`--config` no se acepta (el config es el del repo)", deploy(["--config", "otro.json", "--apply"]), (r) => r.status === 1 && !r.corrio]);
+      const headOk = g(work, "rev-parse", "HEAD").stdout.trim();
+      casos.push(["con todo en orden, despliega", deploy(["--apply"]), (r) => r.status === 0 && r.corrio]);
+      casos.push(["un despliegue nunca imprime el valor de un secreto", deploy(["--apply"]), (r) => r.status === 0 && !r.out.includes(SECRETO)]);
+      fijarDestino({ ...base, command: ["node", "-e", "process.exit(3)"] });
+      casos.push(["un comando que falla sale en rojo", deploy(["--apply"]), (r) => r.status === 1]);
+      casos.push(["un destino que nadie declaró no se despliega", correr(["otro", "--apply"]), (r) => r.status === 1 && !r.corrio]);
+
+      for (const [nombre, r, pasa] of casos) {
+        if (pasa(r)) ok(`deploy: ${nombre}`);
+        else bad(`deploy: ${nombre}`, `exit ${r.status}, ejecutó: ${r.corrio}. salida: ${r.out.trim().slice(-240)}`);
+      }
+
+      // El registro: una línea por `--apply` que llegó a ejecutar, con commit y resultado.
+      let lineas = [];
+      try {
+        lineas = fs.readFileSync(path.join(work, ".git", "deploys.log"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
+      } catch {
+        lineas = [];
+      }
+      if (lineas.length === 3 && lineas[0].destino === "cebo" && lineas[0].commit === headOk && lineas[0].estado === "ok" && lineas[2].estado !== "ok")
+        ok("deploy: cada `--apply` ejecutado deja su línea en el registro (y sólo esos)");
+      else bad("deploy: el registro", `esperaba 3 líneas (ok, ok, falló) sobre ${headOk.slice(0, 7)}, hay ${lineas.length}: ${JSON.stringify(lineas).slice(0, 200)}`);
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  }
+}
+
 // 3d. Catálogo de reuso: el boilerplate que ya tiene abstracción se frena.
 if (hookFiles.has("reuse-guard.mjs")) {
   for (const regla of config.reuse ?? []) {

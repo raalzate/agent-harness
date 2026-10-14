@@ -63,6 +63,7 @@ Los hooks son **genéricos**: toda la especificidad del repo vive en
 | `PreToolUse` Write\|Edit\|mcp__ | `protected-paths.mjs` | deniega editar lo que declara `protectedPaths`, también desde una herramienta MCP que escribe (`writeTools`) |
 | `PreToolUse` Write\|Edit\|mcp__ | `reuse-guard.mjs` | bloquea boilerplate que ya tiene abstracción (`reuse`) |
 | `PreToolUse` Bash | `bash-guard.mjs` | deniega los comandos de `bash.deny`; los de `bash.ask` se los pregunta al humano |
+| `PreToolUse` Bash, `mcp__*` | `deploy-guard.mjs` | despliegue: autoriza el punto de entrada (`deploy.entry`) según `approval`, pregunta por desplegar por fuera o por imprimir secretos, bloquea destruir un entorno ([despliegue.md](despliegue.md)) |
 | `PostToolUse` Write\|Edit\|mcp__ | `post-edit-check.mjs` | corre el lint **sobre el archivo tocado** y devuelve el error real; marca `.git/gate-dirty` |
 | `Stop` | `gate-stop.mjs` | impide cerrar la tarea si se editó código y el gate no quedó verde — salvo con el presupuesto agotado: ahí lo que corresponde es cerrar y escalar |
 | `SubagentStop` | `subagent-contract.mjs` | le devuelve el turno a un subagente sensor que cierra sin su veredicto (`subagentOutput`) |
