@@ -22,7 +22,7 @@
  */
 import fs from "node:fs";
 import path from "node:path";
-import { readInput, loadConfig, allow, REPO_ROOT } from "./harness.mjs";
+import { readInput, loadConfig, allow, rutaDeEstado } from "./harness.mjs";
 
 const input = await readInput();
 const config = loadConfig();
@@ -31,7 +31,7 @@ const config = loadConfig();
 let repuesto = false;
 for (const rel of [config?.loop?.marker, config?.loop?.ledger].filter(Boolean)) {
   try {
-    const abs = path.join(REPO_ROOT, rel);
+    const abs = rutaDeEstado(rel);
     if (rel === config.loop.marker && fs.existsSync(abs)) repuesto = true;
     fs.rmSync(abs, { force: true });
   } catch {
@@ -49,7 +49,7 @@ const spec = config?.askFirst;
 if (!spec?.marker) allow(avisoRepuesto || undefined);
 
 const prompt = String(input?.prompt ?? "").trim();
-const marker = path.join(REPO_ROOT, spec.marker);
+const marker = rutaDeEstado(spec.marker);
 
 /** Borra el marcador: el pedido de este turno no es una pregunta. */
 const limpiar = () => {

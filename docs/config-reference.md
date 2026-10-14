@@ -43,7 +43,8 @@ tocás una clave.
 | `signals[].command` | array argv. Sin shell y sin `eval`: ningún dato del config se interpola en una línea de comandos |
 | `signals[].why` | por qué esta señal no la cubre otra. **Obligatorio** (el self-test lo exige): es lo único que va a defender a la señal cuando tarde y alguien la quiera sacar |
 | `signals[].fastSkip` | `true` = se omite en modo `fast` |
-| `signals[].skipIfMissing` | ruta que, si no existe, hace que la señal se reporte **OMITIDA** en vez de fallar. "Omitida" se imprime siempre: nunca se confunde con "pasó" |
+| `signals[].skipIfMissing` | ruta que, si no existe, hace que la señal se reporte **OMITIDA** en vez de fallar. "Omitida" se imprime siempre: nunca se confunde con "pasó". Una ruta `.git/…` se resuelve al gitdir real en un worktree |
+| `signals[].countsAttempts` | `false` = su rojo no cuenta para el ciclo acotado (`loop`). Para una señal cuyo rojo estable significa «todavía no terminé» y no «estoy trabado», como la de la tarea declarada |
 
 **Orden de las señales:** de la más barata y más informativa a la más lenta. El self-test primero
 (un freno roto invalida todas las demás señales), el build último.
@@ -479,6 +480,46 @@ Los cuatro conjuntos de patrones son un **desempate**, y el orden importa:
 | `directRequestPatterns` | ¿hay pedido directo («¿podés…?», «por favor»)? Entonces sí es orden |
 
 Escribir **fuera** del repo nunca se bloquea: un borrador en el scratchpad es parte de contestar.
+
+---
+
+## `task` — la tarea declarada (opcional)
+
+```json
+{ "file": ".git/harness-task.json",
+  "log": ".git/harness-tasks.log",
+  "criteriaCommand": ["gh", "issue", "view", "{issue}", "--json", "body", "-q", ".body"],
+  "criterionPattern": "^\\s*[-*]\\s+\\[[ xX]\\]\\s+(.+)$",
+  "trivialEvidence": ["^(true|:|exit 0|exit)$", "^(echo|printf)\\b"],
+  "timeoutMs": 600000 }
+```
+
+Planificar antes de escribir, no salirse de lo planificado, y que «terminado» lo demuestre el
+arnés (#52, #53). `scripts/task.mjs` escribe la tarea en `file`:
+
+| Comando | Qué hace |
+|---|---|
+| `start <ítem> [--from-tracker]` | abre la tarea (el ítem va tal cual a `{issue}`: el número del issue, la clave del ticket); con `--from-tracker`, cada casilla del ítem (`criterionPattern` sobre la salida de `criteriaCommand`, con `{issue}` sustituido) es un criterio |
+| `scope <ruta\|glob>… --why "…"` | declara o amplía el alcance; sin motivo se rechaza, y todo el repo (`**`, `*`, `.`) también. Prefijos (`scripts/`) o globs (`*` un segmento, `**` cualquiera) |
+| `criterion "<texto>"` | agrega un criterio |
+| `evidence <n> -- <argv…>` | el comando que FALLA si el criterio n no se cumple. Se rechaza si casa `trivialEvidence` o está en `bash.deny`/`bash.ask`: la verificación la corre el gate, y sin ese chequeo la evidencia era la forma de que el arnés ejecutara lo que `bash-guard` le frena al agente |
+| `status` · `verify` · `done` · `abandon --why "…"` | qué falta · la señal del gate · cerrar (sólo en verde) · descartar con motivo |
+
+Con una tarea activa, `protected-paths.mjs` deniega editar un archivo del repo fuera del alcance
+—y cualquiera mientras el alcance no esté declarado—. La señal «task» del gate (`verify`) re-ejecuta
+la evidencia de cada criterio sin shell, con `timeoutMs`, y cruza contra el alcance todo lo que
+cambió desde el inicio de la tarea: commiteado, sin commitear y nuevo, así que lo escrito por Bash
+también cuenta. Una evidencia que no corre es roja, nunca omitida. Como el hook `Stop` exige gate
+verde después de la última edición, la evidencia no puede quedar vieja.
+
+Con una tarea activa no hay exentos: `STATUS.md` o un documento que se vaya a tocar va en el
+alcance. Una ruta `.git/…` (`file`, `log`) se resuelve al gitdir real en un worktree, y una tarea
+que no tiene la forma esperada se ignora (lo roto deja pasar). Decisión en
+[ADR 0013](decisions/0013-tarea-declarada.md).
+
+`log` guarda cada cierre (`done`) o descarte (`abandon`) con sus criterios y el alcance entero con el motivo de cada entrada: de ahí
+salen los indicadores «entregas con evidencia completa» y «cambios fuera del alcance». Sin `task` en
+el config, nada de esto existe; sin tarea activa, el hook no opina y la señal sale OMITIDA.
 
 ---
 
@@ -982,6 +1023,7 @@ sin control se informa como hueco. Ver [guias-y-sensores.md](guias-y-sensores.md
 | `commitMsg` | `.githooks/commit-msg`, self-test |
 | `sdd` | `sdd-router.mjs`, self-test |
 | `askFirst` | `ask-first.mjs`, `action-guard.mjs`, self-test |
+| `task` | `scripts/task.mjs` (la escribe, la verifica: la señal «task» del gate), `protected-paths.mjs` (frena fuera del alcance, vía `tareaActiva`/`dentroDelAlcance` de `harness.mjs`), `bash.deny` (no se reescribe a mano), self-test (3e-tarea) |
 | `loop` | `scripts/gate.mjs` (cuenta y deja el marcador), `action-guard.mjs` (frena editar), `gate-stop.mjs` (deja cerrar), `ask-first.mjs` (repone), `scripts/hooks-timing.mjs` (estado a restaurar), self-test (3e-loop) |
 | `branches` | `.githooks/pre-push`, self-test |
 | `workflow` | `scripts/cycle-check.mjs` (lo invoca `.githooks/pre-push`), la ruta `cycle` del router, self-test |

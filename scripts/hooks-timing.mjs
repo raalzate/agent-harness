@@ -31,7 +31,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { parseHookCommand } from "../.claude/hooks/harness.mjs";
+import { parseHookCommand, rutaDeEstado } from "../.claude/hooks/harness.mjs";
 
 const REPO_ROOT = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
 const abs = (p) => path.join(REPO_ROOT, p);
@@ -186,7 +186,8 @@ const archivosDeEstado = () => {
   const lista = Array.isArray(declarados) && declarados.length
     ? declarados
     : [config.gate?.marker, config.askFirst?.marker, config.loop?.marker, config.loop?.ledger];
-  return lista.filter(Boolean).map((p) => abs(p));
+  // `rutaDeEstado`: en un worktree `.git` es un archivo y `.git/x` no existe ni se puede crear.
+  return lista.filter(Boolean).map((p) => rutaDeEstado(p));
 };
 
 function tomarEstado() {

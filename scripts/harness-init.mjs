@@ -207,6 +207,9 @@ const COPIAR = [
   "scripts/artifacts-check.mjs",
   "scripts/cycle-check.mjs",
   "scripts/hooks-timing.mjs",
+  // La tarea declarada: `protected-paths` lee su alcance y la señal «task» la verifica. Sin el
+  // script, la plantilla declararía una señal que apunta a la nada.
+  "scripts/task.mjs",
   // El único camino de despliegue: `deploy-guard` lo autoriza, y sin el script el agente quedaría
   // con un punto de entrada que no existe y sólo los CLIs crudos (que piden permiso).
   "scripts/deploy.mjs",
