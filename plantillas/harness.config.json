@@ -48,6 +48,17 @@
         "why": "un plan suelto en el repo cuando el trabajo vive en el gestor parte el registro en dos"
       },
       {
+        "name": "task: criteria and scope",
+        "command": [
+          "node",
+          "scripts/task.mjs",
+          "verify"
+        ],
+        "skipIfMissing": ".git/harness-task.json",
+        "countsAttempts": false,
+        "why": "el agente no puede ser la única fuente de evidencia de que terminó: re-ejecuta la evidencia de cada criterio de la tarea declarada y cruza lo cambiado contra el alcance. OMITIDA sin tarea activa"
+      },
+      {
         "name": "code index (codegraph)",
         "command": [
           "codegraph",
@@ -91,6 +102,10 @@
   "bash": {
     "$comment": "Comandos irreversibles o que saltan la verificación. Agregá los propios de este stack (terraform apply, kubectl delete, drop de base, deploy directo a producción).",
     "deny": [
+      {
+        "pattern": "(\\b(rm|mv|cp|tee|truncate|unlink|del)\\b|>)[^|;&]*\\.git[\\\\/](gate-(escalate|attempts)|harness-task)",
+        "reason": "el marcador y el libro del ciclo acotado (`loop`) los escribe el gate y los levanta el pedido del humano, y la tarea declarada (`task`) la escribe `scripts/task.mjs`. Reescribirlos a mano es saltarse la escalada o el alcance: para la tarea usá `node scripts/task.mjs`; para el presupuesto, pará y contale al humano qué falla."
+      },
       {
         "pattern": "--no-ver[i]fy",
         "reason": "saltarse los hooks de verificación está prohibido. Si el gate estorba, se arregla el gate."
@@ -236,6 +251,18 @@
     "file": "STATUS.md",
     "$reminder": "Lo último que el agente lee al abrir la sesión. Nombrá el comando de gate REAL de este repo: un recordatorio que cita el comando de otro stack es ruido.",
     "reminder": ""
+  },
+  "task": {
+    "$comment": "La tarea declarada: `node scripts/task.mjs start <ítem>` → alcance (`scope … --why`) y criterios con evidencia (`evidence <n> -- <comando>`). `protected-paths` frena editar fuera del alcance y la señal «task» del gate re-ejecuta la evidencia. `criteriaCommand`: el comando de TU gestor que imprime el ítem (`{issue}`), p. ej. [\"gh\",\"issue\",\"view\",\"{issue}\",\"--json\",\"body\",\"-q\",\".body\"]; vacío = los criterios se cargan a mano. Sin tarea activa, nada cambia.",
+    "file": ".git/harness-task.json",
+    "log": ".git/harness-tasks.log",
+    "criteriaCommand": [],
+    "criterionPattern": "^\\s*[-*]\\s+\\[[ xX]\\]\\s+(.+)$",
+    "trivialEvidence": [
+      "^(true|:|exit 0|exit)$",
+      "^(echo|printf)\\b"
+    ],
+    "timeoutMs": 600000
   },
   "loop": {
     "$comment": "Ciclo acotado: el gate cuenta los intentos sobre el MISMO error por señal; pasado `maxAttempts` deja `marker`, `action-guard` frena editar, `gate-stop` deja cerrar para escalar y el próximo pedido del humano repone el presupuesto. `normalize` vacío = el default agnóstico (colores, fechas, duraciones, línea:columna, hashes, temporales). Sin esta clave no se cuenta nada.",

@@ -34,7 +34,7 @@ import path from "node:path";
 import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
-import { resolverEjecutable } from "../.claude/hooks/harness.mjs";
+import { resolverEjecutable, rutaDeEstado } from "../.claude/hooks/harness.mjs";
 
 const REPO_ROOT = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
 const CONFIG_PATH = path.join(REPO_ROOT, ".claude", "harness.config.json");
@@ -135,7 +135,8 @@ for (const senal of senales) {
     continue;
   }
 
-  if (senal.skipIfMissing && !fs.existsSync(path.join(REPO_ROOT, senal.skipIfMissing))) {
+  // `rutaDeEstado`: una ruta `.git/…` en un worktree vive en el gitdir real (`.git` es un archivo).
+  if (senal.skipIfMissing && !fs.existsSync(rutaDeEstado(senal.skipIfMissing))) {
     console.log(`\n──▶ ${senal.name}\n    – OMITIDA: no existe \`${senal.skipIfMissing}\` (omitido ≠ pasó)`);
     omitidas.push(senal.name);
     resultados[senal.name] = { estado: "omitida", motivo: `no existe ${senal.skipIfMissing}` };
@@ -184,7 +185,7 @@ if (duraciones.length) {
 const veredicto = corridas === 0 || fallidas.length ? "rojo" : MODE === "fast" ? "fast-verde" : "verde";
 if (veredicto === "verde") {
   const marcador = config.gate?.marker;
-  if (marcador) fs.rmSync(path.join(REPO_ROOT, marcador), { force: true });
+  if (marcador) fs.rmSync(rutaDeEstado(marcador), { force: true });
 }
 const agotadas = loop ? contarIntentos() : [];
 registrar(veredicto);
@@ -329,7 +330,7 @@ function huella(nombre, salida) {
 
 function leerLibro() {
   try {
-    return JSON.parse(fs.readFileSync(path.join(REPO_ROOT, loop.ledger), "utf8"));
+    return JSON.parse(fs.readFileSync(rutaDeEstado(loop.ledger), "utf8"));
   } catch {
     return {};
   }
@@ -353,6 +354,10 @@ function contarIntentos() {
   for (const [nombre, res] of Object.entries(resultados)) {
     if (res.estado === "verde") delete libro[nombre];
     if (res.estado !== "rojo") continue;
+    // Una señal que declara `countsAttempts: false` no entra al presupuesto: su rojo estable no es
+    // «estoy trabado» sino «todavía no terminé» (la de la tarea declarada, con criterios sin
+    // evidencia, repite la misma salida en cada corrida y congelaba las ediciones a la tercera).
+    if (senales.find((x) => x.name === nombre)?.countsAttempts === false) continue;
     const h = huella(nombre, res.cola ?? res.motivo);
     const antes = libro[nombre];
     const intentos = antes?.huella === h.huella ? antes.intentos + 1 : 1;
@@ -361,11 +366,11 @@ function contarIntentos() {
   }
   libroActual = libro;
   try {
-    const abs = path.join(REPO_ROOT, loop.ledger);
+    const abs = rutaDeEstado(loop.ledger);
     fs.mkdirSync(path.dirname(abs), { recursive: true });
     fs.writeFileSync(abs, JSON.stringify(libro, null, 2) + "\n");
     if (agotadas.length && loop.marker) {
-      const marcador = path.join(REPO_ROOT, loop.marker);
+      const marcador = rutaDeEstado(loop.marker);
       fs.mkdirSync(path.dirname(marcador), { recursive: true });
       fs.writeFileSync(marcador, `${new Date().toISOString()}\n${agotadas.map((a) => `${a.senal} (${a.intentos} intentos): ${a.muestra}`).join("\n")}\n`);
     }

@@ -420,7 +420,7 @@ export function underAny(relPath, prefixes) {
 export function markGateDirty(config) {
   const marker = config?.gate?.marker;
   if (!marker) return;
-  const abs = path.join(REPO_ROOT, marker);
+  const abs = rutaDeEstado(marker);
   try {
     fs.mkdirSync(path.dirname(abs), { recursive: true });
     fs.writeFileSync(abs, new Date().toISOString());
@@ -488,4 +488,65 @@ export function existeEjecutable(cmd, plataforma = process.platform) {
   const exts = plataforma === "win32" ? ["", ...(process.env.PATHEXT ?? ".COM;.EXE;.BAT;.CMD").split(";").filter(Boolean)] : [""];
   const dirs = (process.env.PATH ?? "").split(path.delimiter).filter(Boolean);
   return dirs.some((dir) => exts.some((ext) => fs.existsSync(path.join(dir, cmd + ext))));
+}
+
+/**
+ * ¿La ruta cae dentro del alcance declarado de la tarea? Cada entrada es un prefijo
+ * (`scripts/`, `docs/arnes.md`) o un glob con `*` (un segmento) y `**` (cualquiera).
+ *
+ * Vive acá porque la leen dos: `protected-paths` (frena la edición) y `scripts/task.mjs`
+ * (cruza el diff al verificar). Dos implementaciones del mismo «adentro» divergen, y entonces
+ * el hook deja editar lo que la verificación después marca afuera.
+ */
+export function dentroDelAlcance(rel, entradas) {
+  const ruta = String(rel ?? "").split("\\").join("/");
+  return (entradas ?? []).some((e) => {
+    const patron = String(e?.ruta ?? e ?? "").split("\\").join("/").replace(/^\.\//, "");
+    if (!patron) return false;
+    if (!patron.includes("*")) return underAny(ruta, [patron.replace(/\/$/, "")]);
+    // `**/` es «cero o más directorios»: `**/*.test.js` casa también el de la raíz.
+    const segmento = (trozo) => trozo.split("*").map((t) => t.replace(/[.+?^${}()|[\]\\]/g, "\\$&")).join("[^/]*");
+    const re = patron
+      .split("**/")
+      .map((parte) => parte.split("**").map(segmento).join(".*"))
+      .join("(?:.*/)?");
+    return new RegExp(`^${re}$`).test(ruta);
+  });
+}
+
+/**
+ * Dónde vive un archivo de estado declarado como `.git/<algo>`. En un worktree, `.git` no es un
+ * directorio sino un ARCHIVO que dice `gitdir: <ruta>`: escribir en `.git/x` reventaba con
+ * EEXIST y el freno quedaba inerte. Se resuelve leyendo ese archivo, sin lanzar git — los hooks
+ * no lanzan procesos.
+ */
+export function rutaDeEstado(rel) {
+  const abs = path.join(REPO_ROOT, rel);
+  const norm = String(rel).split("\\").join("/");
+  if (!norm.startsWith(".git/")) return abs;
+  try {
+    const punto = path.join(REPO_ROOT, ".git");
+    if (!fs.statSync(punto).isFile()) return abs;
+    const gitdir = fs.readFileSync(punto, "utf8").match(/^gitdir:\s*(.+)$/m)?.[1]?.trim();
+    return gitdir ? path.join(path.resolve(REPO_ROOT, gitdir), norm.slice(".git/".length)) : abs;
+  } catch {
+    return abs;
+  }
+}
+
+/**
+ * La tarea declarada (`task.file`), o null. Null también si no tiene la FORMA de una tarea: un
+ * `[]` o un `alcance` que no es lista bloqueaba toda edición o tumbaba `session-start` (exit 1,
+ * sin contexto de sesión). Lo roto deja pasar (P5).
+ */
+export function tareaActiva(config) {
+  const rel = config?.task?.file;
+  if (!rel) return null;
+  try {
+    const t = JSON.parse(fs.readFileSync(rutaDeEstado(rel), "utf8"));
+    const forma = t && typeof t === "object" && !Array.isArray(t) && typeof t.item === "string" && Array.isArray(t.alcance) && Array.isArray(t.criterios);
+    return forma ? t : null;
+  } catch {
+    return null;
+  }
 }

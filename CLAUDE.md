@@ -29,6 +29,7 @@ nada del repo.
 scripts/gate.sh               ejecuta gate.signals; no sabe de stacks
 scripts/repo-lint.mjs         9 clases de regla, todas configurables (COHERENCIA: guía vs. freno)
 scripts/cycle-check.mjs       ramas y prácticas XP; --verify-red: la prueba falla sin el cambio
+scripts/task.mjs              la tarea declarada: alcance + criterios con evidencia que corre el gate
 scripts/harness-map.mjs       el arnés como sistema de control: guía/freno/sensor por etapa
 scripts/drift-check.mjs       lo que se degrada sin que ningún cambio lo rompa (programado)
 scripts/reviewer-eval.mjs     la prueba de vida del reviewer, con tasa (programado)

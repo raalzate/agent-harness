@@ -59,6 +59,17 @@
         "why": "leer el código a mano es la fuente de error más cara del agente: abre archivos de más, se pierde relaciones (quién llama a quién) y contesta con la mitad del mapa. El índice es infraestructura de lectura, y un índice desincronizado miente peor que no tenerlo. OMITIDA mientras nadie corra `codegraph init`: omitido no es verde, y esa omisión es exactamente el recordatorio"
       },
       {
+        "name": "task: criteria and scope",
+        "command": [
+          "node",
+          "scripts/task.mjs",
+          "verify"
+        ],
+        "skipIfMissing": ".git/harness-task.json",
+        "countsAttempts": false,
+        "why": "el agente no puede ser la única fuente de evidencia de que terminó: esta señal re-ejecuta la evidencia de cada criterio de aceptación de la tarea declarada y cruza lo que cambió contra el alcance planificado. Ninguna otra señal sabe qué se pidió. OMITIDA sin tarea activa (CI): omitido no es verde"
+      },
+      {
         "name": "profile bench (real stacks)",
         "command": [
           "node",
@@ -122,8 +133,8 @@
         "reason": "`--force` reescribe historia remota. Usá --force-with-lease y pedí confirmación."
       },
       {
-        "pattern": "(\\b(rm|mv|cp|tee|truncate|unlink|del)\\b|>)[^|;&]*\\.git[\\\\/]gate-(escalate|attempts)",
-        "reason": "el marcador y el libro del ciclo acotado (`loop`) los escribe el gate y los levanta el pedido del humano. Borrarlos o reescribirlos desde el agente es saltarse la escalada: pará y contale al humano qué falla, qué probaste y tu próxima hipótesis."
+        "pattern": "(\\b(rm|mv|cp|tee|truncate|unlink|del)\\b|>)[^|;&]*\\.git[\\\\/](gate-(escalate|attempts)|harness-task)",
+        "reason": "el marcador y el libro del ciclo acotado (`loop`) los escribe el gate y los levanta el pedido del humano, y la tarea declarada (`task`) la escribe `scripts/task.mjs`. Reescribirlos a mano es saltarse la escalada o el alcance: para la tarea usá `node scripts/task.mjs` (scope --why, done, abandon --why); para el presupuesto, pará y contale al humano qué falla."
       },
       {
         "pattern": "git\\s+reset\\s+--hard",
@@ -604,6 +615,28 @@
       }
     ],
     "doc": "docs/sdd.md"
+  },
+  "task": {
+    "$comment": "La tarea declarada (#52, #53): el agente planifica antes de escribir y el arnés lo hace cumplir. `scripts/task.mjs` la escribe en `file` (en .git/, P7): el ítem, el ALCANCE (rutas o globs, cada ampliación con motivo) y los CRITERIOS de aceptación, cada uno con el comando que lo demuestra. `protected-paths` frena editar fuera del alcance; la señal «task» del gate re-ejecuta cada evidencia y cruza el diff contra el alcance — terminado lo demuestra el arnés, no lo afirma el agente. `criteriaCommand` trae el texto del ítem del gestor (`{issue}`), y `criterionPattern` saca un criterio por casilla. `trivialEvidence`: comandos que pasan siempre y por eso no demuestran nada. Sin tarea activa, nada cambia.",
+    "file": ".git/harness-task.json",
+    "log": ".git/harness-tasks.log",
+    "criteriaCommand": [
+      "gh",
+      "issue",
+      "view",
+      "{issue}",
+      "--json",
+      "body",
+      "-q",
+      ".body"
+    ],
+    "criterionPattern": "^\\s*[-*]\\s+\\[[ xX]\\]\\s+(.+)$",
+    "trivialEvidence": [
+      "^(true|:|exit 0|exit)$",
+      "^(echo|printf)\\b",
+      "^node -e (process\\.exit\\(0\\)|0|;)?$"
+    ],
+    "timeoutMs": 600000
   },
   "loop": {
     "$comment": "Ciclo acotado (P12): el gate cuenta los intentos sobre el MISMO error por señal y, al pasar `maxAttempts`, deja `marker`: `action-guard` frena editar dentro del repo, `gate-stop` deja cerrar para escalar, y el próximo pedido del humano (`ask-first`) repone el presupuesto. La huella es la señal + las últimas `tailLines` líneas de su salida, sin el ruido que cambia entre corridas aunque el error sea el mismo (`normalize`; vacío = el default agnóstico de scripts/gate.mjs: colores, fechas, duraciones, línea:columna, hashes, temporales). Sin esta clave no se cuenta nada. Todo en `.git/` (P7).",
