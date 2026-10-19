@@ -1,0 +1,32 @@
+Gate (modo: full) — agent-harness
+
+──▶ harness self-test
+    ✓ harness self-test (47002 ms)
+
+──▶ docs link-check
+    ✓ docs link-check (790 ms)
+
+──▶ convention lint
+    ✓ convention lint (1402 ms)
+
+──▶ artifacts in place
+    ✓ artifacts in place (88 ms)
+
+──▶ code index (codegraph)
+    – OMITIDA: no existe `.codegraph` (omitido ≠ pasó)
+
+──▶ task: criteria and scope
+    ✓ task: criteria and scope (310 ms)
+
+──▶ profile bench (real stacks)
+    ✓ profile bench (real stacks) (19870 ms)
+
+──▶ harness eval (deterministic)
+    ✓ harness eval (deterministic) (30115 ms)
+
+──▶ harness cost (hook latency)
+    ✓ harness cost (hook latency) (5980 ms)
+
+Señales omitidas (NO son verde): code index (codegraph)
+Tiempo: 105.5s en 8 señal(es) — las más caras: harness self-test 47.0s · harness eval (deterministic) 30.1s · profile bench (real stacks) 19.9s
+GATE VERDE — entregable.

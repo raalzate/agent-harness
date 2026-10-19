@@ -1,0 +1,3 @@
+$ node scripts/ci-investigate.mjs
+CI EN CURSO — corrida 18342901377 «CI» en `feat/eval-ai` todavía no tiene conclusión. Volvé a correrlo cuando termine.
+  https://github.com/raalzate/agent-harness/actions/runs/18342901377

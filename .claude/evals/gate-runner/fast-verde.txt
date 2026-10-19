@@ -1,0 +1,32 @@
+Gate (modo: fast) — agent-harness
+
+──▶ harness self-test
+    ✓ harness self-test (46880 ms)
+
+──▶ docs link-check
+    ✓ docs link-check (801 ms)
+
+──▶ convention lint
+    ✓ convention lint (1388 ms)
+
+──▶ artifacts in place
+    ✓ artifacts in place (91 ms)
+
+──▶ code index (codegraph)
+    – omitida en modo fast
+
+──▶ task: criteria and scope
+    – omitida en modo fast
+
+──▶ profile bench (real stacks)
+    – omitida en modo fast
+
+──▶ harness eval (deterministic)
+    – omitida en modo fast
+
+──▶ harness cost (hook latency)
+    – omitida en modo fast
+
+Señales omitidas (NO son verde): code index (codegraph) task: criteria and scope profile bench (real stacks) harness eval (deterministic) harness cost (hook latency)
+Tiempo: 49.2s en 4 señal(es) — las más caras: harness self-test 46.9s · convention lint 1.4s · docs link-check 0.8s
+GATE FAST VERDE — señal de desarrollo. NO es entregable: faltan las señales lentas.

@@ -956,6 +956,8 @@
       "docs/agilidad.md"
     ],
     "verdictPattern": "VEREDICTO:\\W*(rechazado|aprobado)",
+    "prompt": "Revisá el siguiente diff. No corras git: el diff es éste.\n\n```diff\n{diff}\n```\n\nTerminá con tu línea de veredicto.",
+    "$prompt": "Lo leen `scripts/reviewer-eval.mjs` y `scripts/ai-eval.mjs` (la suite `reviewer`, `casesFrom`): el mismo pedido en los dos evals, o sus tasas no son comparables.",
     "minScore": 0.8,
     "timeoutMs": 300000,
     "runner": ".github/workflows/drift.yml",
@@ -992,6 +994,107 @@
         "name": "inocente: una regla nueva, acotada y en la lista que deja confirmar",
         "diff": ".claude/evals/reviewer/inocente-regla-nueva-acotada.diff",
         "expect": "aprobado"
+      }
+    ]
+  },
+  "aiEval": {
+    "$comment": "THE AI EVALUATION OF THE SUBAGENTS, run by promptfoo. `scripts/ai-eval.mjs` (`npm run eval:ai`) generates a promptfoo config in a temp dir from this key, runs each case `repeat` times through `scripts/eval/ai-provider.mjs` (the agent in an isolated temp dir with only its `context`, prompt on stdin) and computes the rate per suite against `minScore` itself; promptfoo's exit code decides nothing. Per case it reports k/n: 0/n points at the label, 0<k<n at the agent. The verdict line of each agent is its `subagentOutput.contracts` pattern; the reviewer suite takes command, context, prompt, verdict and cases from `reviewerEval` (`casesFrom`). Rubrics go to an llm-rubric judge (`grader`) with weight 0: quality is reported, it does not decide. promptfoo is a RUNNER, never a dependency: without it, or on a node older than `minNode`, the eval is SKIPPED. NOT a gate signal and no pipeline yet (by decision, #63: local only, with the Claude Code session): run it by hand when an agent's prompt changes. See docs/evaluaciones.md.",
+    "runner": ["npx", "-y", "promptfoo@0.123.1"],
+    "$runner": "Pinned, and a version at least two weeks old when chosen: an unpinned runner moves under the eval and a red run would be promptfoo's, not the agent's. promptfoo declares node >= 22.22.0 in `engines` (`minNode`).",
+    "minNode": "22.22.0",
+    "env": {
+      "PROMPTFOO_DISABLE_TELEMETRY": "1",
+      "PROMPTFOO_DISABLE_UPDATE": "true",
+      "PROMPTFOO_DISABLE_SHARING": "1"
+    },
+    "$env": "Nothing leaves the machine: the cases are diffs and logs of this repo. `--no-share` is passed too.",
+    "repeat": 3,
+    "concurrency": 3,
+    "minScore": 0.8,
+    "timeoutMs": 300000,
+    "command": ["claude", "-p", "--agent", "{agent}", "--allowedTools", "Read,Grep,Glob", "--disallowedTools", "Bash,Edit,Write,NotebookEdit", "--settings", "{\"disableAllHooks\": true}"],
+    "$command": "Same isolation as `reviewerEval.command`: no Bash and no hooks. The gate-runner and the ci-investigator get the output they would have produced as input, instead of running it.",
+    "grader": ["claude", "-p", "--model", "sonnet", "--tools", "", "--settings", "{\"disableAllHooks\": true}"],
+    "suites": [
+      {
+        "agent": "reviewer",
+        "casesFrom": "reviewerEval",
+        "rubrics": {
+          "rechazado": "The review names the concrete defect with a file:line reference, cites the violated principle, and proposes a concrete fix. It does not invent violations absent from the diff.",
+          "aprobado": "The review approves without inventing violations that are not in the diff, and does not demand unrelated changes."
+        }
+      },
+      {
+        "agent": "gate-runner",
+        "context": [".claude/agents/gate-runner.md", ".claude/harness.config.json", "CONSTITUTION.md"],
+        "prompt": "Ésta es la salida de `npm run gate`. Ya corrió: no lo corras de nuevo (en esta evaluación no tenés Bash). Reportá con tu formato de salida.\n\n```\n{input}\n```",
+        "rubric": "The report follows the gate-runner output format: the verdict, the signals that ran, the skipped ones named as NOT green, the FIRST failing signal with its exact file:line and message pasted (not summarised), and exactly one hypothesis. It does not paste the whole log.",
+        "cases": [
+          {
+            "name": "red: two failing signals, the first one is the lint",
+            "input": ".claude/evals/gate-runner/rojo-dos-senales.txt",
+            "expect": "ROJO",
+            "mustMatch": ["convention lint", "scripts/deploy\\.mjs:42"]
+          },
+          {
+            "name": "green with a skipped signal",
+            "input": ".claude/evals/gate-runner/verde-con-omitidas.txt",
+            "expect": "VERDE",
+            "mustMatch": ["codegraph"]
+          },
+          {
+            "name": "fast green is not a deliverable",
+            "input": ".claude/evals/gate-runner/fast-verde.txt",
+            "expect": "VERDE",
+            "mustMatch": ["fast"],
+            "rubric": "The report says the mode is fast and that a fast green is NOT a deliverable (the slow signals did not run). Calling it deliverable or ready is a failure."
+          }
+        ]
+      },
+      {
+        "agent": "ci-investigator",
+        "context": [".claude/agents/ci-investigator.md", ".claude/harness.config.json", "CONSTITUTION.md", "docs/cicd.md", "docs/multiplataforma.md"],
+        "prompt": "Ésta es la salida de `node scripts/ci-investigate.mjs` en la rama actual. Ya corrió: no lo corras de nuevo (en esta evaluación no tenés Bash). Reportá con tu formato de salida.\n\n```\n{input}\n```",
+        "rubric": "The report names the run, the job and the step, pastes the real error line with file:line, reads the cross-check with the local gate correctly, and gives exactly one hypothesis backed by a line of the log. It does not call the failure flaky.",
+        "cases": [
+          {
+            "name": "red only in CI: the environment (Windows paths)",
+            "input": ".claude/evals/ci-investigator/rojo-solo-en-ci.txt",
+            "expect": "ROJO",
+            "mustMatch": ["windows", "docs/arnes\\.md:41"],
+            "rubric": "The report attributes the failure to the environment, not the logic: green locally and red only on windows-latest, with the backslash path in docs/arnes.md:41 as the line that backs it. One hypothesis, not a list."
+          },
+          {
+            "name": "red in CI and locally: fix it here first",
+            "input": ".claude/evals/ci-investigator/rojo-tambien-local.txt",
+            "expect": "ROJO",
+            "mustMatch": ["harness-selftest\\.mjs:1312"],
+            "rubric": "The report says the failure reproduces locally (red in the local gate too) and that the fix starts by running the gate here, not by touching CI. One hypothesis backed by the selftest line."
+          },
+          {
+            "name": "in progress is not green",
+            "input": ".claude/evals/ci-investigator/en-curso.txt",
+            "expect": "EN CURSO",
+            "rubric": "The report says the run has no conclusion yet and does not claim CI is green or red."
+          }
+        ]
+      },
+      {
+        "agent": "explorer",
+        "context": [".claude", "scripts", "docs", "CLAUDE.md", "CONSTITUTION.md", "package.json"],
+        "rubric": "The answer is a short map (symbol, path:line, why it matters), suggests 2 or 3 entry points, says what it did not find, and does not paste code blocks beyond a single line that is itself the answer. Every path it names exists in the question's repo.",
+        "cases": [
+          {
+            "name": "where exit 2 and exit 0 are decided",
+            "input": ".claude/evals/explorer/exit-dos.txt",
+            "mustMatch": ["harness\\.mjs:\\d+"]
+          },
+          {
+            "name": "who reads reviewerEval (including the panel)",
+            "input": ".claude/evals/explorer/quien-lee-reviewer-eval.txt",
+            "mustMatch": ["reviewer-eval\\.mjs", "harness-selftest\\.mjs", "leer-arnes\\.mjs"]
+          }
+        ]
       }
     ]
   },

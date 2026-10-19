@@ -3743,6 +3743,158 @@ if (corre("fuera")) {
   }
 }
 
+// 10f. The AI evaluation of the subagents (promptfoo), tested itself. Neither promptfoo nor a
+//      model can run here (network, account, cost), so a FAKE promptfoo plays the runner: it
+//      reads the generated config, loads the real provider module and calls it as promptfoo
+//      would, with fake agents behind `command`. What is under test is our machine: the rate
+//      per suite, the per-case k/n that tells a rotten label (0/n) from a noisy judge (unstable),
+//      broken infrastructure apart from a wrong agent, isolation (P7) and SKIPPED, never green.
+if (corre("fuera")) {
+  const script = abs("scripts/ai-eval.mjs");
+  if (!fs.existsSync(script)) {
+    skip("AI eval", "the repo has no scripts/ai-eval.mjs");
+  } else {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "harness-ai-eval-"));
+    try {
+      fs.writeFileSync(path.join(tmp, "red.txt"), "FAIL lint\nscripts/x.mjs:3 — no console\n");
+      fs.writeFileSync(path.join(tmp, "green.txt"), "all signals passed\n");
+      fs.writeFileSync(path.join(tmp, "context.md"), "# the fake contract\n");
+      const touch = "touched-by-agent";
+      // Answers only when its context was copied to where it runs, and writes there: the eval
+      // must have run it in a tree of its own, and nothing it wrote may reach this repo.
+      const agent = (name, body) => {
+        fs.writeFileSync(
+          path.join(tmp, `${name}.cjs`),
+          `const fs = require("fs");\nconst t = fs.readFileSync(0, "utf8");\nif (!fs.existsSync("context.md")) process.exit(0);\nfs.writeFileSync(${JSON.stringify(touch)}, "x");\n${body}\n`,
+        );
+      };
+      agent("sharp", 'console.log(t.includes("FAIL") ? "VEREDICTO: ROJO\\nscripts/x.mjs:3" : "VEREDICTO: VERDE");');
+      agent("lenient", 'console.log("VEREDICTO: VERDE");');
+      agent("broken", 'process.stderr.write("401 no key\\n");\nprocess.exit(1);');
+      // Red for the first repeat (both cases), green for the second: each case right once and
+      // wrong once. Alternating per call would line up with the case order and never miss.
+      agent(
+        "noisy",
+        `const n = ${JSON.stringify(path.join(tmp, "noisy-count"))};\nconst c = fs.existsSync(n) ? Number(fs.readFileSync(n, "utf8")) : 0;\nfs.writeFileSync(n, String(c + 1));\nconsole.log(c >= 2 ? "VEREDICTO: VERDE" : "VEREDICTO: ROJO\\nscripts/x.mjs:3");`,
+      );
+      fs.writeFileSync(path.join(tmp, "grader.cjs"), 'require("fs").readFileSync(0, "utf8");\nconsole.log(JSON.stringify({ pass: true, score: 0.7, reason: "fake" }));\n');
+
+      // The fake promptfoo: same CLI shape (eval -c <config> --repeat <n> -o <out>), same JSON
+      // fields the script reads (testCase.metadata, response.output, gradingResult).
+      const fake = path.join(tmp, "fake-promptfoo.mjs");
+      fs.writeFileSync(
+        fake,
+        `import fs from "node:fs";
+import { pathToFileURL } from "node:url";
+const a = process.argv.slice(2);
+const arg = (f) => a[a.indexOf(f) + 1];
+const cfg = JSON.parse(fs.readFileSync(arg("-c"), "utf8"));
+const load = async (p) => { const M = (await import(pathToFileURL(p.id.slice("file://".length)).href)).default; return new M({ id: p.id, config: p.config }); };
+const provider = await load(cfg.providers[0]);
+const grader = await load(cfg.defaultTest.options.provider);
+const results = [];
+for (let i = 0; i < Number(arg("--repeat")); i++)
+  for (const t of cfg.tests) {
+    const prompt = cfg.prompts[0].split("{{prompt}}").join(t.vars.prompt);
+    const response = await provider.callApi(prompt, { vars: t.vars });
+    const componentResults = [];
+    for (const as of t.assert ?? []) {
+      const g = JSON.parse((await grader.callApi(as.value)).output);
+      componentResults.push({ pass: g.pass, score: g.score, reason: g.reason, assertion: as });
+    }
+    results.push({ testCase: t, response, error: response.error, gradingResult: { componentResults } });
+  }
+fs.writeFileSync(arg("-o"), JSON.stringify({ results: { results } }));
+process.exit(results.length ? 100 : 0);
+`,
+      );
+
+      const bait = (agentName, { runner = ["node", fake], minNode = "0.0.0" } = {}) => {
+        const file = path.join(tmp, `config-${agentName}.json`);
+        fs.writeFileSync(
+          file,
+          JSON.stringify({
+            subagentOutput: { contracts: { [agentName]: { mustMatch: "VEREDICTO:\\W*(ROJO|VERDE)" } } },
+            aiEval: {
+              runner,
+              minNode,
+              repeat: 2,
+              concurrency: 1,
+              minScore: 1,
+              command: ["node", path.join(tmp, "{agent}.cjs")],
+              grader: ["node", path.join(tmp, "grader.cjs")],
+              suites: [
+                {
+                  agent: agentName,
+                  context: ["context.md"],
+                  prompt: "Gate output:\n{input}",
+                  rubric: "names the failing file and line",
+                  cases: [
+                    { name: "red", input: "red.txt", expect: "ROJO", mustMatch: ["x\\.mjs:3"] },
+                    { name: "green", input: "green.txt", expect: "VERDE", mustNotMatch: ["```"] },
+                  ],
+                },
+              ],
+            },
+          }),
+        );
+        const r = spawnSync("node", [script, "--config", file], { cwd: REPO_ROOT, encoding: "utf8" });
+        return { status: r.status, out: `${r.stdout ?? ""}${r.stderr ?? ""}` };
+      };
+
+      const good = bait("sharp");
+      const leaked = [REPO_ROOT, tmp].filter((d) => fs.existsSync(path.join(d, touch)));
+      if (good.status === 0 && /AI EVAL GREEN/.test(good.out) && /2\/2.*red/.test(good.out))
+        ok("AI eval: an agent that gets both cases right on every repeat passes (exit 0, 2/2 per case)");
+      else bad("AI eval: a sharp agent passes", `exit ${good.status}: ${good.out.trim().slice(0, 240)}`);
+      if (!leaked.length) ok("AI eval: the agent runs in a tree of its own with its context copied; nothing it writes reaches the repo (P7)");
+      else bad("AI eval: the agent is isolated", `it wrote in: ${leaked.join(", ")}`);
+      for (const d of leaked) fs.rmSync(path.join(d, touch), { force: true });
+      if (/quality 0\.70/.test(good.out)) ok("AI eval: the rubric score is read from promptfoo's grading, not from namedScores (weight 0 shows 0 there)");
+      else bad("AI eval: the rubric score is reported", good.out.trim().slice(0, 240));
+
+      const lenient = bait("lenient");
+      if (lenient.status === 1 && /AI EVAL RED/.test(lenient.out) && /0\/2.*label/.test(lenient.out))
+        ok("AI eval: an agent that says green to everything goes RED, and a 0/n case points at the label too");
+      else bad("AI eval: a lenient agent goes red", `exit ${lenient.status}: ${lenient.out.trim().slice(0, 240)}`);
+
+      const noisy = bait("noisy");
+      if (noisy.status === 1 && /unstable/.test(noisy.out)) ok("AI eval: a case that flips between repeats is flagged unstable");
+      else bad("AI eval: an unstable case is flagged", `exit ${noisy.status}: ${noisy.out.trim().slice(0, 240)}`);
+
+      const broken = bait("broken");
+      if (broken.status === 1 && /AI EVAL BROKEN/.test(broken.out) && !/AI EVAL RED/.test(broken.out))
+        ok("AI eval: a CLI that fails without answering is BROKEN, not an agent that got it wrong");
+      else bad("AI eval: infrastructure apart from judgement", `exit ${broken.status}: ${broken.out.trim().slice(0, 240)}`);
+
+      const absent = bait("sharp", { runner: ["command-that-exists-on-no-machine"] });
+      if (absent.status === 0 && /SKIPPED/.test(absent.out)) ok("AI eval: without promptfoo the eval is SKIPPED, not green");
+      else bad("AI eval: without a runner it is skipped", `exit ${absent.status}: ${absent.out.trim().slice(0, 240)}`);
+
+      const oldNode = bait("sharp", { minNode: "999.0.0" });
+      if (oldNode.status === 0 && /SKIPPED.*node/i.test(oldNode.out)) ok("AI eval: on a node older than the runner needs, SKIPPED says which node");
+      else bad("AI eval: an old node is skipped with its reason", `exit ${oldNode.status}: ${oldNode.out.trim().slice(0, 240)}`);
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+
+    // The real suites must point at something: an agent that does not exist or a missing input
+    // is an eval that never runs, and an `expect` without a verdict contract can never match.
+    const spec = config.aiEval;
+    for (const s of spec?.suites ?? []) {
+      if (fs.existsSync(abs(`.claude/agents/${s.agent}.md`))) ok(`AI eval: the agent \`${s.agent}\` exists`);
+      else bad(`AI eval: the agent \`${s.agent}\` exists`, `no agent file for \`${s.agent}\` under .claude/agents/`);
+      if (s.casesFrom) continue;
+      const verdict = config.subagentOutput?.contracts?.[s.agent]?.mustMatch;
+      for (const c of s.cases ?? []) {
+        if (!fs.existsSync(abs(c.input))) bad(`AI eval: the case «${c.name}» exists`, `\`${c.input}\` does not exist`);
+        else if (c.expect && !verdict) bad(`AI eval: «${c.name}» can be judged`, `it expects \`${c.expect}\` but \`${s.agent}\` has no subagentOutput contract`);
+        else ok(`AI eval: the case «${c.name}» (${s.agent}) exists and can be judged`);
+      }
+    }
+  }
+}
+
 // 10e. The DETERMINISTIC evaluation, tested itself. The real set can be green for the wrong
 //      reasons (an eval that counts everything as caught is always green), so the MACHINE is
 //      tested with bait sets on the same install: one that gets it right passes and its JSON

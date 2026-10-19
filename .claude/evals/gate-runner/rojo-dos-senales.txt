@@ -1,0 +1,38 @@
+Gate (modo: full) — agent-harness
+
+──▶ harness self-test
+    ✓ harness self-test (48210 ms)
+
+──▶ docs link-check
+    ✓ docs link-check (812 ms)
+
+──▶ convention lint
+scripts/deploy.mjs:42:3 — CONSOLE: `console.log` en un hook o script de despliegue; usá el registro (`logger.info`).
+scripts/deploy.mjs:57:5 — CONSOLE: `console.log` en un hook o script de despliegue; usá el registro (`logger.info`).
+repo-lint: 2 problema(s) en 1 archivo(s).
+    ✗ convention lint (1490 ms)
+
+──▶ artifacts in place
+    ✓ artifacts in place (95 ms)
+
+──▶ code index (codegraph)
+    – OMITIDA: no existe `.codegraph` (omitido ≠ pasó)
+
+──▶ task: criteria and scope
+    – OMITIDA: no existe `.git/harness-task.json` (omitido ≠ pasó)
+
+──▶ profile bench (real stacks)
+    ✓ profile bench (real stacks) (20544 ms)
+
+──▶ harness eval (deterministic)
+harness-eval: rules — recall 97 % (69/71) · min 100 %
+  ✗ rules/evasion/git-C-clean: expected block, got allow
+    ✗ harness eval (deterministic) (31877 ms)
+
+──▶ harness cost (hook latency)
+    ✓ harness cost (hook latency) (6120 ms)
+
+Señales omitidas (NO son verde): code index (codegraph) task: criteria and scope
+Tiempo: 109.1s en 7 señal(es) — las más caras: harness self-test 48.2s · harness eval (deterministic) 31.9s · profile bench (real stacks) 20.5s
+GATE ROJO — señales fallidas: convention lint harness eval (deterministic)
+Leé el error real (archivo, línea, mensaje) antes de reintentar. Mismo error 1 vez/veces de 3: a la 3ª se para y se escala. Reintentá sólo con hipótesis nueva.
