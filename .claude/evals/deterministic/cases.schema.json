@@ -1,0 +1,224 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "cases.schema.json",
+  "title": "Deterministic evaluation cases",
+  "description": "The labelled set scripts/harness-eval.mjs runs against a freshly installed harness. Grouped by WHEN the piece acts, the same three groups as docs/guias-y-sensores.md: `guides` (before the agent decides), `rules` (before a tool runs), `signals` (after acting). Every label says what a GOOD harness should do, not what it does today. Validated by scripts/eval/schema.mjs before anything is measured.",
+  "type": "object",
+  "required": ["events", "files", "guides", "rules", "signals"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "$comment": { "type": "string" },
+    "events": {
+      "description": "The Claude Code hook event behind each moment, as settings.json names it. The eval does not hard-code them: the set declares them.",
+      "type": "object",
+      "required": ["prompt", "tool", "afterTool", "turnEnd", "subagentEnd"],
+      "additionalProperties": false,
+      "properties": {
+        "prompt": { "type": "string", "minLength": 1 },
+        "tool": { "type": "string", "minLength": 1 },
+        "afterTool": { "type": "string", "minLength": 1 },
+        "turnEnd": { "type": "string", "minLength": 1 },
+        "subagentEnd": { "type": "string", "minLength": 1 }
+      }
+    },
+    "files": {
+      "description": "The toy repo seeded after the install: {relative path: content}.",
+      "$ref": "#/$defs/fileMap"
+    },
+    "guides": {
+      "type": "object",
+      "required": ["thresholds", "reasonCriteria", "items"],
+      "additionalProperties": false,
+      "properties": {
+        "$comment": { "type": "string" },
+        "thresholds": { "$ref": "#/$defs/scoreThresholds" },
+        "reasonCriteria": {
+          "description": "What every blocking or escalating reason from the `rules` run must have: it is the only thing the agent reads when it is stopped. `nextStep` are regexes (case-insensitive): at least one must match, or the reason says what happened but not what to do.",
+          "type": "object",
+          "required": ["minLength", "nextStep"],
+          "additionalProperties": false,
+          "properties": {
+            "$comment": { "type": "string" },
+            "minLength": { "type": "integer", "minimum": 1 },
+            "nextStep": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } }
+          }
+        },
+        "items": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/guide" } }
+      }
+    },
+    "rules": {
+      "type": "object",
+      "required": ["thresholds", "items"],
+      "additionalProperties": false,
+      "properties": {
+        "$comment": { "type": "string" },
+        "thresholds": {
+          "type": "object",
+          "required": ["minRecall", "maxFpr", "minAccuracy"],
+          "additionalProperties": false,
+          "properties": {
+            "minRecall": { "type": "number", "minimum": 0, "maximum": 1 },
+            "maxFpr": { "type": "number", "minimum": 0, "maximum": 1 },
+            "minAccuracy": { "type": "number", "minimum": 0, "maximum": 1 }
+          }
+        },
+        "items": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/rule" } }
+      }
+    },
+    "signals": {
+      "type": "object",
+      "required": ["thresholds", "items"],
+      "additionalProperties": false,
+      "properties": {
+        "$comment": { "type": "string" },
+        "thresholds": { "$ref": "#/$defs/scoreThresholds" },
+        "items": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/signal" } }
+      }
+    }
+  },
+  "$defs": {
+    "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+    "note": { "type": "string", "minLength": 3 },
+    "lang": {
+      "description": "Language of the case's human content (a prompt, a message, a file). Absent = language-neutral (a command, a path).",
+      "enum": ["es", "en"]
+    },
+    "text": { "type": "string", "minLength": 1 },
+    "fileMap": { "type": "object", "additionalProperties": { "type": "string" } },
+    "scoreThresholds": {
+      "type": "object",
+      "required": ["minScore"],
+      "additionalProperties": false,
+      "properties": { "minScore": { "type": "number", "minimum": 0, "maximum": 1 } }
+    },
+    "history": {
+      "description": "What happened earlier in the same session. Today: a human prompt (it can leave the question marker).",
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["type", "text"],
+        "additionalProperties": false,
+        "properties": {
+          "type": { "const": "prompt" },
+          "text": { "$ref": "#/$defs/text" },
+          "lang": { "$ref": "#/$defs/lang" }
+        }
+      }
+    },
+    "guide": {
+      "type": "object",
+      "required": ["id", "type", "text", "expected", "note"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "type": {
+          "description": "`prompt`: what the prompt hooks put in front of the agent (`injects` with `contains`, or `silent`). `intent`: whether the prompt is a question to answer or an action to take (the `ask-first` marker).",
+          "enum": ["prompt", "intent"]
+        },
+        "lang": { "$ref": "#/$defs/lang" },
+        "text": { "$ref": "#/$defs/text" },
+        "expected": { "enum": ["injects", "silent", "question", "action"] },
+        "contains": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } },
+        "state": { "$ref": "#/$defs/fileMap" },
+        "note": { "$ref": "#/$defs/note" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "type": { "const": "prompt" } } },
+          "then": { "properties": { "expected": { "enum": ["injects", "silent"] } } }
+        },
+        {
+          "if": { "properties": { "type": { "const": "intent" } } },
+          "then": { "properties": { "expected": { "enum": ["question", "action"] }, "contains": false } }
+        },
+        {
+          "if": { "properties": { "expected": { "const": "injects" } } },
+          "then": { "required": ["contains"] },
+          "else": { "properties": { "contains": false } }
+        }
+      ]
+    },
+    "rule": {
+      "type": "object",
+      "required": ["id", "category", "variant", "tool", "args", "expected", "note"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "category": {
+          "enum": [
+            "secrets",
+            "protected paths",
+            "destructive git",
+            "bulk deletion",
+            "data out",
+            "remote code",
+            "disarm the harness",
+            "cloud and deploy",
+            "question or action",
+            "budget and scope"
+          ]
+        },
+        "variant": {
+          "description": "`direct`: the obvious attack. `evasion`: the same attack by another path. `innocent`: looks like an attack and is not.",
+          "enum": ["direct", "evasion", "innocent"]
+        },
+        "tool": { "type": "string", "minLength": 1 },
+        "args": { "description": "The tool_input, as Claude Code sends it. `{root}` is the evaluated repo root.", "type": "object" },
+        "expected": { "enum": ["block", "approve", "allow"] },
+        "lang": { "$ref": "#/$defs/lang" },
+        "gap": {
+          "description": "The attack is known to get through: why, and the document holding its row. It does not count against; caught one day, it turns the eval red.",
+          "type": "string",
+          "pattern": "docs/[\\w./-]+\\.md"
+        },
+        "before": { "$ref": "#/$defs/history" },
+        "state": { "$ref": "#/$defs/fileMap" },
+        "note": { "$ref": "#/$defs/note" }
+      },
+      "if": { "properties": { "variant": { "const": "innocent" } } },
+      "then": { "properties": { "expected": { "const": "allow" }, "gap": false } },
+      "else": { "properties": { "expected": { "enum": ["block", "approve"] } } }
+    },
+    "signal": {
+      "type": "object",
+      "required": ["id", "type", "expected", "note"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "type": {
+          "description": "`turn-end`: the agent tries to close the turn. `after-edit`: right after a write tool. `subagent-end`: a subagent tries to close. `commit`: the git hooks on a real `git commit`.",
+          "enum": ["turn-end", "after-edit", "subagent-end", "commit"]
+        },
+        "lang": { "$ref": "#/$defs/lang" },
+        "expected": { "enum": ["asks-gate", "closes", "marks-gate", "warns", "passes", "returns", "blocks"] },
+        "state": { "$ref": "#/$defs/fileMap" },
+        "payload": { "description": "Extra hook input fields (`stop_hook_active`, `agent_type`, `last_assistant_message`…).", "type": "object" },
+        "tool": { "type": "string", "minLength": 1 },
+        "args": { "type": "object" },
+        "staged": { "description": "Files written and staged before the commit: {path: content}.", "$ref": "#/$defs/fileMap" },
+        "message": { "type": "string", "minLength": 1 },
+        "note": { "$ref": "#/$defs/note" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "type": { "const": "turn-end" } } },
+          "then": { "properties": { "expected": { "enum": ["asks-gate", "closes"] } } }
+        },
+        {
+          "if": { "properties": { "type": { "const": "after-edit" } } },
+          "then": { "required": ["tool", "args"], "properties": { "expected": { "enum": ["marks-gate", "warns", "passes"] } } }
+        },
+        {
+          "if": { "properties": { "type": { "const": "subagent-end" } } },
+          "then": { "required": ["payload"], "properties": { "expected": { "enum": ["returns", "closes"] } } }
+        },
+        {
+          "if": { "properties": { "type": { "const": "commit" } } },
+          "then": { "required": ["staged", "message"], "properties": { "expected": { "enum": ["blocks", "passes"] } } }
+        }
+      ]
+    }
+  }
+}

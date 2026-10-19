@@ -1761,6 +1761,7 @@ DRY-RUN: 38 archivo(s) a copiar, 0 conservado(s).</code></pre>
             <tr><td><a href="https://github.com/raalzate/agent-harness/blob/main/docs/caso-de-estudio.md">caso-de-estudio.md</a></td><td>Un arnés real con números verificables, cuatro mecanismos contados desde el incidente que los creó, y los huecos que ese repo declara.</td></tr>
             <tr><td><a href="https://github.com/raalzate/agent-harness/blob/main/docs/buenas-practicas.md">buenas-practicas.md</a></td><td>La guía de fondo, agnóstica de stack: qué es un arnés, las cinco decisiones del bucle, los niveles de madurez L0–L4.</td></tr>
             <tr><td><a href="https://github.com/raalzate/agent-harness/blob/main/docs/guias-y-sensores.md">guias-y-sensores.md</a></td><td>El marco de <em>harness engineering</em> (Böckeler, martinfowler.com) aplicado: guías y sensores, computacional e inferencial, qué mecanismo cubre cada idea y qué huecos quedan declarados.</td></tr>
+            <tr><td><a href="https://github.com/raalzate/agent-harness/blob/main/docs/evaluaciones.md">evaluaciones.md</a></td><td>Las dos familias de evaluación: determinista (acciones etiquetadas contra el arnés recién instalado: rodeos, inocentes y huecos conocidos, en el gate) y con IA (la prueba de vida del <code>reviewer</code>).</td></tr>
             <tr><td><a href="https://github.com/raalzate/agent-harness/blob/main/docs/agilidad.md">agilidad.md</a></td><td>Los principios ágiles con mecanismo: diez principios, el comando que falla cuando se violan, y la lista explícita de lo que NO se hace cumplir.</td></tr>
             <tr><td><a href="https://github.com/raalzate/agent-harness/blob/main/docs/ciclo-desarrollo.md">ciclo-desarrollo.md</a></td><td>El ciclo de desarrollo declarado: modelo de ramas (trunk-based, git flow, GitHub flow) y las cuatro prácticas de XP que tienen mecanismo, con lo que cada una NO prueba.</td></tr>
             <tr><td><a href="https://github.com/raalzate/agent-harness/blob/main/docs/arquitectura.md">arquitectura.md</a></td><td>Qué documentación de arquitectura es obligatoria, cuándo va un ADR, y la traducción de bajo acoplamiento / alta cohesión a reglas que fallan.</td></tr>
@@ -1800,6 +1801,7 @@ DRY-RUN: 38 archivo(s) a copiar, 0 conservado(s).</code></pre>
             <tr><td><a href="https://github.com/raalzate/agent-harness/blob/main/docs/decisions/0012-el-arnes-autoriza-un-camino.md">0012</a></td><td>El arnés autoriza un camino de despliegue, y sólo en su forma exacta; el script exige el config commiteado.</td></tr>
             <tr><td><a href="https://github.com/raalzate/agent-harness/blob/main/docs/decisions/0013-tarea-declarada.md">0013</a></td><td>La tarea declarada: el agente planifica alcance y criterios; <code>protected-paths</code> frena fuera del alcance y el gate re-ejecuta la evidencia antes de dar por terminado.</td></tr>
             <tr><td><a href="https://github.com/raalzate/agent-harness/blob/main/docs/decisions/0014-selftest-en-abanico.md">0014</a></td><td>El self-test corre en partes paralelas; las que tocan los marcadores de sesión van en serie en el mismo grupo. El gate, en serie.</td></tr>
+            <tr><td><a href="https://github.com/raalzate/agent-harness/blob/main/docs/decisions/0015-promptfoo-como-corredor.md">0015</a></td><td>promptfoo evalúa a los subagentes como corredor (npx, versión fija), nunca como dependencia; el veredicto y el k/n por caso los calcula el arnés.</td></tr>
           </tbody>
         </table>
       </div>
@@ -1913,6 +1915,11 @@ DRY-RUN: 38 archivo(s) a copiar, 0 conservado(s).</code></pre>
         L("BANCO VERDE — 105 comprobaciones sobre 9 repos de juguete", "dim"),
         L("    ✓ profile bench (real stacks)", "ok"),
         L(""),
+        L("──▶ harness eval (deterministic)"),
+        L("DETERMINISTIC EVAL GREEN — guides 118/118 · rules 80/80,", "dim"),
+        L("0/45 FP · signals 25/25 · es 34/34 · en 33/33", "dim"),
+        L("    ✓ harness eval (deterministic)", "ok"),
+        L(""),
         L("──▶ harness cost (hook latency)"),
         L("LATENCIA VERDE — todos los hooks dentro de", "dim"),
         L("presupuesto (PreToolUse: 280 ms por turno)", "dim"),
@@ -1961,6 +1968,9 @@ DRY-RUN: 38 archivo(s) a copiar, 0 conservado(s).</code></pre>
         L("BANCO VERDE — 105 comprobaciones sobre 9 repos de juguete", "dim"),
         L("    ✓ profile bench (real stacks)", "ok"),
         L(""),
+        L("──▶ harness eval (deterministic)"),
+        L("    ✓ harness eval (deterministic)", "ok"),
+        L(""),
         L("──▶ harness cost (hook latency)"),
         L("LATENCIA VERDE — todos los hooks dentro de", "dim"),
         L("presupuesto (PreToolUse: 280 ms por turno)", "dim"),
@@ -1999,11 +2009,15 @@ DRY-RUN: 38 archivo(s) a copiar, 0 conservado(s).</code></pre>
         L("──▶ profile bench (real stacks)"),
         L("    – omitida en modo fast", "sk"),
         L(""),
+        L("──▶ harness eval (deterministic)"),
+        L("    – omitida en modo fast", "sk"),
+        L(""),
         L("──▶ harness cost (hook latency)"),
         L("    ✓ harness cost (hook latency)", "ok"),
         L(""),
         L("Señales omitidas (NO son verde):", "sk"),
         L("  code index (codegraph) · banco de perfiles", "sk"),
+        L("  evaluación determinista", "sk"),
         L(""),
         L("GATE FAST VERDE — señal de desarrollo.", "sk"),
         L("NO es entregable: faltan las señales lentas.", "sk"),

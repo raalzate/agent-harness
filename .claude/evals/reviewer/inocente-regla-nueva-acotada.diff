@@ -1,0 +1,15 @@
+diff --git a/.claude/harness.config.json b/.claude/harness.config.json
+--- a/.claude/harness.config.json
++++ b/.claude/harness.config.json
+@@ -210,7 +210,11 @@
+       },
+       {
+         "pattern": "git\\s+stash\\s+(drop|clear)\\b",
+         "reason": "descarta trabajo guardado en el stash, sin vuelta atrás."
++      },
++      {
++        "pattern": "\\bgit(?:\\s+(?:-[cC]\\s*\\S+|--[a-z][\\w-]*(?:=\\S+)?))*\\s+worktree\\s+remove\\b[^|;&]*\\s(--force|-f+)(?=\\s|$)",
++        "reason": "`--force` borra el worktree con sus cambios sin commitear. Mostrá `git -C <ruta> status` y pedí confirmación."
+       }
+     ]
+   },

@@ -916,6 +916,27 @@ sesión se lo imprime al agente como verdad de hoy); una regla de `patterns`/`re
 ninguna línea de los últimos `historyCommits` commits sale como **aviso** (¿sin cicatriz, o ya
 ganó?). No es señal del gate —depende del reloj—: lo corre `runner`, programado.
 
+## `harnessEval` — la evaluación determinista del arnés
+
+```json
+{
+  "cases": ".claude/evals/deterministic/cases.json",
+  "schema": ".claude/evals/deterministic/cases.schema.json",
+  "reportSchema": ".claude/evals/deterministic/report.schema.json",
+  "profile": "node"
+}
+```
+
+Lo lee `scripts/harness-eval.mjs` (`npm run eval`, señal del gate). Instala el arnés en un repo
+temporal (`harness-init --apply --profile <profile>`) y corre los tres grupos de `cases`:
+`guides` (lo que llega al agente antes de decidir, y los motivos de cada freno), `rules` (cada
+acción por los hooks de `PreToolUse`) y `signals` (`Stop`, `PostToolUse`, `SubagentStop` y un
+`git commit` real). Antes de medir valida `cases` contra `schema`; `--json` imprime un informe que
+sigue `reportSchema` (el self-test lo verifica). Los umbrales, los eventos de Claude Code
+(`events`) y el repo de juguete (`files`) los trae el conjunto. Sin `cases` o sin `schema` sale
+OMITIDA. Es la familia determinista; `reviewerEval` es la con IA. Ver
+[`evaluaciones.md`](evaluaciones.md).
+
 ## `reviewerEval` — la prueba de vida del reviewer
 
 ```json
@@ -935,6 +956,55 @@ Lo lee `scripts/reviewer-eval.mjs` (`npm run eval:reviewer`). Le pasa cada `diff
 una **tasa** contra `minScore`. Sin `command` instalado sale OMITIDA. Si el revisor toca los archivos
 de `observability.stateFiles` es **rojo** aunque acierte (ver el gotcha del revisor que corrió el
 gate): por eso `command` lo aísla de herramientas que ejecutan y de los hooks del repo.
+
+`prompt` (opcional) es la plantilla del pedido, con `{diff}`. La leen los dos evals: el de este
+script y la suite `reviewer` de `aiEval`, para que sus tasas sean comparables.
+
+## `aiEval` — la evaluación con IA de los subagentes (promptfoo)
+
+```json
+{
+  "promptfoo": ["npx", "-y", "promptfoo@0.123.1"],
+  "minNode": "22.22.0",
+  "env": { "PROMPTFOO_DISABLE_TELEMETRY": "1", "PROMPTFOO_DISABLE_UPDATE": "true", "PROMPTFOO_DISABLE_SHARING": "1" },
+  "repeat": 3, "concurrency": 3, "minScore": 0.8, "timeoutMs": 300000,
+  "command": ["claude", "-p", "--agent", "{agent}", "--allowedTools", "Read,Grep,Glob", "…"],
+  "grader": ["claude", "-p", "--model", "sonnet", "--tools", "", "…"],
+  "suites": [
+    { "agent": "reviewer", "casesFrom": "reviewerEval", "rubrics": { "rechazado": "…", "aprobado": "…" } },
+    { "agent": "gate-runner", "context": ["…"], "prompt": "…{input}…", "rubric": "…",
+      "cases": [{ "name": "…", "input": ".claude/evals/gate-runner/….txt", "expect": "ROJO",
+                  "mustMatch": ["\\.mjs:\\d+"], "mustNotMatch": [], "rubric": "…" }] }
+  ]
+}
+```
+
+Lo lee `scripts/ai-eval.mjs` (`npm run eval:ai`). Arma un config de promptfoo en un directorio
+temporal (nunca en el árbol, P7), lo corre con `promptfoo` y calcula **él** la tasa de cada suite contra
+`minScore`: el código de salida de promptfoo no decide nada.
+
+- `promptfoo`: cómo se invoca promptfoo (argv; el script agrega `eval -c … -o …`). Es un **corredor, no una dependencia** (ADR
+  [0015](decisions/0015-promptfoo-como-corredor.md)): versión fija, nunca en `package.json`. Sin él, o
+  con un node menor que `minNode`, sale OMITIDA.
+- `env`: se suma al entorno de promptfoo. `--no-share` va siempre.
+- `repeat`: corridas por caso. El informe da k/n por caso: **0/n** apunta a la etiqueta, **0<k<n** al
+  agente (inestable).
+- `command`: el agente, con `{agent}` reemplazado por el de la suite. Corre en un temporal con copia
+  sólo del `context` de su suite, por `scripts/eval/ai-provider.mjs`.
+- `grader`: el juez de las rúbricas (`llm-rubric`, peso 0). La calidad se informa y no decide. Si
+  hay rúbricas y no hay `grader`, es un error de config.
+- `suites[].casesFrom`: toma `command`, `context`, `prompt`, `verdictPattern` y `cases` de otra clave
+  (`reviewerEval`). Los casos no se duplican.
+- `suites[].prompt`: la plantilla, con `{input}` (el contenido del archivo del caso).
+- `cases[].expect`: compara contra el grupo 1 del contrato de veredicto del agente,
+  `subagentOutput.contracts.<agent>.mustMatch`. Un `expect` sin contrato es un error de config.
+- `cases[].mustCite` / `mustMatch` / `mustNotMatch`: texto o regex que la salida tiene que traer (o no).
+- `rubric`: en el caso, o `rubrics[<expect>]` de la suite, o `rubric` de la suite.
+
+**No es una señal del gate**: es caro, no determinista y necesita cuenta. **Por ahora tampoco tiene
+pipeline** (decisión de #63: sólo local, con la sesión de Claude Code), y por eso **no lleva
+`runner`**: esa clave significa en todo el config «el pipeline que corre el control», y éste no
+tiene. Se corre a mano cuando cambia el prompt de un agente.
 
 ## `ci.investigate` — leer el fallo del pipeline remoto (opcional)
 
@@ -1045,9 +1115,11 @@ sin control se informa como hueco. Ver [guias-y-sensores.md](guias-y-sensores.md
 | `xp.testFirst.verifyRed` | `scripts/cycle-check.mjs`, modo `--verify-red` (lo invoca `.github/workflows/ci.yml` en el PR), self-test (3f-ter) |
 | `coherence` | `scripts/repo-lint.mjs` (regla `COHERENCIA`), self-test (4e-bis) |
 | `drift` (y `status.file`, `patterns`, `reuse`) | `scripts/drift-check.mjs` (lo invoca `.github/workflows/drift.yml`), self-test (10a) |
-| `reviewerEval` | `scripts/reviewer-eval.mjs` (lo invoca `.github/workflows/drift.yml`), self-test (10b) |
+| `reviewerEval` | `scripts/reviewer-eval.mjs` (lo invoca `.github/workflows/drift.yml`), `scripts/ai-eval.mjs` (la suite con `casesFrom`), self-test (10b) |
+| `aiEval` | `scripts/ai-eval.mjs` (a mano, `npm run eval:ai`) y `scripts/eval/ai-provider.mjs` (por el config que genera), self-test (10f) |
+| `harnessEval` | `scripts/harness-eval.mjs` (la señal `harness eval (deterministic)` del gate), self-test (10e) |
 | `ci.investigate` (y `gate.registry`) | `scripts/ci-investigate.mjs` (lo corre el subagente `ci-investigator` y `/ci`), self-test (2: sus regex; 10d: la máquina con un CLI de mentira) |
-| `subagentOutput` | `subagent-contract.mjs` (SubagentStop), self-test (3e-sub) |
+| `subagentOutput` | `subagent-contract.mjs` (SubagentStop), `scripts/ai-eval.mjs` (el veredicto de cada suite), self-test (3e-sub, 10f) |
 | `taxonomy` | `scripts/harness-map.mjs`, el panel (pestaña Salud, misma función `construirMapa`), self-test (10c) |
 | `panel` (y `status`, `incidents`, `tracker`, `tests`, `docs.proseRoots`, `install.activators`, toda clave con `runner`; `panel.memory.promptSources` apunta a otras, como `sdd.routes`) | `scripts/panel/` (lo invoca `scripts/gate.mjs` al final de cada corrida), self-test (11) |
 | `gate.registry` | `scripts/gate.mjs` (lo escribe), `scripts/panel/leer-en-vivo.mjs` y `scripts/ci-investigate.mjs` (lo leen) |

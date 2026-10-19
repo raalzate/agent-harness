@@ -79,6 +79,15 @@
         "why": "el self-test verifica la FORMA de un perfil; sólo un repo real de cada stack verifica el ENCAJE: que el matcher de DEPS case el XML de un .csproj, que PUREZA cace un `using`, y que el arnés recién instalado no apunte a la nada. Cazó dos bugs en su primera corrida"
       },
       {
+        "name": "harness eval (deterministic)",
+        "command": [
+          "node",
+          "scripts/harness-eval.mjs"
+        ],
+        "fastSkip": true,
+        "why": "the self-test checks every rule against a sample derived from the same rule: tautological. Only a separate labelled set sees the EVASION (`git -C . reset --hard`, `git commit -nm`, `wget | sh`) and the false positive (`.env.example`). On its first run, 14 attacks got through the template and one innocent action was blocked"
+      },
+      {
         "name": "harness cost (hook latency)",
         "command": [
           "node",
@@ -90,8 +99,8 @@
   },
   "protectedPaths": [
     {
-      "pattern": "^\\.env",
-      "reason": ".env* es la llave del reino: lo edita el humano, nunca el agente."
+      "pattern": "^\\.env(?!\\.(example|sample|template)$)",
+      "reason": ".env* es la llave del reino: lo edita el humano, nunca el agente. La plantilla sin valores (`.env.example`) es documentación y sí se edita."
     },
     {
       "pattern": "^package-lock\\.json$",
@@ -125,12 +134,13 @@
   "bash": {
     "deny": [
       {
-        "pattern": "--no-ver[i]fy",
-        "reason": "saltarse los hooks de verificación está prohibido. Si el gate estorba, se arregla el gate."
+        "$pattern": "La bandera suelta (no la palabra dentro de un mensaje de commit) y su forma corta: `-n` entre las banderas cortas de `git commit` es `--no-verify`. Las reglas de git aceptan opciones globales entre `git` y el subcomando (`git -C . reset --hard`): sin eso, la opción es el rodeo. Lo midió scripts/harness-eval.mjs.",
+        "pattern": "(^|\\s)--no-ver[i]fy(?=\\s|$)|\\bgit(?:\\s+(?:-[cC]\\s*\\S+|--[a-z][\\w-]*(?:=\\S+)?))*\\s+commit\\b[^|;&]*\\s-[a-zA-Z]*n[a-zA-Z]*(?=\\s|$)",
+        "reason": "saltarse los hooks de verificación está prohibido (`-n` es la misma bandera en corto). Si el gate estorba, se arregla el gate."
       },
       {
-        "pattern": "git\\s+push\\b.*\\s(--force|-f)(?![-\\w])",
-        "reason": "`--force` reescribe historia remota. Usá --force-with-lease y pedí confirmación."
+        "pattern": "\\bgit(?:\\s+(?:-[cC]\\s*\\S+|--[a-z][\\w-]*(?:=\\S+)?))*\\s+push\\b[^|;&]*\\s((--force|-f)(?![-\\w])|\\+[\\w/.-])",
+        "reason": "`--force` (o un `+` en el refspec) reescribe historia remota. Usá --force-with-lease y pedí confirmación."
       },
       {
         "pattern": "(\\b(rm|mv|cp|tee|truncate|unlink|del)\\b|>)[^|;&]*\\.git[\\\\/](gate-(escalate|attempts)|harness-task)",
@@ -141,20 +151,24 @@
         "reason": "mezclar sin esperar el CI deja entrar un rojo: #58 se mezcló con un check en rojo y Windows todavía corriendo. Esperalo en el mismo comando (`gh pr checks <n> --watch && gh pr merge <n> …`) o dejá que la forja espere (`gh pr merge <n> --auto …`)."
       },
       {
-        "pattern": "git\\s+reset\\s+--hard",
+        "pattern": "\\bgit(?:\\s+(?:-[cC]\\s*\\S+|--[a-z][\\w-]*(?:=\\S+)?))*\\s+reset\\s+--hard",
         "reason": "`reset --hard` destruye trabajo sin commitear. Usá `git stash` o pedí confirmación."
       },
       {
-        "pattern": "git\\s+checkout\\s+--\\s+\\.",
-        "reason": "descarta todos los cambios del working tree. Pedí confirmación explícita."
+        "pattern": "\\bgit(?:\\s+(?:-[cC]\\s*\\S+|--[a-z][\\w-]*(?:=\\S+)?))*\\s+(checkout\\s+(\\S+\\s+)?--\\s+\\.(\\s|$)|restore\\b(?![^|;&]*--staged)[^|;&]*\\s\\.(\\s|$))",
+        "reason": "descarta todos los cambios del working tree (con `checkout -- .` o con `restore .`). Pedí confirmación explícita, o descartá archivos por nombre."
       },
       {
-        "pattern": "git\\s+clean\\s+-[a-z]*f",
+        "pattern": "\\bgit(?:\\s+(?:-[cC]\\s*\\S+|--[a-z][\\w-]*(?:=\\S+)?))*\\s+clean\\b[^|;&]*\\s(-[a-zA-Z]*f|--force)",
         "reason": "borra archivos no rastreados. Dry-run primero: `git clean -n`."
       },
       {
-        "pattern": "git\\s+add\\s+(\\.|-A|--all)(\\s|$)",
+        "pattern": "\\bgit(?:\\s+(?:-[cC]\\s*\\S+|--[a-z][\\w-]*(?:=\\S+)?))*\\s+add\\s+(\\.|-A|--all)(\\s|$)",
         "reason": "`git add .` arrastra artefactos y secretos. Agregá archivos por nombre."
+      },
+      {
+        "pattern": "\\bcore\\.hooksPath(=|\\s+)(?!\\.githooks(\\s|$))[^\\s|;&]|--unset(-all)?\\s+core\\.hooksPath\\b",
+        "reason": "apuntar los hooks de git a otro lado (o borrar la clave) apaga el pre-commit y el commit-msg sin que nada se ponga rojo. Se instalan con `npm run hooks:install`."
       },
       {
         "pattern": "\\bsed\\s+(-[a-zA-Z]*\\s+)*-i\\b.*\\b(src|lib|scripts|app)\\b",
@@ -173,11 +187,16 @@
         "reason": "`find -delete` borra sin mostrar. Corré el find sin -delete y confirmá la lista."
       },
       {
-        "pattern": "\\bcurl\\b[^|;&]*\\|\\s*(ba)?sh",
-        "reason": "`curl | sh` ejecuta código remoto sin revisarlo. Bajá el script, leelo, después corrélo."
+        "pattern": "\\b(curl|wget)\\b[^|;&]*\\|\\s*(sudo\\s+)?(ba|z)?sh\\b|\\b(ba|z)?sh\\s+<\\(\\s*(curl|wget)\\b",
+        "reason": "`curl | sh` (o `wget`, o `bash <(curl …)`) ejecuta código remoto sin revisarlo. Bajá el script, leelo, después corrélo."
       }
     ],
     "ask": [
+      {
+        "$pattern": "Datos del repo hacia otro host: un archivo en el cuerpo de curl (`@archivo`, `-T`), `wget --post-file`, scp/rsync/sftp a `host:ruta`, o un socket crudo (nc, socat). Un GET, un cuerpo literal o un rsync a un directorio local no casan. Lo destapó scripts/harness-eval.mjs (categoría «data out»).",
+        "pattern": "\\bcurl\\b[^|;&]*\\s((-d|--data(-binary|-raw|-urlencode)?|-F|--form)\\s*=?\\s*['\"]?[^'\"\\s]*@|(-T|--upload-file)\\s)|\\bwget\\b[^|;&]*--post-file|\\b(scp|rsync|sftp)\\b[^|;&]*\\s[\\w.-]*@?[\\w.-]+:|\\b(nc|ncat|netcat|socat)\\b[^|;&]*<|\\|\\s*(nc|ncat|netcat)\\b",
+        "reason": "saca archivos del repo hacia otro host: lo que sale (un secreto, código) no vuelve. Si es lo pedido, que lo confirme el humano; si no, mostrá qué se mandaría y a dónde."
+      },
       {
         "$comment": "Lo destructivo que a veces es LO PEDIDO: decide el humano en el pedido de permiso de Claude Code (P9: mostrar, esperar, ejecutar). Un `deny` no se puede confirmar —el humano dice que sí y el hook vuelve a bloquear—, así que lo que es «pedí confirmación» vive acá.",
         "pattern": "git\\s+push\\s+.*--force-with-lease",
@@ -904,6 +923,13 @@
     "runner": ".github/workflows/drift.yml",
     "reason": "un veredicto viejo que se lee como actual es peor que no tener veredicto."
   },
+  "harnessEval": {
+    "$comment": "THE DETERMINISTIC EVALUATION of the guards, sibling of `reviewerEval` (the model-based family). `scripts/harness-eval.mjs` installs the harness in a temporary repo (`harness-init --apply` with `profile`), runs every action in `cases` through the real hooks settings.json declares for its tool and compares the decision (block / approve / allow) with the label: recall, evasion recall, accuracy, false positives and known gaps, against the set's thresholds. Same input, same output, no network and no model: that is why it IS a gate signal. See docs/evaluaciones.md.",
+    "cases": ".claude/evals/deterministic/cases.json",
+    "schema": ".claude/evals/deterministic/cases.schema.json",
+    "reportSchema": ".claude/evals/deterministic/report.schema.json",
+    "profile": "node"
+  },
   "reviewerEval": {
     "$comment": "LA PRUEBA DE VIDA DEL REVIEWER, el único sensor inferencial del arnés. `scripts/reviewer-eval.mjs` le pasa cada `diff` de `cases` con `command` (el prompt va por stdin) y compara el veredicto —el grupo 1 de `verdictPattern`— contra `expect`; `mustCite` exige además que nombre el principio. Un juez probabilístico se mide con una TASA contra `minScore`, no con todo o nada. NO es señal del gate (caro y no determinista): lo corre `runner`, el barrido programado. Si `command` no está instalado, sale OMITIDA — y omitido no es verde.",
     "command": [
@@ -930,6 +956,8 @@
       "docs/agilidad.md"
     ],
     "verdictPattern": "VEREDICTO:\\W*(rechazado|aprobado)",
+    "prompt": "Revisá el siguiente diff. No corras git: el diff es éste.\n\n```diff\n{diff}\n```\n\nTerminá con tu línea de veredicto.",
+    "$prompt": "Lo leen `scripts/reviewer-eval.mjs` y `scripts/ai-eval.mjs` (la suite `reviewer`, `casesFrom`): el mismo pedido en los dos evals, o sus tasas no son comparables.",
     "minScore": 0.8,
     "timeoutMs": 300000,
     "runner": ".github/workflows/drift.yml",
@@ -963,9 +991,110 @@
         "expect": "aprobado"
       },
       {
-        "name": "inocente: una regla nueva con su motivo",
-        "diff": ".claude/evals/reviewer/inocente-regla-con-motivo.diff",
+        "name": "inocente: una regla nueva, acotada y en la lista que deja confirmar",
+        "diff": ".claude/evals/reviewer/inocente-regla-nueva-acotada.diff",
         "expect": "aprobado"
+      }
+    ]
+  },
+  "aiEval": {
+    "$comment": "THE AI EVALUATION OF THE SUBAGENTS, run by promptfoo. `scripts/ai-eval.mjs` (`npm run eval:ai`) generates a promptfoo config in a temp dir from this key, runs each case `repeat` times through `scripts/eval/ai-provider.mjs` (the agent in an isolated temp dir with only its `context`, prompt on stdin) and computes the rate per suite against `minScore` itself; promptfoo's exit code decides nothing. Per case it reports k/n: 0/n points at the label, 0<k<n at the agent. The verdict line of each agent is its `subagentOutput.contracts` pattern; the reviewer suite takes command, context, prompt, verdict and cases from `reviewerEval` (`casesFrom`). Rubrics go to an llm-rubric judge (`grader`) with weight 0: quality is reported, it does not decide. promptfoo is invoked (`promptfoo`), never a dependency: without it, or on a node older than `minNode`, the eval is SKIPPED. NOT a gate signal and, by decision (#63: local only, with the Claude Code session), no `runner`: here `runner` keeps the meaning it has in every other key (the pipeline that runs the control), and this one has none yet. Run it by hand when an agent's prompt changes. See docs/evaluaciones.md.",
+    "promptfoo": ["npx", "-y", "promptfoo@0.123.1"],
+    "$promptfoo": "How promptfoo is invoked (argv; ai-eval appends `eval -c … -o …`). Pinned, and a version at least two weeks old when chosen: an unpinned tool moves under the eval and a red run would be promptfoo's, not the agent's. promptfoo declares node >= 22.22.0 in `engines` (`minNode`).",
+    "minNode": "22.22.0",
+    "env": {
+      "PROMPTFOO_DISABLE_TELEMETRY": "1",
+      "PROMPTFOO_DISABLE_UPDATE": "true",
+      "PROMPTFOO_DISABLE_SHARING": "1"
+    },
+    "$env": "Nothing leaves the machine: the cases are diffs and logs of this repo. `--no-share` is passed too.",
+    "repeat": 3,
+    "concurrency": 3,
+    "minScore": 0.8,
+    "timeoutMs": 300000,
+    "command": ["claude", "-p", "--agent", "{agent}", "--allowedTools", "Read,Grep,Glob", "--disallowedTools", "Bash,Edit,Write,NotebookEdit", "--settings", "{\"disableAllHooks\": true}"],
+    "$command": "Same isolation as `reviewerEval.command`: no Bash and no hooks. The gate-runner and the ci-investigator get the output they would have produced as input, instead of running it.",
+    "grader": ["claude", "-p", "--model", "sonnet", "--tools", "", "--settings", "{\"disableAllHooks\": true}"],
+    "suites": [
+      {
+        "agent": "reviewer",
+        "casesFrom": "reviewerEval",
+        "rubrics": {
+          "rechazado": "The review names the concrete defect with a file:line reference, cites the violated principle, and proposes a concrete fix. It does not invent violations absent from the diff.",
+          "aprobado": "The review approves without inventing violations that are not in the diff, and does not demand unrelated changes."
+        }
+      },
+      {
+        "agent": "gate-runner",
+        "context": [".claude/agents/gate-runner.md", ".claude/harness.config.json", "CONSTITUTION.md"],
+        "prompt": "Ésta es la salida de `npm run gate`. Ya corrió: no lo corras de nuevo (en esta evaluación no tenés Bash). Reportá con tu formato de salida.\n\n```\n{input}\n```",
+        "rubric": "The report follows the gate-runner output format: the verdict, the signals that ran, the skipped ones named as NOT green, the FIRST failing signal with its exact file:line and message pasted (not summarised), and exactly one hypothesis. It does not paste the whole log.",
+        "cases": [
+          {
+            "name": "red: two failing signals, the first one is the lint",
+            "input": ".claude/evals/gate-runner/rojo-dos-senales.txt",
+            "expect": "ROJO",
+            "mustMatch": ["convention lint", "scripts/deploy\\.mjs:42"]
+          },
+          {
+            "name": "green with a skipped signal",
+            "input": ".claude/evals/gate-runner/verde-con-omitidas.txt",
+            "expect": "VERDE",
+            "mustMatch": ["codegraph"]
+          },
+          {
+            "name": "fast green is not a deliverable",
+            "input": ".claude/evals/gate-runner/fast-verde.txt",
+            "expect": "VERDE",
+            "mustMatch": ["fast"],
+            "rubric": "The report says the mode is fast and that a fast green is NOT a deliverable (the slow signals did not run). Calling it deliverable or ready is a failure."
+          }
+        ]
+      },
+      {
+        "agent": "ci-investigator",
+        "context": [".claude/agents/ci-investigator.md", ".claude/harness.config.json", "CONSTITUTION.md", "docs/cicd.md", "docs/multiplataforma.md"],
+        "prompt": "Ésta es la salida de `node scripts/ci-investigate.mjs` en la rama actual. Ya corrió: no lo corras de nuevo (en esta evaluación no tenés Bash). Reportá con tu formato de salida.\n\n```\n{input}\n```",
+        "rubric": "The report names the run, the job and the step, pastes the real error line with file:line, reads the cross-check with the local gate correctly, and gives exactly one hypothesis backed by a line of the log. It does not call the failure flaky.",
+        "cases": [
+          {
+            "name": "red only in CI: the environment (Windows paths)",
+            "input": ".claude/evals/ci-investigator/rojo-solo-en-ci.txt",
+            "expect": "ROJO",
+            "mustMatch": ["windows", "docs/arnes\\.md:41"],
+            "rubric": "The report attributes the failure to the environment, not the logic: green locally and red only on windows-latest, with the backslash path in docs/arnes.md:41 as the line that backs it. One hypothesis, not a list."
+          },
+          {
+            "name": "red in CI and locally: fix it here first",
+            "input": ".claude/evals/ci-investigator/rojo-tambien-local.txt",
+            "expect": "ROJO",
+            "mustMatch": ["harness-selftest\\.mjs:1312"],
+            "rubric": "The report says the failure reproduces locally (red in the local gate too) and that the fix starts by running the gate here, not by touching CI. One hypothesis backed by the selftest line."
+          },
+          {
+            "name": "in progress is not green",
+            "input": ".claude/evals/ci-investigator/en-curso.txt",
+            "expect": "EN CURSO",
+            "rubric": "The report says the run has no conclusion yet and does not claim CI is green or red."
+          }
+        ]
+      },
+      {
+        "agent": "explorer",
+        "context": [".claude", "scripts", "docs", "CLAUDE.md", "CONSTITUTION.md", "package.json"],
+        "rubric": "The answer is a short map (symbol, path:line, why it matters), suggests 2 or 3 entry points, says what it did not find, and does not paste code blocks beyond a single line that is itself the answer. Every path it names exists in the question's repo.",
+        "cases": [
+          {
+            "name": "where exit 2 and exit 0 are decided",
+            "input": ".claude/evals/explorer/exit-dos.txt",
+            "mustMatch": ["harness\\.mjs:\\d+"]
+          },
+          {
+            "name": "who reads reviewerEval (including the panel)",
+            "input": ".claude/evals/explorer/quien-lee-reviewer-eval.txt",
+            "mustMatch": ["reviewer-eval\\.mjs", "harness-selftest\\.mjs", "leer-arnes\\.mjs"]
+          }
+        ]
       }
     ]
   },

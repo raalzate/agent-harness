@@ -1,0 +1,14 @@
+$ node scripts/ci-investigate.mjs
+CI ROJO — corrida 18342551020 «CI» en `feat/presupuesto` (failure).
+  https://github.com/raalzate/agent-harness/actions/runs/18342551020
+  job: gate (ubuntu-latest) · paso: npm run gate
+
+  Líneas del error (2 marcada(s), contexto ±2):
+    ──▶ harness self-test
+      ✓ ciclo acotado: el marcador se crea al tercer rojo
+  ▶   ✗ ciclo acotado: el pedido del humano repone el presupuesto
+  ▶       scripts/harness-selftest.mjs:1312 — esperaba que el marcador de escalada no existiera después del pedido; existe
+      ✓ ciclo acotado: gate-stop deja cerrar con el presupuesto agotado
+
+  Cruce con el gate local (`.git/gate-last.json`, rama feat/presupuesto @ 91ac0e3):
+    · «harness self-test»: también roja acá → se reproduce local: arreglala acá primero.

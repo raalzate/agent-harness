@@ -1,0 +1,136 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "report.schema.json",
+  "title": "Deterministic evaluation report",
+  "description": "What `node scripts/harness-eval.mjs --json` prints and `--save` writes next to the text report. The machine-readable contract of a run: other tools (the panel, a trend over time) read this, not the text.",
+  "type": "object",
+  "required": ["kind", "version", "date", "cases", "source", "green", "failures", "groups", "byLanguage", "latency", "brokenHooks"],
+  "additionalProperties": false,
+  "properties": {
+    "kind": { "const": "deterministic-eval" },
+    "version": { "const": 1 },
+    "date": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
+    "cases": { "type": "string", "minLength": 1 },
+    "source": {
+      "type": "object",
+      "required": ["profile", "config"],
+      "additionalProperties": false,
+      "properties": {
+        "profile": { "type": ["string", "null"] },
+        "config": { "description": "null = the template the installer ships", "type": ["string", "null"] }
+      }
+    },
+    "green": { "type": "boolean" },
+    "failures": { "type": "array", "items": { "type": "string" } },
+    "groups": {
+      "type": "object",
+      "required": ["guides", "rules", "signals"],
+      "additionalProperties": false,
+      "properties": {
+        "guides": { "$ref": "#/$defs/scored" },
+        "rules": { "$ref": "#/$defs/rules" },
+        "signals": { "$ref": "#/$defs/scored" }
+      }
+    },
+    "byLanguage": {
+      "description": "Passed over total per language of the case content, across groups (known gaps excluded).",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "es": { "$ref": "#/$defs/tally" },
+        "en": { "$ref": "#/$defs/tally" },
+        "neutral": { "$ref": "#/$defs/tally" }
+      }
+    },
+    "latency": {
+      "type": "object",
+      "required": ["p50Ms", "p95Ms", "runs"],
+      "additionalProperties": false,
+      "properties": {
+        "p50Ms": { "type": "number", "minimum": 0 },
+        "p95Ms": { "type": "number", "minimum": 0 },
+        "runs": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "brokenHooks": { "type": "array", "items": { "$ref": "#/$defs/failed" } }
+  },
+  "$defs": {
+    "ratio": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+    "tally": {
+      "type": "object",
+      "required": ["total", "passed"],
+      "additionalProperties": false,
+      "properties": { "total": { "type": "integer", "minimum": 0 }, "passed": { "type": "integer", "minimum": 0 } }
+    },
+    "failed": {
+      "type": "object",
+      "required": ["id", "expected", "actual"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "kind": { "type": "string" },
+        "lang": { "type": ["string", "null"] },
+        "expected": { "type": "string" },
+        "actual": { "type": "string" },
+        "note": { "type": "string" },
+        "detail": { "type": "string" }
+      }
+    },
+    "scored": {
+      "type": "object",
+      "required": ["total", "passed", "score", "minScore", "byKind", "failed"],
+      "additionalProperties": false,
+      "properties": {
+        "total": { "type": "integer", "minimum": 0 },
+        "passed": { "type": "integer", "minimum": 0 },
+        "score": { "$ref": "#/$defs/ratio" },
+        "minScore": { "type": "number", "minimum": 0, "maximum": 1 },
+        "byKind": { "type": "object", "additionalProperties": { "$ref": "#/$defs/tally" } },
+        "failed": { "type": "array", "items": { "$ref": "#/$defs/failed" } }
+      }
+    },
+    "rules": {
+      "type": "object",
+      "required": ["total", "attacks", "caught", "exact", "evasions", "evasionsCaught", "innocents", "falsePositives", "recall", "evasionRecall", "accuracy", "fpr", "thresholds", "byCategory", "escaped", "falsePositiveCases", "inexact", "closedGaps", "knownGaps"],
+      "additionalProperties": false,
+      "properties": {
+        "total": { "type": "integer", "minimum": 0 },
+        "attacks": { "type": "integer", "minimum": 0 },
+        "caught": { "type": "integer", "minimum": 0 },
+        "exact": { "type": "integer", "minimum": 0 },
+        "evasions": { "type": "integer", "minimum": 0 },
+        "evasionsCaught": { "type": "integer", "minimum": 0 },
+        "innocents": { "type": "integer", "minimum": 0 },
+        "falsePositives": { "type": "integer", "minimum": 0 },
+        "recall": { "$ref": "#/$defs/ratio" },
+        "evasionRecall": { "$ref": "#/$defs/ratio" },
+        "accuracy": { "$ref": "#/$defs/ratio" },
+        "fpr": { "$ref": "#/$defs/ratio" },
+        "thresholds": { "type": "object" },
+        "byCategory": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "required": ["attacks", "caught", "exact", "evasions", "evasionsCaught", "innocents", "falsePositives", "gaps"],
+            "additionalProperties": false,
+            "properties": {
+              "attacks": { "type": "integer" },
+              "caught": { "type": "integer" },
+              "exact": { "type": "integer" },
+              "evasions": { "type": "integer" },
+              "evasionsCaught": { "type": "integer" },
+              "innocents": { "type": "integer" },
+              "falsePositives": { "type": "integer" },
+              "gaps": { "type": "integer" }
+            }
+          }
+        },
+        "escaped": { "type": "array", "items": { "$ref": "#/$defs/failed" } },
+        "falsePositiveCases": { "type": "array", "items": { "$ref": "#/$defs/failed" } },
+        "inexact": { "type": "array", "items": { "$ref": "#/$defs/failed" } },
+        "closedGaps": { "type": "array", "items": { "$ref": "#/$defs/failed" } },
+        "knownGaps": { "type": "array", "items": { "type": "object", "required": ["id", "gap"], "additionalProperties": false, "properties": { "id": { "type": "string" }, "gap": { "type": "string" } } } }
+      }
+    }
+  }
+}

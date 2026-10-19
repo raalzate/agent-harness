@@ -1,0 +1,14 @@
+$ node scripts/ci-investigate.mjs
+CI ROJO — corrida 18342207714 «CI» en `feat/rutas` (failure).
+  https://github.com/raalzate/agent-harness/actions/runs/18342207714
+  job: gate (windows-latest) · paso: npm run gate
+
+  Líneas del error (2 marcada(s), contexto ±2):
+    ──▶ docs link-check
+      docs/portar.md:88 → scripts/harness-init.mjs ✓
+  ▶   docs/arnes.md:41 → .claude\hooks\bash-guard.mjs ✗ no está en git ls-files
+      docs/arnes.md:52 → scripts/gate.mjs ✓
+  ▶     ✗ docs link-check (1022 ms)
+
+  Cruce con el gate local (`.git/gate-last.json`, rama feat/rutas @ 4be10c2):
+    · «docs link-check»: verde acá, roja en CI → falla sólo en CI → entorno: SO, rutas, shell, variables.
