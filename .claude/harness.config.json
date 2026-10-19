@@ -989,8 +989,8 @@
         "expect": "aprobado"
       },
       {
-        "name": "inocente: una regla nueva con su motivo",
-        "diff": ".claude/evals/reviewer/inocente-regla-con-motivo.diff",
+        "name": "inocente: una regla nueva, acotada y en la lista que deja confirmar",
+        "diff": ".claude/evals/reviewer/inocente-regla-nueva-acotada.diff",
         "expect": "aprobado"
       }
     ]
