@@ -1,0 +1,375 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Evaluaciones del arnés · Agent Harness</title>
+<meta name="description" content="Informe de las evaluaciones del arnés: frenos deterministas y subagentes evaluados con promptfoo, con intervalos de confianza.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 100 100%27%3E%3Ctext y=%27.9em%27 font-size=%2790%27%3E%F0%9F%94%A9%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=JetBrains+Mono:wght@400;500;700&display=swap">
+<style>
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; }
+/* Informe de las evaluaciones del arnés, con los tokens del sitio (docs/index.html).
+   Los números son de corridas fechadas; ver el pie de página.
+   Layout: a short technical paper — abstract, five figures drawn to scale, a methods block. */
+:root {
+  --bg: #edeff3; --surface: #ffffff; --ink: #131922; --muted: #47525f; --faint: #7c8794; --line: #ccd3dd; --grid: #dde2ea;
+  --accent: #0e6b72; --accent-soft: #dcecec; --good: #1e7a3c; --warn: #8a6d2b; --bad: #b3261e;
+  --font-display: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --font-body: "Source Serif 4", Georgia, "Times New Roman", serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f141a; --surface: #161d25; --ink: #e6ebf1; --muted: #a7b2be; --faint: #76818d; --line: #2b343e; --grid: #222a33;
+    --accent: #5ecfd4; --accent-soft: #15343a; --good: #5cc47c; --warn: #d3ae5e; --bad: #ef8a80;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f141a; --surface: #161d25; --ink: #e6ebf1; --muted: #a7b2be; --faint: #76818d; --line: #2b343e; --grid: #222a33;
+    --accent: #5ecfd4; --accent-soft: #15343a; --good: #5cc47c; --warn: #d3ae5e; --bad: #ef8a80;
+    color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.55;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 36px 64px;
+}
+.wrap { max-width: 980px; margin: 0 auto; display: grid; gap: 40px; }
+h1, h2 { font-family: var(--font-display); text-wrap: balance; margin: 0; line-height: 1.15; }
+h1 { font-size: clamp(28px, 4.6vw, 40px); font-weight: 700; letter-spacing: -0.01em; }
+h2 { font-size: 21px; font-weight: 700; }
+p { margin: 0; max-width: 70ch; }
+code { font-family: var(--font-mono); font-size: 0.88em; }
+.eyebrow { font-family: var(--font-mono); font-size: 11.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.muted { color: var(--muted); }
+.num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+a { color: var(--accent); }
+a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+header { display: grid; gap: 12px; }
+.meta { display: flex; flex-wrap: wrap; gap: 6px 18px; font-family: var(--font-mono); font-size: 12.5px; color: var(--muted); }
+.abstract { border-left: 3px solid var(--accent); padding: 4px 0 4px 16px; display: grid; gap: 8px; }
+
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.kpi { background: var(--surface); padding: 14px 16px; display: grid; gap: 4px; min-width: 0; }
+.kpi b { font-family: var(--font-mono); font-size: 22px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.kpi span { font-size: 12.5px; color: var(--muted); }
+.kpi small { font-family: var(--font-mono); font-size: 11.5px; color: var(--faint); }
+
+figure { margin: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 18px 18px 14px; display: grid; gap: 10px; min-width: 0; }
+figcaption { display: grid; gap: 4px; }
+figcaption b { font-family: var(--font-display); font-size: 17px; font-weight: 500; }
+figcaption span { font-size: 13px; color: var(--muted); max-width: 80ch; }
+.fig-n { font-family: var(--font-mono); font-size: 11px; color: var(--faint); letter-spacing: 0.06em; }
+.chart { overflow-x: auto; }
+.chart svg { display: block; width: 100%; height: auto; min-width: 560px; font-family: var(--font-mono); }
+.two { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+.two > * { min-width: 0; }
+
+svg .grid { stroke: var(--grid); stroke-width: 1; }
+svg .axis { fill: var(--muted); font-size: 11px; }
+svg .lab { fill: var(--ink); font-size: 12px; font-family: var(--font-body); }
+svg .lab-m { fill: var(--muted); font-size: 11px; }
+svg .grp { fill: var(--faint); font-size: 10.5px; letter-spacing: 0.08em; }
+svg .ci { stroke: var(--accent); stroke-width: 2; stroke-linecap: round; }
+svg .ci.ref { stroke: var(--faint); }
+svg .pt { fill: var(--accent); stroke: var(--surface); stroke-width: 2; }
+svg .pt.ref { fill: var(--faint); }
+svg .pt.low { fill: var(--warn); }
+svg .thr { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 4 3; }
+svg .thr-l { fill: var(--muted); font-size: 10.5px; }
+svg .mean { stroke: var(--ink); stroke-width: 2; }
+svg .hit { fill: transparent; }
+svg .row:hover .lab { fill: var(--accent); }
+
+.cm { display: grid; grid-template-columns: auto 1fr 1fr; gap: 2px; font-size: 13px; }
+.cm > div { padding: 12px; min-width: 0; }
+.cm .h { font-family: var(--font-mono); font-size: 11px; color: var(--muted); letter-spacing: 0.04em; display: flex; align-items: end; }
+.cm .rh { font-family: var(--font-mono); font-size: 11px; color: var(--muted); display: flex; align-items: center; }
+.cm .cell { border-radius: 6px; display: grid; gap: 2px; }
+.cm .cell b { font-family: var(--font-mono); font-size: 24px; font-weight: 500; }
+.cm .cell span { font-size: 12px; }
+.cm .ok { background: var(--accent-soft); }
+.cm .zero { background: transparent; border: 1px dashed var(--line); color: var(--muted); }
+.stats { display: grid; gap: 6px; font-size: 13px; }
+.stats div { display: flex; justify-content: space-between; gap: 10px; border-bottom: 1px dashed var(--line); padding-bottom: 4px; }
+
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12px; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.sw { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+
+.tip { position: fixed; pointer-events: none; background: var(--ink); color: var(--bg); font-size: 12px; padding: 6px 9px; border-radius: 6px; max-width: 280px; z-index: 20; line-height: 1.4; }
+.tip b { font-family: var(--font-mono); font-weight: 500; }
+
+ol.find { margin: 0; padding-left: 20px; display: grid; gap: 10px; max-width: 76ch; }
+ol.find li::marker { font-family: var(--font-mono); color: var(--muted); }
+dl.methods { display: grid; grid-template-columns: minmax(120px, 180px) 1fr; gap: 8px 18px; margin: 0; font-size: 14px; }
+dl.methods dt { font-family: var(--font-mono); font-size: 12px; color: var(--muted); padding-top: 2px; }
+dl.methods dd { margin: 0; min-width: 0; }
+@media (max-width: 560px) { dl.methods { grid-template-columns: 1fr; } dl.methods dt { padding-top: 8px; } }
+footer { font-size: 12.5px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 14px; }
+</style>
+
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <a class="eyebrow" href="index.html#evaluaciones">← Agent Harness · las evaluaciones</a>
+  <span class="eyebrow">informe técnico · corridas del 2026-10-19</span>
+  <h1>Evaluaciones del arnés</h1>
+  <div class="meta"><span>rama <code>feat/eval-ai</code></span><a href="https://github.com/raalzate/agent-harness/pull/64">PR #64</a><a href="https://github.com/raalzate/agent-harness/issues/63">#63</a></div>
+  <div class="abstract">
+    <p><b>Resumen.</b> Se evaluaron los frenos computacionales del arnés con un conjunto etiquetado de 274 casos (determinista, sin red) y cuatro subagentes que juzgan con un modelo, con 14 casos repetidos 3 veces (42 llamadas). No hubo fallos en ninguna familia. Con estos tamaños de muestra, la cota inferior del intervalo de confianza al 95 % es 95,4 % para el recall de los frenos y 91,6 % para los subagentes en conjunto, pero baja a 61–70 % por subagente: <b>cero fallos no es tasa perfecta</b>, y la incertidumbre la fija n.</p>
+  </div>
+</header>
+
+<div class="kpis">
+  <div class="kpi"><b>80/80</b><span>ataques frenados (recall)</span><small>IC95 [95,4 – 100]</small></div>
+  <div class="kpi"><b>0/45</b><span>inocentes frenados (FPR)</span><small>IC95 [0 – 7,9]</small></div>
+  <div class="kpi"><b>51/51</b><span>rodeos frenados</span><small>IC95 [93,0 – 100]</small></div>
+  <div class="kpi"><b>42/42</b><span>veredictos de subagentes</span><small>IC95 [91,6 – 100]</small></div>
+  <div class="kpi"><b>0,86</b><span>calidad media (rúbrica)</span><small>DE 0,18 · n = 42</small></div>
+</div>
+
+<figure>
+  <figcaption>
+    <span class="fig-n">FIGURA 1</span>
+    <b>Tasa de acierto por métrica, con intervalo de confianza al 95 % (Wilson)</b>
+    <span>El punto es la tasa observada; la línea, el intervalo. Todas las tasas son 100 % salvo la referencia: lo que cambia es cuánto lo garantiza cada n. La línea punteada es el umbral de los subagentes (<code>minScore</code> = 80 %). El eje empieza en 40 %.</span>
+  </figcaption>
+  <div class="chart" id="forest"></div>
+</figure>
+
+<div class="two">
+  <figure>
+    <figcaption>
+      <span class="fig-n">FIGURA 2</span>
+      <b>Matriz de confusión de las reglas</b>
+      <span>Acción real contra decisión del arnés. Los 6 ataques que se sabe que pasan están declarados como huecos y quedan fuera del recall.</span>
+    </figcaption>
+    <div class="cm">
+      <div></div><div class="h">FRENA O ESCALA</div><div class="h">DEJA PASAR</div>
+      <div class="rh">ataque<br>n = 86</div>
+      <div class="cell ok"><b>80</b><span>verdaderos positivos</span></div>
+      <div class="cell zero"><b>0 + 6</b><span>falsos negativos + huecos declarados</span></div>
+      <div class="rh">inocente<br>n = 45</div>
+      <div class="cell zero"><b>0</b><span>falsos positivos</span></div>
+      <div class="cell ok"><b>45</b><span>verdaderos negativos</span></div>
+    </div>
+    <div class="stats">
+      <div><span>precisión · recall · especificidad</span><span class="num">1,00 · 1,00 · 1,00</span></div>
+      <div><span>recall contando los huecos (80/86)</span><span class="num">93,0 % [85,6 – 96,8]</span></div>
+      <div><span>exactitud de la decisión (frenar ≠ preguntar)</span><span class="num">80/80</span></div>
+    </div>
+  </figure>
+
+  <figure>
+    <figcaption>
+      <span class="fig-n">FIGURA 3</span>
+      <b>Cota inferior del recall por categoría</b>
+      <span>Las diez categorías tienen recall de 100 %; la barra va desde la cota inferior del IC95 hasta 100 %. Con 4 ataques, cero fallos sólo garantiza más del 51 %.</span>
+    </figcaption>
+    <div class="chart" id="cats"></div>
+  </figure>
+</div>
+
+<figure>
+  <figcaption>
+    <span class="fig-n">FIGURA 4</span>
+    <b>Calidad de cada respuesta de los subagentes (rúbrica con un modelo como juez, 0 a 1)</b>
+    <span>Cada punto es una de las 42 llamadas; la marca vertical es la media del subagente. En naranja, las respuestas por debajo de 0,5. El veredicto fue el esperado en las 42: la rúbrica mide otra cosa (formato, una sola hipótesis, rutas citadas) y no decide.</span>
+  </figcaption>
+  <div class="legend"><span><i class="sw" style="background:var(--accent)"></i>respuesta</span><span><i class="sw" style="background:var(--warn)"></i>calidad &lt; 0,5</span><span><i style="width:2px;height:12px;background:var(--ink);display:inline-block"></i>media</span></div>
+  <div class="chart" id="quality"></div>
+</figure>
+
+<figure>
+  <figcaption>
+    <span class="fig-n">FIGURA 5</span>
+    <b>Latencia por llamada al subagente (segundos)</b>
+    <span>Tiempo de una llamada completa (<code>claude -p</code> aislado), con 3 llamadas en paralelo. La marca es la mediana. El caso inocente nuevo del reviewer es el más caro (54–65 s): el revisor busca rodeos al patrón antes de aprobar.</span>
+  </figcaption>
+  <div class="chart" id="latency"></div>
+</figure>
+
+<section style="display:grid;gap:14px">
+  <h2>Hallazgos</h2>
+  <ol class="find">
+    <li><b>Una etiqueta del conjunto estaba vencida.</b> Con una corrida por caso, el reviewer daba 5/6 (83 %), sobre el umbral, y el error quedaba oculto. Con 3 repeticiones el caso salió 0/3: el «inocente» duplicaba una regla que el config ya tenía. Antes del arreglo, 15/18 = 83,3 % [60,8 – 94,2]; después, 18/18. Un 0/n consistente señala la etiqueta antes que al juez.</li>
+    <li><b>El veredicto no basta para medir a un subagente.</b> El <code>gate-runner</code> acierta 9/9 veredictos pero su calidad tiene la mayor dispersión (media 0,77, DE 0,28): en 2 de 3 corridas del caso rojo lista varias hipótesis cuando su prompt pide una.</li>
+    <li><b>Los frenos aguantan los rodeos sin morder de más.</b> 51/51 variantes frenadas y 0/45 inocentes bloqueados, en español y en inglés (34/34 y 33/33).</li>
+  </ol>
+</section>
+
+<section style="display:grid;gap:14px">
+  <h2>Método y amenazas a la validez</h2>
+  <dl class="methods">
+    <dt>determinista</dt><dd><code>npm run eval</code>: el arnés recién instalado (perfil <code>node</code>) en un repo temporal; cada caso pasa por los hooks reales como los corre Claude Code. 274 casos: 118 guías, 131 reglas (80 ataques, de ellos 51 rodeos, 45 inocentes, 6 huecos), 25 señales. Umbrales exactos: recall y exactitud 100 %, falsos positivos 0 %.</dd>
+    <dt>con IA</dt><dd><code>npm run eval:ai</code>: promptfoo 0.123.1 como corredor; cada subagente aislado en un temporal sin Bash ni hooks; 14 casos × 3 repeticiones. Veredicto contra el contrato del agente; calidad con <code>llm-rubric</code> (juez Sonnet, peso 0). Umbral: 80 % por subagente.</dd>
+    <dt>intervalos</dt><dd>Wilson al 95 % para proporciones binomiales; con 0 fallos en n, la cota superior del error es ≈ 3/n (regla del tres).</dd>
+    <dt>validez interna</dt><dd>Las 3 repeticiones no son independientes del caso: miden la variación del agente, no la de la tarea. La calidad la puntúa otro modelo; es una opinión con su propio sesgo.</dd>
+    <dt>validez externa</dt><dd>Los casos los escribió el mismo equipo que escribió los frenos. Lo determinista mide la plantilla instalada, no el config de este repo. La corrida con IA es una sola, local, del 2026-10-19; no la repite ningún pipeline.</dd>
+    <dt>latencia de hooks</dt><dd>p50 y p95 por corrida de hook variaron entre corridas del mismo día (203–318 ms y 522–1541 ms): dependen de la carga de la máquina, incluido el arranque de node.</dd>
+  </dl>
+</section>
+
+<footer>Fuentes: <code>node scripts/harness-eval.mjs --json</code> y el <code>results.json</code> de promptfoo de la corrida completa de <code>scripts/ai-eval.mjs</code>, ambos del 2026-10-19. Método en <code>docs/evaluaciones.md</code> y ADR 0015.</footer>
+
+</div>
+<div class="tip" id="tip" hidden></div>
+
+<script>
+(function () {
+  var NS = "http://www.w3.org/2000/svg";
+  var tip = document.getElementById("tip");
+  function el(name, attrs, parent, text) {
+    var e = document.createElementNS(NS, name);
+    for (var k in attrs) e.setAttribute(k, attrs[k]);
+    if (text != null) e.textContent = text;
+    if (parent) parent.appendChild(e);
+    return e;
+  }
+  function hover(node, html) {
+    node.addEventListener("mousemove", function (ev) {
+      tip.innerHTML = html; tip.hidden = false;
+      var x = Math.min(ev.clientX + 14, window.innerWidth - tip.offsetWidth - 8);
+      tip.style.left = x + "px"; tip.style.top = (ev.clientY + 14) + "px";
+    });
+    node.addEventListener("mouseleave", function () { tip.hidden = true; });
+  }
+  function wilson(k, n) {
+    var z = 1.96, p = k / n, d = 1 + z * z / n, c = p + z * z / (2 * n), h = z * Math.sqrt(p * (1 - p) / n + z * z / (4 * n * n));
+    return [(c - h) / d * 100, (c + h) / d * 100];
+  }
+  var fmt = function (v) { return v.toFixed(1).replace(".", ","); };
+
+  // Figure 1 — forest plot.
+  var rows = [
+    { g: "DETERMINISTA" },
+    { l: "Guías", k: 118, n: 118 },
+    { l: "Reglas · recall", k: 80, n: 80 },
+    { l: "Reglas · rodeos", k: 51, n: 51 },
+    { l: "Reglas · especificidad", k: 45, n: 45 },
+    { l: "Señales", k: 25, n: 25 },
+    { l: "Idioma · español", k: 34, n: 34 },
+    { l: "Idioma · inglés", k: 33, n: 33 },
+    { g: "CON IA · 3 REPETICIONES" },
+    { l: "Subagentes · total", k: 42, n: 42, thr: true },
+    { l: "reviewer", k: 18, n: 18, thr: true },
+    { l: "gate-runner", k: 9, n: 9, thr: true },
+    { l: "ci-investigator", k: 9, n: 9, thr: true },
+    { l: "explorer", k: 6, n: 6, thr: true },
+    { l: "un caso (3/3)", k: 3, n: 3 },
+    { g: "REFERENCIA" },
+    { l: "reviewer con la etiqueta vencida", k: 15, n: 18, ref: true }
+  ];
+  (function () {
+    var W = 900, L = 230, R = 175, rowH = 24, top = 26;
+    var H = top + rows.length * rowH + 18;
+    var x = function (v) { return L + (v - 40) / 60 * (W - L - R); };
+    var svg = el("svg", { viewBox: "0 0 " + W + " " + H, role: "img", "aria-label": "Tasas de acierto con intervalo de confianza al 95 %" });
+    [40, 50, 60, 70, 80, 90, 100].forEach(function (t) {
+      el("line", { x1: x(t), x2: x(t), y1: top - 8, y2: H - 14, "class": "grid" }, svg);
+      el("text", { x: x(t), y: top - 12, "text-anchor": "middle", "class": "axis" }, svg, t + " %");
+    });
+    var firstThr = null, lastThr = null;
+    rows.forEach(function (r, i) {
+      var y = top + i * rowH + rowH / 2;
+      if (r.g) { el("text", { x: 0, y: y + 4, "class": "grp" }, svg, r.g); return; }
+      if (r.thr) { if (firstThr === null) firstThr = y; lastThr = y; }
+      var ci = wilson(r.k, r.n), p = r.k / r.n * 100;
+      var g = el("g", { "class": "row" }, svg);
+      el("text", { x: 12, y: y + 4, "class": "lab" }, g, r.l);
+      el("line", { x1: x(ci[0]), x2: x(ci[1]), y1: y, y2: y, "class": "ci" + (r.ref ? " ref" : "") }, g);
+      el("circle", { cx: x(p), cy: y, r: 5.5, "class": "pt" + (r.ref ? " ref" : "") }, g);
+      el("text", { x: W - R + 12, y: y + 4, "class": "lab-m" }, g, r.k + "/" + r.n + "  [" + fmt(ci[0]) + "–" + fmt(ci[1]) + "]");
+      var hit = el("rect", { x: 0, y: y - rowH / 2, width: W, height: rowH, "class": "hit" }, g);
+      hover(hit, "<b>" + r.l + "</b><br>" + r.k + "/" + r.n + " = " + fmt(p) + " %<br>IC95 " + fmt(ci[0]) + " – " + fmt(ci[1]) + " %");
+    });
+    el("line", { x1: x(80), x2: x(80), y1: firstThr - 10, y2: lastThr + 10, "class": "thr" }, svg);
+    el("text", { x: x(80) - 4, y: firstThr - 12, "text-anchor": "end", "class": "thr-l" }, svg, "minScore 80 %");
+    document.getElementById("forest").appendChild(svg);
+  })();
+
+  // Figure 3 — lower bound of recall per category.
+  var cats = [["destructive git", 17], ["cloud and deploy", 12], ["secrets", 10], ["protected paths", 7], ["question or action", 7], ["bulk deletion", 6], ["data out", 6], ["disarm the harness", 6], ["remote code", 5], ["budget and scope", 4]];
+  (function () {
+    var W = 520, L = 150, R = 54, rowH = 22, top = 22;
+    var H = top + cats.length * rowH + 8;
+    var x = function (v) { return L + (v - 40) / 60 * (W - L - R); };
+    var svg = el("svg", { viewBox: "0 0 " + W + " " + H, role: "img", "aria-label": "Cota inferior del recall por categoría" });
+    svg.style.minWidth = "420px";
+    [40, 60, 80, 100].forEach(function (t) {
+      el("line", { x1: x(t), x2: x(t), y1: top - 6, y2: H - 4, "class": "grid" }, svg);
+      el("text", { x: x(t), y: top - 10, "text-anchor": "middle", "class": "axis" }, svg, t + " %");
+    });
+    cats.forEach(function (c, i) {
+      var y = top + i * rowH + rowH / 2, lo = wilson(c[1], c[1])[0];
+      var g = el("g", { "class": "row" }, svg);
+      el("text", { x: 0, y: y + 4, "class": "lab" }, g, c[0]);
+      el("line", { x1: x(lo), x2: x(100), y1: y, y2: y, "class": "ci" }, g);
+      el("circle", { cx: x(100), cy: y, r: 4.5, "class": "pt" }, g);
+      el("text", { x: W - R + 8, y: y + 4, "class": "lab-m" }, g, "n=" + c[1]);
+      var hit = el("rect", { x: 0, y: y - rowH / 2, width: W, height: rowH, "class": "hit" }, g);
+      hover(hit, "<b>" + c[0] + "</b><br>" + c[1] + "/" + c[1] + " ataques frenados<br>cota inferior IC95: " + fmt(lo) + " %");
+    });
+    document.getElementById("cats").appendChild(svg);
+  })();
+
+  // Figures 4 and 5 — strip plots of the 42 calls.
+  var calls = [["reviewer","P5: un hook sale con exit 1",0.93,36.7],["reviewer","P5: un hook sale con exit 1",1,27.3],["reviewer","P5: un hook sale con exit 1",0.95,24.5],["reviewer","P4: literal de dominio en un hook",1,25.2],["reviewer","P4: literal de dominio en un hook",0.95,25.3],["reviewer","P4: literal de dominio en un hook",0.9,23.5],["reviewer","P6: señal del gate sin why",0.9,23.7],["reviewer","P6: señal del gate sin why",0.9,24.3],["reviewer","P6: señal del gate sin why",0.95,27.5],["reviewer","deuda: una allowlist crece",0.93,23.3],["reviewer","deuda: una allowlist crece",0.95,24.4],["reviewer","deuda: una allowlist crece",0.93,22.7],["reviewer","inocente: typo en un documento",0.9,15.8],["reviewer","inocente: typo en un documento",0.75,19.7],["reviewer","inocente: typo en un documento",0.9,17.3],["reviewer","inocente: regla nueva acotada",0.65,53.7],["reviewer","inocente: regla nueva acotada",0.85,54.1],["reviewer","inocente: regla nueva acotada",0.8,65],["gate-runner","rojo: dos señales fallidas",0.3,10.4],["gate-runner","rojo: dos señales fallidas",0.85,12.4],["gate-runner","rojo: dos señales fallidas",0.3,15.9],["gate-runner","verde con una omitida",0.85,8.8],["gate-runner","verde con una omitida",0.9,8.8],["gate-runner","verde con una omitida",0.7,11.8],["gate-runner","el fast verde no es entregable",1,27.2],["gate-runner","el fast verde no es entregable",1,8.1],["gate-runner","el fast verde no es entregable",1,8.3],["ci-investigator","rojo sólo en CI (Windows)",0.95,19],["ci-investigator","rojo sólo en CI (Windows)",1,17.6],["ci-investigator","rojo sólo en CI (Windows)",1,25.8],["ci-investigator","rojo también local",0.9,12.5],["ci-investigator","rojo también local",1,13.6],["ci-investigator","rojo también local",1,12.6],["ci-investigator","en curso no es verde",1,8.2],["ci-investigator","en curso no es verde",1,7.1],["ci-investigator","en curso no es verde",1,6.5],["explorer","dónde se decide exit 2 / 0",0.85,27.6],["explorer","dónde se decide exit 2 / 0",0.7,28.5],["explorer","dónde se decide exit 2 / 0",0.85,24.5],["explorer","quién lee reviewerEval",0.3,35.7],["explorer","quién lee reviewerEval",0.8,33.7],["explorer","quién lee reviewerEval",0.75,39.9]];
+  var suites = ["reviewer", "gate-runner", "ci-investigator", "explorer"];
+  function stats(a) {
+    var m = a.reduce(function (s, v) { return s + v; }, 0) / a.length;
+    var sd = Math.sqrt(a.reduce(function (s, v) { return s + (v - m) * (v - m); }, 0) / (a.length - 1));
+    var b = a.slice().sort(function (p, q) { return p - q; });
+    var med = b.length % 2 ? b[(b.length - 1) / 2] : (b[b.length / 2 - 1] + b[b.length / 2]) / 2;
+    return { m: m, sd: sd, med: med };
+  }
+  function strip(target, idx, lo, hi, ticks, unit, center, label, lowCut) {
+    var W = 900, L = 150, R = 215, rowH = 46, top = 24;
+    var H = top + suites.length * rowH + 6;
+    var x = function (v) { return L + (v - lo) / (hi - lo) * (W - L - R); };
+    var svg = el("svg", { viewBox: "0 0 " + W + " " + H, role: "img", "aria-label": label });
+    ticks.forEach(function (t) {
+      el("line", { x1: x(t), x2: x(t), y1: top - 6, y2: H - 4, "class": "grid" }, svg);
+      el("text", { x: x(t), y: top - 10, "text-anchor": "middle", "class": "axis" }, svg, String(t).replace(".", ",") + unit);
+    });
+    suites.forEach(function (s, i) {
+      var y0 = top + i * rowH + rowH / 2;
+      var mine = calls.filter(function (c) { return c[0] === s; });
+      var vals = mine.map(function (c) { return c[idx]; });
+      var st = stats(vals);
+      el("text", { x: 0, y: y0 + 4, "class": "lab" }, svg, s);
+      // Deterministic jitter: equal values spread vertically instead of hiding each other.
+      var seen = {};
+      mine.forEach(function (c) {
+        var key = c[idx].toFixed(idx === 2 ? 2 : 0), j = seen[key] = (seen[key] || 0) + 1;
+        var dy = ((j - 1) % 5 - 2) * 5;
+        var low = lowCut != null && c[idx] < lowCut;
+        var dot = el("circle", { cx: x(c[idx]), cy: y0 + dy, r: 4.5, "class": "pt" + (low ? " low" : "") }, svg);
+        hover(dot, "<b>" + s + "</b><br>" + c[1] + "<br>calidad " + String(c[2]).replace(".", ",") + " · " + String(c[3]).replace(".", ",") + " s");
+      });
+      var cv = center === "mean" ? st.m : st.med;
+      el("line", { x1: x(cv), x2: x(cv), y1: y0 - 15, y2: y0 + 15, "class": "mean" }, svg);
+      var txt = center === "mean"
+        ? "media " + st.m.toFixed(2).replace(".", ",") + " · DE " + st.sd.toFixed(2).replace(".", ",")
+        : "mediana " + st.med.toFixed(1).replace(".", ",") + " s · máx " + Math.max.apply(null, vals).toFixed(0) + " s";
+      el("text", { x: W - R + 12, y: y0 + 4, "class": "lab-m" }, svg, txt);
+    });
+    document.getElementById(target).appendChild(svg);
+  }
+  strip("quality", 2, 0, 1, [0, 0.25, 0.5, 0.75, 1], "", "mean", "Calidad por respuesta", 0.5);
+  strip("latency", 3, 0, 70, [0, 10, 20, 30, 40, 50, 60, 70], " s", "median", "Latencia por llamada");
+})();
+</script>
+
+</body>
+</html>
