@@ -80,6 +80,9 @@ export function exec(executable, argv, { cwd, input = "" } = {}) {
     child.stderr.on("data", (d) => (stderr += d));
     child.on("error", (e) => resolve({ status: null, stdout, stderr: e.message, ms: 0 }));
     child.on("close", (status) => resolve({ status, stdout, stderr, ms: Number(process.hrtime.bigint() - t0) / 1e6 }));
+    // A hook may decide without reading all of stdin and exit: the write then fails with EPIPE.
+    // Unhandled, that error killed the whole eval (CI on main); the exit code is what counts.
+    child.stdin.on("error", () => {});
     child.stdin.end(input);
   });
 }
