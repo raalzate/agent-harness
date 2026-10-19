@@ -964,7 +964,7 @@ script y la suite `reviewer` de `aiEval`, para que sus tasas sean comparables.
 
 ```json
 {
-  "runner": ["npx", "-y", "promptfoo@0.123.1"],
+  "promptfoo": ["npx", "-y", "promptfoo@0.123.1"],
   "minNode": "22.22.0",
   "env": { "PROMPTFOO_DISABLE_TELEMETRY": "1", "PROMPTFOO_DISABLE_UPDATE": "true", "PROMPTFOO_DISABLE_SHARING": "1" },
   "repeat": 3, "concurrency": 3, "minScore": 0.8, "timeoutMs": 300000,
@@ -980,10 +980,10 @@ script y la suite `reviewer` de `aiEval`, para que sus tasas sean comparables.
 ```
 
 Lo lee `scripts/ai-eval.mjs` (`npm run eval:ai`). Arma un config de promptfoo en un directorio
-temporal (nunca en el árbol, P7), lo corre con `runner` y calcula **él** la tasa de cada suite contra
+temporal (nunca en el árbol, P7), lo corre con `promptfoo` y calcula **él** la tasa de cada suite contra
 `minScore`: el código de salida de promptfoo no decide nada.
 
-- `runner`: cómo se invoca promptfoo. Es un **corredor, no una dependencia** (ADR
+- `promptfoo`: cómo se invoca promptfoo (argv; el script agrega `eval -c … -o …`). Es un **corredor, no una dependencia** (ADR
   [0015](decisions/0015-promptfoo-como-corredor.md)): versión fija, nunca en `package.json`. Sin él, o
   con un node menor que `minNode`, sale OMITIDA.
 - `env`: se suma al entorno de promptfoo. `--no-share` va siempre.
@@ -1002,8 +1002,9 @@ temporal (nunca en el árbol, P7), lo corre con `runner` y calcula **él** la ta
 - `rubric`: en el caso, o `rubrics[<expect>]` de la suite, o `rubric` de la suite.
 
 **No es una señal del gate**: es caro, no determinista y necesita cuenta. **Por ahora tampoco tiene
-pipeline** (decisión de #63: sólo local, con la sesión de Claude Code). Se corre a mano cuando
-cambia el prompt de un agente.
+pipeline** (decisión de #63: sólo local, con la sesión de Claude Code), y por eso **no lleva
+`runner`**: esa clave significa en todo el config «el pipeline que corre el control», y éste no
+tiene. Se corre a mano cuando cambia el prompt de un agente.
 
 ## `ci.investigate` — leer el fallo del pipeline remoto (opcional)
 

@@ -3809,14 +3809,14 @@ process.exit(results.length ? 100 : 0);
 `,
       );
 
-      const bait = (agentName, { runner = ["node", fake], minNode = "0.0.0" } = {}) => {
+      const bait = (agentName, { promptfoo = ["node", fake], minNode = "0.0.0", cases = null } = {}) => {
         const file = path.join(tmp, `config-${agentName}.json`);
         fs.writeFileSync(
           file,
           JSON.stringify({
             subagentOutput: { contracts: { [agentName]: { mustMatch: "VEREDICTO:\\W*(ROJO|VERDE)" } } },
             aiEval: {
-              runner,
+              promptfoo,
               minNode,
               repeat: 2,
               concurrency: 1,
@@ -3829,7 +3829,7 @@ process.exit(results.length ? 100 : 0);
                   context: ["context.md"],
                   prompt: "Gate output:\n{input}",
                   rubric: "names the failing file and line",
-                  cases: [
+                  cases: cases ?? [
                     { name: "red", input: "red.txt", expect: "ROJO", mustMatch: ["x\\.mjs:3"] },
                     { name: "green", input: "green.txt", expect: "VERDE", mustNotMatch: ["```"] },
                   ],
@@ -3867,7 +3867,36 @@ process.exit(results.length ? 100 : 0);
         ok("AI eval: a CLI that fails without answering is BROKEN, not an agent that got it wrong");
       else bad("AI eval: infrastructure apart from judgement", `exit ${broken.status}: ${broken.out.trim().slice(0, 240)}`);
 
-      const absent = bait("sharp", { runner: ["command-that-exists-on-no-machine"] });
+      // A misdeclared suite is an error before anything runs, not a red rate: a case whose input
+      // does not exist, and a verdict expected from an agent with no verdict contract.
+      const noInput = bait("sharp", { cases: [{ name: "ghost", input: "nowhere.txt", expect: "ROJO" }] });
+      const noContract = spawnSync(
+        "node",
+        [
+          script,
+          "--config",
+          (() => {
+            const f = path.join(tmp, "config-no-contract.json");
+            fs.writeFileSync(
+              f,
+              JSON.stringify({
+                aiEval: {
+                  promptfoo: ["node", fake],
+                  command: ["node", path.join(tmp, "{agent}.cjs")],
+                  suites: [{ agent: "sharp", context: ["context.md"], cases: [{ name: "red", input: "red.txt", expect: "ROJO" }] }],
+                },
+              }),
+            );
+            return f;
+          })(),
+        ],
+        { cwd: REPO_ROOT, encoding: "utf8" },
+      );
+      if (noInput.status === 1 && /nowhere\.txt/.test(noInput.out) && noContract.status === 1 && /no verdict pattern/.test(`${noContract.stdout}${noContract.stderr}`))
+        ok("AI eval: a misdeclared suite (missing input, expect without a verdict contract) fails before calling any agent");
+      else bad("AI eval: a misdeclared suite is an error", `missing input: exit ${noInput.status} · no contract: exit ${noContract.status}`);
+
+      const absent = bait("sharp", { promptfoo: ["command-that-exists-on-no-machine"] });
       if (absent.status === 0 && /SKIPPED/.test(absent.out)) ok("AI eval: without promptfoo the eval is SKIPPED, not green");
       else bad("AI eval: without a runner it is skipped", `exit ${absent.status}: ${absent.out.trim().slice(0, 240)}`);
 
@@ -3884,6 +3913,9 @@ process.exit(results.length ? 100 : 0);
     for (const s of spec?.suites ?? []) {
       if (fs.existsSync(abs(`.claude/agents/${s.agent}.md`))) ok(`AI eval: the agent \`${s.agent}\` exists`);
       else bad(`AI eval: the agent \`${s.agent}\` exists`, `no agent file for \`${s.agent}\` under .claude/agents/`);
+      // A renamed doc in `context` would only show up as BROKEN in an expensive run.
+      const missing = (s.context ?? []).filter((rel) => !fs.existsSync(abs(rel)));
+      if (missing.length) bad(`AI eval: the context of \`${s.agent}\` exists`, `missing: ${missing.join(", ")}`);
       if (s.casesFrom) continue;
       const verdict = config.subagentOutput?.contracts?.[s.agent]?.mustMatch;
       for (const c of s.cases ?? []) {

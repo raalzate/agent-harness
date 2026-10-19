@@ -266,7 +266,7 @@ gate-runner — 8/9 (89 %) · min 80 %
 - **La tasa** de cada suite contra `minScore` decide el exit. La calcula el script, no promptfoo.
 - **`quality`** es el promedio de la rúbrica (`llm-rubric`, peso 0, juez `aiEval.grader`). Se
   informa y no decide: un juez con un modelo puntuando a otro modelo es una opinión.
-- **EVAL ROTO**: una llamada que no contestó (sin cuota, timeout) es infraestructura, no un agente
+- **AI EVAL BROKEN**: una llamada que no contestó (sin cuota, timeout) es infraestructura, no un agente
   que se equivoca. No cuenta en la tasa: se arregla y se vuelve a correr.
 
 ### Cuándo correrlo

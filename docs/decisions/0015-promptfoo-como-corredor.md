@@ -22,7 +22,7 @@ es un paquete npm, y el arnés no tiene dependencias (ADR 0002).
 ## Decisión
 
 promptfoo entra como **corredor externo**, igual que la CLI `claude` en `reviewerEval`: se invoca
-con `npx -y promptfoo@<versión fija>` (`aiEval.runner`) y nunca aparece en `package.json`.
+con `npx -y promptfoo@<versión fija>` (`aiEval.promptfoo`) y nunca aparece en `package.json`.
 
 - **El config sigue siendo la única fuente.** `scripts/ai-eval.mjs` genera el config de promptfoo
   en un temporal desde `aiEval`. Los casos del reviewer salen de `reviewerEval` (`casesFrom`), y el
@@ -48,8 +48,11 @@ con `npx -y promptfoo@<versión fija>` (`aiEval.runner`) y nunca aparece en `pac
 - **Agregarle `--repeat` y rúbricas a `reviewer-eval.mjs`.** Sin dependencias, pero reescribe un
   juez con un modelo, un visor y la concurrencia: el mantenimiento que el ADR 0002 evita.
 - **Meterlo en el gate.** Descartada por el ADR 0007: caro y no determinista.
-- **Un job en `drift.yml`.** Diferida: necesita un secreto en CI y gasta cuota en cada barrido. Al
-  activarla, el `runner` pasa a ser ese pipeline y el self-test lo verifica, como con `reviewerEval`.
+- **Un job en `drift.yml`.** Diferida por decisión (#63). El secreto ya existe (lo usa el job
+  `revisor`); las razones son la cuota de cada barrido (≈ 45 llamadas al agente y otras tantas al
+  juez) y que `drift.yml` corre con node 20, donde promptfoo saldría OMITIDO. Al activarla: node 22
+  en ese job, una clave `aiEval.runner` con la ruta del pipeline (el mismo significado que en el
+  resto del config) y `corredorDeclarado` en el self-test, como con `reviewerEval`.
 
 ## Consecuencias
 
@@ -58,6 +61,13 @@ con `npx -y promptfoo@<versión fija>` (`aiEval.runner`) y nunca aparece en `pac
 - promptfoo pide node ≥ 22.22 (`minNode`). En un node más viejo, el eval sale OMITIDA con el motivo.
 - Una versión nueva de promptfoo no entra sola: se cambia la versión fija, eligiendo una que tenga
   al menos dos semanas, y se vuelve a correr.
+- **Hueco declarado:** `gate-runner`, `ci-investigator` y `explorer` tienen prueba de vida, pero
+  ningún mecanismo la dispara: depende de que alguien corra `eval:ai` al tocar un agente. P2 programado
+  sólo lo cumple el `reviewer`, por `reviewer-eval`. Cerrarlo es el job de arriba, o un aviso de
+  `drift-check` cuando un agente cambió después del último k/n.
+- **Deuda conocida:** el contexto se copia del disco, no de `git ls-files` (al explorer le llegan
+  archivos sin trackear); y en Windows, `shell: true` parte `--settings {…}` y borra `--tools ""`,
+  el mismo problema que ya tenía `reviewer-eval`.
 - El self-test (10f) prueba la máquina con un promptfoo de mentira que carga el proveedor real: la
   tasa, el k/n, el aislamiento, lo roto y lo omitido. Que los agentes acierten sólo lo dice una
   corrida real.

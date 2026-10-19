@@ -13,7 +13,7 @@
  * It also covers the subagents nobody had measured (gate-runner, ci-investigator, explorer) and
  * reports the quality of the answer with an llm-rubric judge, informative only.
  *
- * promptfoo is a RUNNER, not a dependency: it is invoked as `aiEval.runner` (npx, pinned
+ * promptfoo is a RUNNER, not a dependency: it is invoked as `aiEval.promptfoo` (npx, pinned
  * version), never installed in package.json. Without it, or on a node older than it needs, the
  * eval is SKIPPED — and skipped is not green. The verdict is ours: this script reads promptfoo's
  * JSON output and computes the rate per suite against `aiEval.minScore`; promptfoo's own exit
@@ -75,7 +75,7 @@ try {
   skipped("no readable config.");
 }
 const spec = config.aiEval;
-if (!spec?.runner?.length || !(spec.suites ?? []).length) skipped("the repo declares no `aiEval.runner` and `aiEval.suites`.");
+if (!spec?.promptfoo?.length || !(spec.suites ?? []).length) skipped("the repo declares no `aiEval.promptfoo` and `aiEval.suites`.");
 
 const newer = (have, need) => {
   const a = String(have).split(".").map(Number);
@@ -84,8 +84,8 @@ const newer = (have, need) => {
   return true;
 };
 if (spec.minNode && !newer(process.versions.node, spec.minNode))
-  skipped(`the runner needs node >= ${spec.minNode} and this is node ${process.versions.node}.`);
-if (!existeEjecutable(spec.runner[0])) skipped(`\`${spec.runner[0]}\` (aiEval.runner) is not installed on this machine.`);
+  skipped(`promptfoo needs node >= ${spec.minNode} and this is node ${process.versions.node}.`);
+if (!existeEjecutable(spec.promptfoo[0])) skipped(`\`${spec.promptfoo[0]}\` (aiEval.promptfoo) is not installed on this machine.`);
 
 // ---- suites, resolved from the config -------------------------------------------------------
 
@@ -156,10 +156,10 @@ const outFile = path.join(run, "results.json");
 fs.writeFileSync(cfgFile, JSON.stringify(pfConfig, null, 2));
 
 const calls = tests.length * repeat;
-console.log(`AI evaluation — ${suites.length} suite(s), ${tests.length} case(s) × ${repeat} = ${calls} agent call(s), via \`${spec.runner.join(" ")}\`\n`);
+console.log(`AI evaluation — ${suites.length} suite(s), ${tests.length} case(s) × ${repeat} = ${calls} agent call(s), via \`${spec.promptfoo.join(" ")}\`\n`);
 const r = spawnSync(
-  spec.runner[0],
-  [...spec.runner.slice(1), "eval", "-c", cfgFile, "--no-cache", "--no-share", "-j", String(spec.concurrency ?? 1), "--repeat", String(repeat), "-o", outFile],
+  spec.promptfoo[0],
+  [...spec.promptfoo.slice(1), "eval", "-c", cfgFile, "--no-cache", "--no-share", "-j", String(spec.concurrency ?? 1), "--repeat", String(repeat), "-o", outFile],
   {
     cwd: run,
     encoding: "utf8",
@@ -170,7 +170,7 @@ const r = spawnSync(
   },
 );
 const cleanup = () => {
-  if (KEEP) console.log(`\nRun kept in ${run} · PROMPTFOO_CONFIG_DIR=${path.join(run, ".promptfoo")} ${spec.runner.join(" ")} view`);
+  if (KEEP) console.log(`\nRun kept in ${run} · PROMPTFOO_CONFIG_DIR=${path.join(run, ".promptfoo")} ${spec.promptfoo.join(" ")} view`);
   else fs.rmSync(run, { recursive: true, force: true });
 };
 
@@ -180,7 +180,7 @@ try {
 } catch {
   const tail = `${r.stderr ?? ""}${r.stdout ?? ""}`.trim().split("\n").slice(-5).join("\n");
   cleanup();
-  fail(`AI EVAL BROKEN — the runner wrote no results (exit ${r.status ?? r.error?.code}).\n${tail}`);
+  fail(`AI EVAL BROKEN — promptfoo wrote no results (exit ${r.status ?? r.error?.code}).\n${tail}`);
 }
 
 // ---- our verdict ------------------------------------------------------------------------------
