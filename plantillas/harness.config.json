@@ -107,28 +107,28 @@
         "reason": "el marcador y el libro del ciclo acotado (`loop`) los escribe el gate y los levanta el pedido del humano, y la tarea declarada (`task`) la escribe `scripts/task.mjs`. Reescribirlos a mano es saltarse la escalada o el alcance: para la tarea usá `node scripts/task.mjs`; para el presupuesto, pará y contale al humano qué falla."
       },
       {
-        "$pattern": "La bandera suelta (no la palabra dentro de un mensaje de commit) y su forma corta: `-n` entre las banderas cortas de `git commit` es `--no-verify`. Las reglas de git aceptan opciones globales entre `git` y el subcomando (`git -C . reset --hard`): sin eso, la opción es el rodeo. Lo midió scripts/harness-eval.mjs.",
-        "pattern": "(^|\\s)--no-ver[i]fy(?=\\s|$)|\\bgit(?:\\s+(?:-[cC]\\s*\\S+|--[a-z][\\w-]*(?:=\\S+)?))*\\s+commit\\b[^|;&]*\\s-[a-zA-Z]*n[a-zA-Z]*(?=\\s|$)",
+        "$pattern": "La bandera suelta (no la palabra dentro de un mensaje de commit) y su forma corta: `-n` entre las banderas cortas de `git commit` es `--no-verify`. Las reglas de git aceptan opciones globales entre `git` y el subcomando (`git -C . reset --hard`): sin eso, la opción es el rodeo. El valor puede ir entre comillas (`-C \"mi repo\"`) o separado por espacio (`--git-dir /x`): los dos pasaban (#68). Lo midió scripts/harness-eval.mjs.",
+        "pattern": "(^|\\s)--no-ver[i]fy(?=\\s|$)|\\bgit(?:\\s+(?:-[cC]\\s*(?:\"[^\"]*\"|'[^']*'|\\S+)|--[a-z][\\w-]*(?:=\\S+|\\s+(?!-)(?:\"[^\"]*\"|'[^']*'|\\S+))?))*\\s+commit\\b[^|;&]*\\s-[a-zA-Z]*n[a-zA-Z]*(?=\\s|$)",
         "reason": "saltarse los hooks de verificación está prohibido (`-n` es la misma bandera en corto). Si el gate estorba, se arregla el gate."
       },
       {
-        "pattern": "\\bgit(?:\\s+(?:-[cC]\\s*\\S+|--[a-z][\\w-]*(?:=\\S+)?))*\\s+push\\b[^|;&]*\\s((--force|-f)(?![-\\w])|\\+[\\w/.-])",
+        "pattern": "\\bgit(?:\\s+(?:-[cC]\\s*(?:\"[^\"]*\"|'[^']*'|\\S+)|--[a-z][\\w-]*(?:=\\S+|\\s+(?!-)(?:\"[^\"]*\"|'[^']*'|\\S+))?))*\\s+push\\b[^|;&]*\\s((--force|-f)(?![-\\w])|\\+[\\w/.-])",
         "reason": "`--force` (o un `+` en el refspec) reescribe historia remota. Usá --force-with-lease y pedí confirmación."
       },
       {
-        "pattern": "\\bgit(?:\\s+(?:-[cC]\\s*\\S+|--[a-z][\\w-]*(?:=\\S+)?))*\\s+reset\\s+--hard",
+        "pattern": "\\bgit(?:\\s+(?:-[cC]\\s*(?:\"[^\"]*\"|'[^']*'|\\S+)|--[a-z][\\w-]*(?:=\\S+|\\s+(?!-)(?:\"[^\"]*\"|'[^']*'|\\S+))?))*\\s+reset\\s+--hard",
         "reason": "destruye trabajo sin commitear. Usá `git stash` o pedí confirmación."
       },
       {
-        "pattern": "\\bgit(?:\\s+(?:-[cC]\\s*\\S+|--[a-z][\\w-]*(?:=\\S+)?))*\\s+(checkout\\s+(\\S+\\s+)?--\\s+\\.(\\s|$)|restore\\b(?![^|;&]*--staged)[^|;&]*\\s\\.(\\s|$))",
+        "pattern": "\\bgit(?:\\s+(?:-[cC]\\s*(?:\"[^\"]*\"|'[^']*'|\\S+)|--[a-z][\\w-]*(?:=\\S+|\\s+(?!-)(?:\"[^\"]*\"|'[^']*'|\\S+))?))*\\s+(checkout\\s+(\\S+\\s+)?--\\s+\\.(\\s|$)|restore\\b(?![^|;&]*--staged)[^|;&]*\\s\\.(\\s|$))",
         "reason": "descarta todos los cambios del working tree (con `checkout -- .` o con `restore .`). Pedí confirmación explícita, o descartá archivos por nombre."
       },
       {
-        "pattern": "\\bgit(?:\\s+(?:-[cC]\\s*\\S+|--[a-z][\\w-]*(?:=\\S+)?))*\\s+clean\\b[^|;&]*\\s(-[a-zA-Z]*f|--force)",
+        "pattern": "\\bgit(?:\\s+(?:-[cC]\\s*(?:\"[^\"]*\"|'[^']*'|\\S+)|--[a-z][\\w-]*(?:=\\S+|\\s+(?!-)(?:\"[^\"]*\"|'[^']*'|\\S+))?))*\\s+clean\\b[^|;&]*\\s(-[a-zA-Z]*f|--force)",
         "reason": "borra archivos no rastreados. Dry-run primero: `git clean -n`."
       },
       {
-        "pattern": "\\bgit(?:\\s+(?:-[cC]\\s*\\S+|--[a-z][\\w-]*(?:=\\S+)?))*\\s+add\\s+(\\.|-A|--all)(\\s|$)",
+        "pattern": "\\bgit(?:\\s+(?:-[cC]\\s*(?:\"[^\"]*\"|'[^']*'|\\S+)|--[a-z][\\w-]*(?:=\\S+|\\s+(?!-)(?:\"[^\"]*\"|'[^']*'|\\S+))?))*\\s+add\\s+(\\.|-A|--all)(\\s|$)",
         "reason": "arrastra artefactos y secretos. Agregá archivos por nombre."
       },
       {
