@@ -431,3 +431,17 @@ Mecanismo: matcher `…|mcp__.*` en `settings.json`, la clave `writeTools` (`esc
          verifican que el matcher deje LLEGAR el evento al hook y que una escritura externa (con
          contenido y sin ruta) no cuente como edición del repo.
 
+
+### GOTCHA: un hook que no lee todo su stdin tumbó la evaluación determinista en CI
+
+Síntoma: CI de `main` rojo en `harness eval (deterministic)` con `Error: write EPIPE … at
+         scripts/eval/hooks.mjs:83` y `Unhandled 'error' event`; local, verde.
+Causa:   el corredor le escribe el payload por stdin a cada hook. Un hook que decide sin leerlo
+         entero sale antes, el pipe se cierra y la escritura falla. Nadie escuchaba el `error` de
+         `child.stdin`, así que el proceso entero murió, aunque `exec()` prometía no lanzar nunca.
+         Es una carrera: depende de quién termina primero, y en el runner de CI perdió.
+Regla:   todo `spawn` que escribe en stdin atiende `child.stdin.on("error")`: lo que cuenta es el
+         exit del proceso, no si alcanzó a leer. `scripts/eval/ai-provider.mjs` ya lo hacía.
+Mecanismo: caso de la sección 10e del self-test: un hook que sale sin leer, con un payload más
+         grande que el buffer del pipe, hace el EPIPE determinista; el corredor tiene que resolver
+         con el exit, no caerse.

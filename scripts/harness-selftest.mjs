@@ -4034,6 +4034,19 @@ if (corre("fuera")) {
     const inGate = (config.gate?.signals ?? []).some((s) => (s.command ?? []).some((c) => String(c).includes("scripts/harness-eval.mjs")));
     if (inGate) ok("deterministic eval: it is a gate signal (deterministic and cheap: no reason to leave it out)");
     else bad("deterministic eval: it is a gate signal", "no `gate.signals` entry invokes scripts/harness-eval.mjs: installed and nobody runs it");
+
+    // CI on main died with `write EPIPE` at scripts/eval/hooks.mjs: a hook that decides without
+    // reading all of stdin closes the pipe, and the unhandled write error killed the whole eval.
+    // A hook that exits first, with a payload bigger than the pipe buffer, makes it deterministic.
+    const runner = abs("scripts/eval/hooks.mjs");
+    if (fs.existsSync(runner)) {
+      const probe = `import { exec } from ${JSON.stringify(pathToFileURL(runner).href)};\n` +
+        `const r = await exec(process.execPath, ["-e", "process.exit(0)"], { input: "x".repeat(4 * 1024 * 1024) });\n` +
+        `console.log("resolved " + r.status);\n`;
+      const r = spawnSync(process.execPath, ["--input-type=module", "-e", probe], { encoding: "utf8" });
+      if (r.status === 0 && /resolved 0/.test(r.stdout)) ok("deterministic eval: a hook that exits without reading stdin does not crash the runner (EPIPE)");
+      else bad("deterministic eval: a hook that closes stdin early", `exit ${r.status}: ${`${r.stderr}`.trim().split("\n").find((l) => /Error/.test(l)) ?? r.stdout.trim()}`);
+    }
   }
 }
 
