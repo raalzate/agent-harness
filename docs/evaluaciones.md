@@ -4,16 +4,17 @@ Dos familias que no se mezclan, porque se prueban distinto:
 
 | | Determinista (computacional) | Con IA (inferencial) |
 |---|---|---|
-| Qué mide | los mecanismos computacionales del arnés: lo mismo da lo mismo | lo que juzga un modelo: el `reviewer` |
+| Qué mide | los mecanismos computacionales del arnés: lo mismo da lo mismo | lo que juzga un modelo: los subagentes sensores |
 | Cómo se prueba | un conjunto etiquetado, con umbral exacto | una tasa contra un conjunto etiquetado |
 | Necesita | nada: sin red, sin modelo | la CLI de Claude y su cuenta |
-| Comando | `npm run eval` (señal del gate) | `npm run eval:reviewer` (barrido programado) |
-| Conjunto | `.claude/evals/deterministic/cases.json`: `guides` · `rules` · `signals` | `.claude/evals/reviewer/` (`reviewerEval`) |
+| Comando | `npm run eval` (señal del gate) | `npm run eval:reviewer` (barrido programado) · `npm run eval:ai` (a mano, con promptfoo) |
+| Conjunto | `.claude/evals/deterministic/cases.json`: `guides` · `rules` · `signals` | `.claude/evals/<agente>/` (`reviewerEval`, `aiEval`) |
 | Esquema | `cases.schema.json` (el conjunto) y `report.schema.json` (el informe `--json`) | — |
-| Script | [`scripts/harness-eval.mjs`](../scripts/harness-eval.mjs) + [`scripts/eval/`](../scripts/eval/schema.mjs) | [`scripts/reviewer-eval.mjs`](../scripts/reviewer-eval.mjs) |
+| Script | [`scripts/harness-eval.mjs`](../scripts/harness-eval.mjs) + [`scripts/eval/`](../scripts/eval/schema.mjs) | [`scripts/reviewer-eval.mjs`](../scripts/reviewer-eval.mjs) · [`scripts/ai-eval.mjs`](../scripts/ai-eval.mjs) |
 
-Este documento es sobre la familia **determinista**. La con IA está en [`guias-y-sensores.md`](guias-y-sensores.md)
-y en el `$comment` de `reviewerEval` del config.
+La mayor parte de este documento es sobre la familia **determinista**. La con IA con promptfoo está al
+final ([«La familia con IA»](#la-familia-con-ia-los-subagentes-con-promptfoo)). La del barrido
+programado está en [`guias-y-sensores.md`](guias-y-sensores.md) y en el `$comment` de `reviewerEval`.
 
 ## Idioma
 
@@ -216,3 +217,67 @@ El esquema dice cuál falta. Una categoría nueva o un `type` nuevo se agregan p
 
 Arreglar una regla cambia lo que viaja: la plantilla (`plantillas/harness.config.json`) es lo que
 se evalúa, y el config de este repo se ajusta aparte donde la regla es la misma.
+
+## La familia con IA: los subagentes, con promptfoo
+
+`npm run eval:reviewer` corre cada caso **una vez** y sólo lee el veredicto. `npm run eval:ai`
+([`scripts/ai-eval.mjs`](../scripts/ai-eval.mjs)) los corre `aiEval.repeat` veces con
+[promptfoo](https://github.com/promptfoo/promptfoo), y además mide a los otros sensores
+inferenciales: `gate-runner`, `ci-investigator` y `explorer`.
+
+promptfoo es un **corredor, no una dependencia** (ADR [0015](decisions/0015-promptfoo-como-corredor.md)):
+`npx -y promptfoo@<versión fija>`, nunca en `package.json`. Necesita node ≥ 22.22. Sin promptfoo,
+sin la CLI del agente o con un node más viejo, sale OMITIDA.
+
+```bash
+npm run eval:ai                                   # todas las suites, aiEval.repeat veces
+node scripts/ai-eval.mjs --only=gate-runner       # una suite
+node scripts/ai-eval.mjs --case="<nombre>"        # un caso
+node scripts/ai-eval.mjs --repeat=5               # más repeticiones
+node scripts/ai-eval.mjs --keep                   # conserva la corrida para `promptfoo view`
+```
+
+### Qué mide
+
+| Suite | Entrada | Qué tiene que hacer |
+|---|---|---|
+| `reviewer` | los diffs de `reviewerEval` (`casesFrom`) | el veredicto y el principio citado; la rúbrica mira `archivo:línea` y el arreglo |
+| `gate-runner` | una salida del gate ya corrida | el veredicto, la **primera** señal que falló con su línea, las omitidas nombradas, y que el fast verde no es entregable |
+| `ci-investigator` | una salida de `ci-investigate` ya corrida | el veredicto, la línea real, y si la causa es el entorno (sólo en CI) o se reproduce local |
+| `explorer` | una pregunta sobre el repo copiado | un mapa con `archivo:línea`, sin volcar código, sin rutas inventadas |
+
+El veredicto de cada agente es su patrón de `subagentOutput.contracts`, la misma definición que
+lee el hook `subagent-contract`. Los agentes corren aislados: cada uno en un temporal con copia
+sólo de su `context`, sin Bash y sin hooks. A los que en una sesión correrían algo (el gate, el CLI
+de la forja) se les da la salida ya corrida.
+
+### Cómo se lee el resultado
+
+```
+gate-runner — 8/9 (89 %) · min 80 %
+  ✓ 3/3  quality 0.91  red: two failing signals, the first one is the lint
+  ✗ 2/3  quality 0.88  fast green is not a deliverable — unstable: missing /fast/
+  ✓ 3/3  quality 0.95  green with a skipped signal
+```
+
+- **k/n por caso.** **0/n** (falla siempre) apunta primero a la **etiqueta**: el caso pudo quedar
+  viejo frente al config. Así se encontró el inocente podrido del reviewer. **0<k<n** es el agente
+  inestable: eso es lo que mide la tasa.
+- **La tasa** de cada suite contra `minScore` decide el exit. La calcula el script, no promptfoo.
+- **`quality`** es el promedio de la rúbrica (`llm-rubric`, peso 0, juez `aiEval.grader`). Se
+  informa y no decide: un juez con un modelo puntuando a otro modelo es una opinión.
+- **EVAL ROTO**: una llamada que no contestó (sin cuota, timeout) es infraestructura, no un agente
+  que se equivoca. No cuenta en la tasa: se arregla y se vuelve a correr.
+
+### Cuándo correrlo
+
+Cuando cambia el prompt de un agente (`.claude/agents/*.md`), su contrato de veredicto o el config
+que cita. No tiene pipeline por decisión (#63): corre con la sesión de Claude Code de quien lo
+lanza. Un barrido completo son ≈ 45 llamadas al agente y otras tantas al juez.
+
+### Sumar un caso
+
+Un archivo en `.claude/evals/<agente>/` y su entrada en `aiEval.suites[].cases`. Antes de que entre,
+córrelo con `--case` y `--repeat 3`: un caso que el agente falla 3/3 casi siempre dice algo del caso.
+El self-test (10f) verifica que el agente y la entrada existan, y que un `expect` tenga un contrato
+de veredicto contra el cual compararse.

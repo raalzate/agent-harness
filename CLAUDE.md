@@ -26,6 +26,7 @@ nada del repo.
 .claude/commands/             /gate · /lesson · /harness-audit · /harness-port · /architecture · /code-index · /ci
 .claude/skills/               new-guardrail: una regla en prosa → un freno con su prueba de vida
 .claude/evals/reviewer/       los diffs con los que se le toma la prueba de vida al reviewer
+.claude/evals/<agente>/       las entradas de la evaluación con IA de gate-runner, ci-investigator y explorer
 .claude/evals/deterministic/  la evaluación determinista: cases.json (guides · rules · signals, es/en) y sus esquemas
 scripts/gate.sh               ejecuta gate.signals; no sabe de stacks
 scripts/repo-lint.mjs         9 clases de regla, todas configurables (COHERENCIA: guía vs. freno)
@@ -35,6 +36,7 @@ scripts/harness-map.mjs       el arnés como sistema de control: guía/freno/sen
 scripts/drift-check.mjs       lo que se degrada sin que ningún cambio lo rompa (programado)
 scripts/reviewer-eval.mjs     la prueba de vida del reviewer, con tasa (programado)
 scripts/harness-eval.mjs      la evaluación determinista contra el arnés recién instalado (scripts/eval/: esquema, hooks, grupos)
+scripts/ai-eval.mjs           la evaluación con IA de los subagentes: promptfoo como corredor, k/n por caso (a mano)
 scripts/ci-investigate.mjs    el fallo de CI leído con el CLI de la forja, cruzado con el gate local
 scripts/harness-selftest.mjs  prueba de vida: genera los casos DESDE el config
 scripts/harness-bench.mjs     el arnés instalado en un repo real de cada stack (el encaje)
@@ -96,6 +98,7 @@ npm run drift          # ¿algo se degradó sin que nadie lo tocara? (lo corre d
 npm run panel          # la salud del arnés en una página (el gate ya lo regenera en cada corrida)
 npm run eval           # ¿los frenos aguantan un rodeo y dejan pasar lo inocente? (determinista: en el gate)
 npm run eval:reviewer  # ¿el reviewer encuentra lo que dice encontrar? (caro: fuera del gate)
+npm run eval:ai        # ¿los subagentes aciertan siempre, o a veces? promptfoo, k/n por caso (a mano, al tocar un agente)
 npm run ci:investigate # ¿por qué falló CI? corrida, job, línea, y si el gate local lo ve (red: fuera del gate)
 ```
 
