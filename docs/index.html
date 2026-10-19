@@ -481,6 +481,7 @@ footer { border-top: 4px solid var(--ink); }
         <p class="thesis"><em>Una regla sin un comando que la haga fallar es una sugerencia.</em></p>
         <p class="hero-cta">
           <a class="btn btn-1" href="#quickstart">Quick start — 4 comandos</a>
+          <a class="btn btn-2" href="evaluaciones.html">Ver la evaluación completa</a>
           <a class="btn btn-2" href="https://github.com/raalzate/agent-harness">Ver el repo ↗</a>
           <span class="btn-nota">un ejemplo que corre, no una demo</span>
         </p>
@@ -1253,12 +1254,13 @@ presupuesto.</code></pre>
 <span class="hdr">DETERMINISTIC EVAL GREEN</span></code></pre>
         </figure>
         <figure class="panel">
-          <figcaption>npm run eval:ai · corrida local, 2026-10-19</figcaption>
+          <figcaption>npm run eval:ai · sobre main, 2026-10-19</figcaption>
           <pre><code>AI evaluation — 4 suite(s), 14 case(s) × 3
 
-reviewer        — 18/18 (100 %) · min 80 %
+reviewer        — 17/18 (94 %) · min 80 %
+  ✗ 2/3  inocente: una regla nueva — unstable
 gate-runner     —  9/9  (100 %)
-  ✓ 3/3  quality 0.48  red: two failing signals
+  ✓ 3/3  quality 0.52  red: two failing signals
 ci-investigator —  9/9  (100 %)
 explorer        —  6/6  (100 %)
 
@@ -1278,7 +1280,7 @@ above minScore.</code></pre>
             <tr><td>inocentes que se parecen a un ataque</td><td class="mono">0/45 frenados</td><td>un freno que muerde de más se apaga a mano en una semana (P3)</td></tr>
             <tr><td>ataques que se sabe que pasan</td><td class="mono">6 huecos</td><td>declarados y fuera del recall; si uno se cierra sin actualizar el caso, la evaluación sale roja</td></tr>
             <tr><td>guías y señales, en español y en inglés</td><td class="mono">118/118 · 25/25</td><td>un freno que sólo entiende un idioma es medio freno</td></tr>
-            <tr><td>los cuatro subagentes, 3 veces cada caso</td><td class="mono">42/42</td><td>el k/n por caso separa la etiqueta vieja (0/n) del juez inestable (0&lt;k&lt;n)</td></tr>
+            <tr><td>los cuatro subagentes, 3 veces cada caso</td><td class="mono">41/42</td><td>el k/n por caso separa la etiqueta vieja (0/n) del caso inestable (0&lt;k&lt;n): el único 2/3 es un «inocente» que el reviewer rechaza con razón una de tres veces</td></tr>
             <tr><td>la calidad de la respuesta (rúbrica, informativa)</td><td class="mono">0.86 media</td><td>el veredicto acierta y aun así el <code>gate-runner</code> lista varias hipótesis cuando su prompt pide una</td></tr>
           </tbody>
         </table>
@@ -1289,13 +1291,14 @@ above minScore.</code></pre>
           etiquetado: un «inocente» que agregaba una regla que el config ya tenía. El revisor lo
           rechazaba siempre, con razón, y con una sola corrida por caso la tasa (5/6) quedaba sobre el
           umbral y lo escondía. Los números deterministas los imprime <code>npm run eval</code> en cada
-          gate. Los de IA son de una corrida local fechada: no los regenera ningún pipeline, y la página
-          lo dice. Detalle en <a href="https://github.com/raalzate/agent-harness/blob/main/docs/evaluaciones.md">evaluaciones.md</a>.</p>
-        <p><a href="evaluaciones.html"><strong>Ver el informe completo →</strong></a> las tasas con su
-          intervalo de confianza al 95 %, la matriz de confusión de las reglas, el piso del recall por
-          categoría, la calidad y la latencia de cada una de las 42 respuestas de los subagentes, y las
-          amenazas a la validez. Cero fallos no es una tasa perfecta: el informe dice cuánto garantiza
-          cada tamaño de muestra.</p>
+          gate. Los de IA son de una corrida fechada sobre <code>main</code>, hecha a mano: no los regenera
+          ningún pipeline, y la página lo dice. Detalle en <a href="https://github.com/raalzate/agent-harness/blob/main/docs/evaluaciones.md">evaluaciones.md</a>.</p>
+        <p>El informe completo trae las tasas con su intervalo de confianza al 95 %, la matriz de
+          confusión de las reglas, el piso del recall por categoría, la calidad y la latencia de cada
+          una de las 42 respuestas de los subagentes, y las amenazas a la validez. Cero fallos no es una
+          tasa perfecta: el informe dice cuánto garantiza cada tamaño de muestra. Se mide siempre sobre
+          <code>main</code>, que es lo que se entrega.</p>
+        <p class="hero-cta"><a class="btn btn-1" href="evaluaciones.html">Ver la evaluación completa →</a></p>
       </div>
     </div>
   </div>

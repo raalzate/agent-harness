@@ -271,6 +271,12 @@ gate-runner — 8/9 (89 %) · min 80 %
 
 ### Cuándo correrlo
 
+**El informe publicado se mide sobre `main`**, que es lo que se entrega: `docs/evaluaciones.html` y
+la sección `#evaluaciones` del sitio dicen el commit de `main` que midieron, nunca una rama ni un PR.
+Un PR se verifica con el gate; el informe se actualiza después del merge, corriendo las dos
+evaluaciones sobre `main`.
+
+
 Cuando cambia el prompt de un agente (`.claude/agents/*.md`), su contrato de veredicto o el config
 que cita. No tiene pipeline por decisión (#63): corre con la sesión de Claude Code de quien lo
 lanza. Un barrido completo son ≈ 45 llamadas al agente y otras tantas al juez.

@@ -49,6 +49,16 @@ code { font-family: var(--font-mono); font-size: 0.88em; }
 .eyebrow { font-family: var(--font-mono); font-size: 11.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
 .muted { color: var(--muted); }
 .num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.back { justify-self: start; display: inline-flex; align-items: center; gap: 8px; font-family: var(--font-display); font-weight: 600; font-size: 14px; color: var(--accent); text-decoration: none; border: 1px solid var(--accent); border-radius: 999px; padding: 8px 16px; background: var(--surface); }
+.back:hover { background: var(--accent-soft); }
+.data-wrap { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
+table.data { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+table.data th, table.data td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+table.data th { font-family: var(--font-mono); font-size: 11px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); white-space: nowrap; }
+table.data tbody tr:last-child td { border-bottom: 0; }
+table.data .r { text-align: right; white-space: nowrap; }
+table.data td.num { white-space: nowrap; color: var(--muted); font-size: 12px; }
+.back:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 a { color: var(--accent); }
 a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
@@ -121,12 +131,12 @@ footer { font-size: 12.5px; color: var(--muted); border-top: 1px solid var(--lin
 <div class="wrap">
 
 <header>
-  <a class="eyebrow" href="index.html#evaluaciones">← Agent Harness · las evaluaciones</a>
-  <span class="eyebrow">informe técnico · corridas del 2026-10-19</span>
+  <a class="back" href="index.html#evaluaciones">← Volver a Agent Harness</a>
+  <span class="eyebrow">informe técnico · medido sobre main</span>
   <h1>Evaluaciones del arnés</h1>
-  <div class="meta"><span>rama <code>feat/eval-ai</code></span><a href="https://github.com/raalzate/agent-harness/pull/64">PR #64</a><a href="https://github.com/raalzate/agent-harness/issues/63">#63</a></div>
+  <div class="meta"><span>rama <code>main</code> · commit <code>9922a27</code></span><span>corridas del 2026-10-19</span></div>
   <div class="abstract">
-    <p><b>Resumen.</b> Se evaluaron los frenos computacionales del arnés con un conjunto etiquetado de 274 casos (determinista, sin red) y cuatro subagentes que juzgan con un modelo, con 14 casos repetidos 3 veces (42 llamadas). No hubo fallos en ninguna familia. Con estos tamaños de muestra, la cota inferior del intervalo de confianza al 95 % es 95,4 % para el recall de los frenos y 91,6 % para los subagentes en conjunto, pero baja a 61–70 % por subagente: <b>cero fallos no es tasa perfecta</b>, y la incertidumbre la fija n.</p>
+    <p><b>Resumen.</b> Se evaluaron los frenos computacionales del arnés con un conjunto etiquetado de 274 casos (determinista, sin red) y cuatro subagentes que juzgan con un modelo, con 14 casos repetidos 3 veces (42 llamadas), todo sobre <code>main</code>. Los frenos no fallaron ningún caso; los subagentes acertaron 41 de 42 veredictos. Con estos tamaños de muestra, la cota inferior del intervalo de confianza al 95 % es 95,4 % para el recall de los frenos y 87,7 % para los subagentes en conjunto, y baja a 61–74 % por subagente: <b>cero fallos no es tasa perfecta</b>, y la incertidumbre la fija n.</p>
   </div>
 </header>
 
@@ -134,15 +144,15 @@ footer { font-size: 12.5px; color: var(--muted); border-top: 1px solid var(--lin
   <div class="kpi"><b>80/80</b><span>ataques frenados (recall)</span><small>IC95 [95,4 – 100]</small></div>
   <div class="kpi"><b>0/45</b><span>inocentes frenados (FPR)</span><small>IC95 [0 – 7,9]</small></div>
   <div class="kpi"><b>51/51</b><span>rodeos frenados</span><small>IC95 [93,0 – 100]</small></div>
-  <div class="kpi"><b>42/42</b><span>veredictos de subagentes</span><small>IC95 [91,6 – 100]</small></div>
-  <div class="kpi"><b>0,86</b><span>calidad media (rúbrica)</span><small>DE 0,18 · n = 42</small></div>
+  <div class="kpi"><b>41/42</b><span>veredictos de subagentes</span><small>IC95 [87,7 – 99,6]</small></div>
+  <div class="kpi"><b>0,86</b><span>calidad media (rúbrica)</span><small>DE 0,22 · n = 42</small></div>
 </div>
 
 <figure>
   <figcaption>
     <span class="fig-n">FIGURA 1</span>
     <b>Tasa de acierto por métrica, con intervalo de confianza al 95 % (Wilson)</b>
-    <span>El punto es la tasa observada; la línea, el intervalo. Todas las tasas son 100 % salvo la referencia: lo que cambia es cuánto lo garantiza cada n. La línea punteada es el umbral de los subagentes (<code>minScore</code> = 80 %). El eje empieza en 40 %.</span>
+    <span>El punto es la tasa observada; la línea, el intervalo. Casi todas las tasas son 100 %: lo que cambia es cuánto lo garantiza cada n. La línea punteada es el umbral de los subagentes (<code>minScore</code> = 80 %). El eje empieza en 20 %.</span>
   </figcaption>
   <div class="chart" id="forest"></div>
 </figure>
@@ -184,7 +194,7 @@ footer { font-size: 12.5px; color: var(--muted); border-top: 1px solid var(--lin
   <figcaption>
     <span class="fig-n">FIGURA 4</span>
     <b>Calidad de cada respuesta de los subagentes (rúbrica con un modelo como juez, 0 a 1)</b>
-    <span>Cada punto es una de las 42 llamadas; la marca vertical es la media del subagente. En naranja, las respuestas por debajo de 0,5. El veredicto fue el esperado en las 42: la rúbrica mide otra cosa (formato, una sola hipótesis, rutas citadas) y no decide.</span>
+    <span>Cada punto es una de las 42 llamadas; la marca vertical es la media del subagente. En naranja, las respuestas por debajo de 0,5. El veredicto fue el esperado en 41 de las 42: la rúbrica mide otra cosa (formato, una sola hipótesis, rutas citadas) y no decide.</span>
   </figcaption>
   <div class="legend"><span><i class="sw" style="background:var(--accent)"></i>respuesta</span><span><i class="sw" style="background:var(--warn)"></i>calidad &lt; 0,5</span><span><i style="width:2px;height:12px;background:var(--ink);display:inline-block"></i>media</span></div>
   <div class="chart" id="quality"></div>
@@ -194,7 +204,7 @@ footer { font-size: 12.5px; color: var(--muted); border-top: 1px solid var(--lin
   <figcaption>
     <span class="fig-n">FIGURA 5</span>
     <b>Latencia por llamada al subagente (segundos)</b>
-    <span>Tiempo de una llamada completa (<code>claude -p</code> aislado), con 3 llamadas en paralelo. La marca es la mediana. El caso inocente nuevo del reviewer es el más caro (54–65 s): el revisor busca rodeos al patrón antes de aprobar.</span>
+    <span>Tiempo de una llamada completa (<code>claude -p</code> aislado), con 3 llamadas en paralelo. La marca es la mediana. El caso inocente nuevo del reviewer es el más caro (43–57 s): el revisor busca rodeos al patrón antes de decidir.</span>
   </figcaption>
   <div class="chart" id="latency"></div>
 </figure>
@@ -202,10 +212,28 @@ footer { font-size: 12.5px; color: var(--muted); border-top: 1px solid var(--lin
 <section style="display:grid;gap:14px">
   <h2>Hallazgos</h2>
   <ol class="find">
-    <li><b>Una etiqueta del conjunto estaba vencida.</b> Con una corrida por caso, el reviewer daba 5/6 (83 %), sobre el umbral, y el error quedaba oculto. Con 3 repeticiones el caso salió 0/3: el «inocente» duplicaba una regla que el config ya tenía. Antes del arreglo, 15/18 = 83,3 % [60,8 – 94,2]; después, 18/18. Un 0/n consistente señala la etiqueta antes que al juez.</li>
-    <li><b>El veredicto no basta para medir a un subagente.</b> El <code>gate-runner</code> acierta 9/9 veredictos pero su calidad tiene la mayor dispersión (media 0,77, DE 0,28): en 2 de 3 corridas del caso rojo lista varias hipótesis cuando su prompt pide una.</li>
+    <li><b>El caso inocente del reviewer es inestable (2/3).</b> Una de tres veces lo rechaza, y con razón: la regla del caso termina en <code>(?=\s|$)</code>, así que <code>git worktree remove wt -f;echo</code> o <code>(git … --force)</code> la rodean; la regla hermana de <code>push</code> usa <code>(?![-\w])</code>. La etiqueta «inocente» es discutible, no el juez. Es la segunda vez que un 0/n o un k/n bajo en este caso señala el dato antes que al agente: la primera, el inocente original duplicaba una regla que el config ya tenía (con una corrida por caso daba 5/6 y quedaba oculto).</li>
+    <li><b>El veredicto no basta para medir a un subagente.</b> El <code>gate-runner</code> acierta 9/9 veredictos pero su calidad tiene la mayor dispersión (media 0,79, DE 0,27): en 2 de 3 corridas del caso rojo lista varias hipótesis cuando su prompt pide una.</li>
     <li><b>Los frenos aguantan los rodeos sin morder de más.</b> 51/51 variantes frenadas y 0/45 inocentes bloqueados, en español y en inglés (34/34 y 33/33).</li>
   </ol>
+</section>
+
+<section id="datos" style="display:grid;gap:14px">
+  <h2>Datos</h2>
+  <p>Cada número de este informe sale de estos conjuntos, en el commit medido de <code>main</code> (<code>9922a27</code>). Los enlaces apuntan a ese commit, no a la versión actual: si el conjunto cambia, la huella deja de coincidir y el informe está vencido. Los resultados crudos —el resumen determinista y las 42 llamadas con su caso, su entrada, el veredicto esperado, si acertó, su calidad y su latencia— están en <a href="evaluaciones-datos.json"><code>evaluaciones-datos.json</code></a>.</p>
+  <div class="data-wrap">
+    <table class="data">
+      <thead><tr><th>Conjunto</th><th>Archivo en main@9922a27</th><th class="r">Casos</th><th>Composición</th><th>SHA-256</th></tr></thead>
+      <tbody>
+        <tr><td>determinista</td><td><a href="https://github.com/raalzate/agent-harness/blob/9922a27/.claude/evals/deterministic/cases.json"><code>.claude/evals/deterministic/cases.json</code></a> (esquema: <a href="https://github.com/raalzate/agent-harness/blob/9922a27/.claude/evals/deterministic/cases.schema.json"><code>cases.schema.json</code></a>)</td><td class="r num">274</td><td>118 guías · 131 reglas (80 ataques, 45 inocentes, 6 huecos) · 25 señales; es/en</td><td class="num">d27fc8d60be2…</td></tr>
+        <tr><td>reviewer</td><td><a href="https://github.com/raalzate/agent-harness/tree/9922a27/.claude/evals/reviewer"><code>.claude/evals/reviewer/</code></a> · casos en <code>reviewerEval.cases</code></td><td class="r num">6 × 3</td><td>4 diffs con una violación (P4, P5, P6, deuda) · 2 inocentes</td><td class="num">por archivo, en el JSON</td></tr>
+        <tr><td>gate-runner</td><td><a href="https://github.com/raalzate/agent-harness/tree/9922a27/.claude/evals/gate-runner"><code>.claude/evals/gate-runner/</code></a> · <code>aiEval.suites</code></td><td class="r num">3 × 3</td><td>salidas del gate: rojo con dos señales, verde con omitida, fast verde</td><td class="num">por archivo, en el JSON</td></tr>
+        <tr><td>ci-investigator</td><td><a href="https://github.com/raalzate/agent-harness/tree/9922a27/.claude/evals/ci-investigator"><code>.claude/evals/ci-investigator/</code></a> · <code>aiEval.suites</code></td><td class="r num">3 × 3</td><td>salidas de <code>ci-investigate</code>: rojo sólo en CI, rojo también local, en curso</td><td class="num">por archivo, en el JSON</td></tr>
+        <tr><td>explorer</td><td><a href="https://github.com/raalzate/agent-harness/tree/9922a27/.claude/evals/explorer"><code>.claude/evals/explorer/</code></a> · <code>aiEval.suites</code></td><td class="r num">2 × 3</td><td>preguntas sobre el repo copiado</td><td class="num">por archivo, en el JSON</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="muted">Las etiquetas (qué debería pasar) viven en el config de ese mismo commit: <a href="https://github.com/raalzate/agent-harness/blob/9922a27/.claude/harness.config.json"><code>.claude/harness.config.json</code></a> (<code>harnessEval</code>, <code>reviewerEval</code>, <code>aiEval</code>, <code>subagentOutput.contracts</code>). Para reproducir: <code>git checkout 9922a27 &amp;&amp; npm run eval &amp;&amp; npm run eval:ai</code>; lo determinista da lo mismo, lo de IA da una muestra nueva.</p>
 </section>
 
 <section style="display:grid;gap:14px">
@@ -215,12 +243,14 @@ footer { font-size: 12.5px; color: var(--muted); border-top: 1px solid var(--lin
     <dt>con IA</dt><dd><code>npm run eval:ai</code>: promptfoo 0.123.1 como corredor; cada subagente aislado en un temporal sin Bash ni hooks; 14 casos × 3 repeticiones. Veredicto contra el contrato del agente; calidad con <code>llm-rubric</code> (juez Sonnet, peso 0). Umbral: 80 % por subagente.</dd>
     <dt>intervalos</dt><dd>Wilson al 95 % para proporciones binomiales; con 0 fallos en n, la cota superior del error es ≈ 3/n (regla del tres).</dd>
     <dt>validez interna</dt><dd>Las 3 repeticiones no son independientes del caso: miden la variación del agente, no la de la tarea. La calidad la puntúa otro modelo; es una opinión con su propio sesgo.</dd>
-    <dt>validez externa</dt><dd>Los casos los escribió el mismo equipo que escribió los frenos. Lo determinista mide la plantilla instalada, no el config de este repo. La corrida con IA es una sola, local, del 2026-10-19; no la repite ningún pipeline.</dd>
-    <dt>latencia de hooks</dt><dd>p50 y p95 por corrida de hook variaron entre corridas del mismo día (203–318 ms y 522–1541 ms): dependen de la carga de la máquina, incluido el arranque de node.</dd>
+    <dt>validez externa</dt><dd>Los casos los escribió el mismo equipo que escribió los frenos. Lo determinista mide la plantilla instalada, no el config de este repo. La corrida con IA es una sola, sobre <code>main</code>, hecha a mano el 2026-10-19 con la sesión local de Claude Code; no la repite ningún pipeline.</dd>
+    <dt>latencia de hooks</dt><dd>p50 y p95 por corrida de hook variaron entre corridas del mismo día (195–318 ms y 452–1541 ms): dependen de la carga de la máquina, incluido el arranque de node.</dd>
   </dl>
 </section>
 
-<footer>Fuentes: <code>node scripts/harness-eval.mjs --json</code> y el <code>results.json</code> de promptfoo de la corrida completa de <code>scripts/ai-eval.mjs</code>, ambos del 2026-10-19. Método en <code>docs/evaluaciones.md</code> y ADR 0015.</footer>
+<a class="back" href="index.html#evaluaciones">← Volver a Agent Harness</a>
+
+<footer>Regla: la evaluación publicada se mide sobre <code>main</code>, que es lo que se entrega; un PR se verifica con el gate, no con este informe. Fuentes: <code>node scripts/harness-eval.mjs --json</code> y la corrida completa de <code>scripts/ai-eval.mjs</code>, ambas sobre <code>main@9922a27</code> el 2026-10-19; datos en <a href="#datos">Datos</a> y <a href="evaluaciones-datos.json"><code>evaluaciones-datos.json</code></a>. Método en <code>docs/evaluaciones.md</code> y ADR 0015.</footer>
 
 </div>
 <div class="tip" id="tip" hidden></div>
@@ -261,21 +291,20 @@ footer { font-size: 12.5px; color: var(--muted); border-top: 1px solid var(--lin
     { l: "Idioma · español", k: 34, n: 34 },
     { l: "Idioma · inglés", k: 33, n: 33 },
     { g: "CON IA · 3 REPETICIONES" },
-    { l: "Subagentes · total", k: 42, n: 42, thr: true },
-    { l: "reviewer", k: 18, n: 18, thr: true },
+    { l: "Subagentes · total", k: 41, n: 42, thr: true },
+    { l: "reviewer", k: 17, n: 18, thr: true },
     { l: "gate-runner", k: 9, n: 9, thr: true },
     { l: "ci-investigator", k: 9, n: 9, thr: true },
     { l: "explorer", k: 6, n: 6, thr: true },
-    { l: "un caso (3/3)", k: 3, n: 3 },
-    { g: "REFERENCIA" },
-    { l: "reviewer con la etiqueta vencida", k: 15, n: 18, ref: true }
+    { l: "un caso estable (3/3)", k: 3, n: 3 },
+    { l: "el caso inestable (2/3)", k: 2, n: 3 }
   ];
   (function () {
     var W = 900, L = 230, R = 175, rowH = 24, top = 26;
     var H = top + rows.length * rowH + 18;
-    var x = function (v) { return L + (v - 40) / 60 * (W - L - R); };
+    var x = function (v) { return L + (v - 20) / 80 * (W - L - R); };
     var svg = el("svg", { viewBox: "0 0 " + W + " " + H, role: "img", "aria-label": "Tasas de acierto con intervalo de confianza al 95 %" });
-    [40, 50, 60, 70, 80, 90, 100].forEach(function (t) {
+    [20, 30, 40, 50, 60, 70, 80, 90, 100].forEach(function (t) {
       el("line", { x1: x(t), x2: x(t), y1: top - 8, y2: H - 14, "class": "grid" }, svg);
       el("text", { x: x(t), y: top - 12, "text-anchor": "middle", "class": "axis" }, svg, t + " %");
     });
@@ -324,7 +353,7 @@ footer { font-size: 12.5px; color: var(--muted); border-top: 1px solid var(--lin
   })();
 
   // Figures 4 and 5 — strip plots of the 42 calls.
-  var calls = [["reviewer","P5: un hook sale con exit 1",0.93,36.7],["reviewer","P5: un hook sale con exit 1",1,27.3],["reviewer","P5: un hook sale con exit 1",0.95,24.5],["reviewer","P4: literal de dominio en un hook",1,25.2],["reviewer","P4: literal de dominio en un hook",0.95,25.3],["reviewer","P4: literal de dominio en un hook",0.9,23.5],["reviewer","P6: señal del gate sin why",0.9,23.7],["reviewer","P6: señal del gate sin why",0.9,24.3],["reviewer","P6: señal del gate sin why",0.95,27.5],["reviewer","deuda: una allowlist crece",0.93,23.3],["reviewer","deuda: una allowlist crece",0.95,24.4],["reviewer","deuda: una allowlist crece",0.93,22.7],["reviewer","inocente: typo en un documento",0.9,15.8],["reviewer","inocente: typo en un documento",0.75,19.7],["reviewer","inocente: typo en un documento",0.9,17.3],["reviewer","inocente: regla nueva acotada",0.65,53.7],["reviewer","inocente: regla nueva acotada",0.85,54.1],["reviewer","inocente: regla nueva acotada",0.8,65],["gate-runner","rojo: dos señales fallidas",0.3,10.4],["gate-runner","rojo: dos señales fallidas",0.85,12.4],["gate-runner","rojo: dos señales fallidas",0.3,15.9],["gate-runner","verde con una omitida",0.85,8.8],["gate-runner","verde con una omitida",0.9,8.8],["gate-runner","verde con una omitida",0.7,11.8],["gate-runner","el fast verde no es entregable",1,27.2],["gate-runner","el fast verde no es entregable",1,8.1],["gate-runner","el fast verde no es entregable",1,8.3],["ci-investigator","rojo sólo en CI (Windows)",0.95,19],["ci-investigator","rojo sólo en CI (Windows)",1,17.6],["ci-investigator","rojo sólo en CI (Windows)",1,25.8],["ci-investigator","rojo también local",0.9,12.5],["ci-investigator","rojo también local",1,13.6],["ci-investigator","rojo también local",1,12.6],["ci-investigator","en curso no es verde",1,8.2],["ci-investigator","en curso no es verde",1,7.1],["ci-investigator","en curso no es verde",1,6.5],["explorer","dónde se decide exit 2 / 0",0.85,27.6],["explorer","dónde se decide exit 2 / 0",0.7,28.5],["explorer","dónde se decide exit 2 / 0",0.85,24.5],["explorer","quién lee reviewerEval",0.3,35.7],["explorer","quién lee reviewerEval",0.8,33.7],["explorer","quién lee reviewerEval",0.75,39.9]];
+  var calls = [["reviewer","P5: un hook sale con exit 1",0.95,28.2],["reviewer","P5: un hook sale con exit 1",1,26.9],["reviewer","P5: un hook sale con exit 1",0.93,22.7],["reviewer","P4: literal de dominio en un hook",0.95,22.2],["reviewer","P4: literal de dominio en un hook",0.93,27.7],["reviewer","P4: literal de dominio en un hook",0.93,37.1],["reviewer","P6: señal del gate sin why",0.85,22.9],["reviewer","P6: señal del gate sin why",0.92,22.9],["reviewer","P6: señal del gate sin why",0.93,22.1],["reviewer","deuda declarada: una allowlist crece",1,22.4],["reviewer","deuda declarada: una allowlist crece",1,25.2],["reviewer","deuda declarada: una allowlist crece",0.95,27.1],["reviewer","inocente: un typo en un documento",0.85,14.9],["reviewer","inocente: un typo en un documento",0.9,14.4],["reviewer","inocente: un typo en un documento",1,18.6],["reviewer","inocente: una regla nueva, acotada y en la lista que deja confirmar",0.9,43.5],["reviewer","inocente: una regla nueva, acotada y en la lista que deja confirmar",0,56.6],["reviewer","inocente: una regla nueva, acotada y en la lista que deja confirmar",0.35,57],["gate-runner","red: two failing signals, the first one is the lint",0.9,11.1],["gate-runner","red: two failing signals, the first one is the lint",0.4,10.5],["gate-runner","red: two failing signals, the first one is the lint",0.25,12.4],["gate-runner","green with a skipped signal",0.85,8.2],["gate-runner","green with a skipped signal",0.8,8.2],["gate-runner","green with a skipped signal",0.9,8],["gate-runner","fast green is not a deliverable",1,8.8],["gate-runner","fast green is not a deliverable",1,8.8],["gate-runner","fast green is not a deliverable",1,10],["ci-investigator","red only in CI: the environment (Windows paths)",1,16.7],["ci-investigator","red only in CI: the environment (Windows paths)",1,18.6],["ci-investigator","red only in CI: the environment (Windows paths)",1,21.2],["ci-investigator","red in CI and locally: fix it here first",1,13.1],["ci-investigator","red in CI and locally: fix it here first",1,12.7],["ci-investigator","red in CI and locally: fix it here first",1,11.7],["ci-investigator","in progress is not green",1,6.8],["ci-investigator","in progress is not green",1,6.5],["ci-investigator","in progress is not green",1,6.9],["explorer","where exit 2 and exit 0 are decided",0.8,27.2],["explorer","where exit 2 and exit 0 are decided",0.85,28.2],["explorer","where exit 2 and exit 0 are decided",0.85,33.7],["explorer","who reads reviewerEval (including the panel)",0.8,29.3],["explorer","who reads reviewerEval (including the panel)",0.75,28.7],["explorer","who reads reviewerEval (including the panel)",0.8,32.1]];
   var suites = ["reviewer", "gate-runner", "ci-investigator", "explorer"];
   function stats(a) {
     var m = a.reduce(function (s, v) { return s + v; }, 0) / a.length;
