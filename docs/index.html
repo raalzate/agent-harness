@@ -527,6 +527,7 @@ footer { border-top: 4px solid var(--ink); }
     <a href="#piezas" data-grupo="metodo" data-k="piezas hooks gate self-test lint">Las cinco piezas</a>
     <a href="#freno" data-grupo="metodo" data-k="freno regla json bloqueo config">Anatomía de un freno</a>
     <a href="#costo" data-grupo="metodo" data-k="costo latencia milisegundos presupuesto observability hooks-timing medir performance">Lo que cuesta el arnés</a>
+    <a href="#evaluaciones" data-grupo="metodo" data-k="evaluaciones eval determinista promptfoo ia recall rodeos inocentes falsos positivos huecos subagentes repeticiones rubrica">Las evaluaciones</a>
     <a href="#panel" data-grupo="metodo" data-k="panel salud tablero burn-down burndown plan gestor dashboard mapa guia freno sensor">El panel del arnés</a>
     <a href="#indice" data-grupo="metodo" data-k="indice codegraph grafo leer codigo radio impacto">El índice del código</a>
     <a href="#registro" data-grupo="metodo" data-k="registro trazabilidad commit issue pr">Trazabilidad</a>
@@ -915,14 +916,14 @@ repo-lint: 1 problema(s)
           <div class="arq-cartas">
             <button type="button" class="arq-card" data-k="eventos" data-dir="runtime"><svg aria-hidden="true"><use href="#i-antena"/></svg><b>Eventos</b><span class="sub">11 hooks · 6 eventos</span><span class="tag">.claude/settings.json</span></button>
             <button type="button" class="arq-card" data-k="latencia" data-dir="sensor"><svg aria-hidden="true"><use href="#i-reloj"/></svg><b>Latencia</b><span class="sub">cada hook contra su presupuesto</span><span class="tag">npm run timing</span></button>
-            <button type="button" class="arq-card" data-k="panel" data-dir="sensor"><svg aria-hidden="true"><use href="#i-panel"/></svg><b>Panel y deriva</b><span class="sub">cada gate · semanal</span><span class="tag">panel · drift.yml · eval:reviewer</span></button>
+            <button type="button" class="arq-card" data-k="panel" data-dir="sensor"><svg aria-hidden="true"><use href="#i-panel"/></svg><b>Panel y deriva</b><span class="sub">cada gate · semanal</span><span class="tag">panel · drift.yml · eval:reviewer · eval:ai</span></button>
           </div>
         </div>
 
         <div class="arq-capa" data-capa="mul" style="grid-area: mul">
           <header><h3>Multi-agente</h3><span class="arq-flujo">↑ devuelve al bucle</span></header>
           <div class="arq-cartas">
-            <button type="button" class="arq-card" data-k="subagentes" data-dir="sensor"><svg aria-hidden="true"><use href="#i-agente"/></svg><b>Subagentes</b><span class="sub">contexto aislado</span><span class="tag">explorer · reviewer · gate-runner</span></button>
+            <button type="button" class="arq-card" data-k="subagentes" data-dir="sensor"><svg aria-hidden="true"><use href="#i-agente"/></svg><b>Subagentes</b><span class="sub">contexto aislado</span><span class="tag">explorer · reviewer · gate-runner · ci-investigator</span></button>
             <button type="button" class="arq-card" data-k="contrato" data-dir="sensor"><svg aria-hidden="true"><use href="#i-contrato"/></svg><b>Contrato de salida</b><span class="sub">sin veredicto no cierra</span><span class="tag">subagent-contract.mjs · SubagentStop</span></button>
             <button type="button" class="arq-card" data-k="worktree" data-dir="sensor"><svg aria-hidden="true"><use href="#i-rama"/></svg><b>Worktrees</b><span class="sub">medir sin ensuciar el repo</span><span class="tag">cycle-check --verify-red</span></button>
           </div>
@@ -1211,6 +1212,85 @@ presupuesto.</code></pre>
           señal se pone roja, con presupuesto holgado el repo pasa, sin la clave declarada
           <strong>deja pasar</strong> —un repo portado no se pone rojo por una señal que su equipo no
           eligió—, y un caso verifica que medir no deje basura atrás.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="evaluaciones">
+  <div class="wrap sec-inner">
+    <p class="rail"><b>0/45</b>inocentes frenados</p>
+    <div>
+      <div class="col stack">
+        <p class="eyebrow">Las evaluaciones</p>
+        <h2 style="font-size:var(--step-2)">Un freno que caza su propia muestra no prueba nada</h2>
+        <p>El self-test prueba que cada regla muerde, pero la muestra la fabrica a partir de la misma
+          regla: es tautológico. Las evaluaciones preguntan otra cosa, con conjuntos etiquetados que
+          <strong>no</strong> salen del config: ¿el freno aguanta otra forma de pedir lo mismo?
+          ¿deja pasar lo que sólo se parece a un ataque? ¿el subagente que juzga con un modelo acierta
+          siempre, o a veces?</p>
+        <p>Son dos familias, porque se prueban distinto. Lo <strong>determinista</strong> (los hooks
+          contra el arnés recién instalado) da lo mismo con la misma entrada: va en el gate, con umbral
+          exacto. Lo que juzga un <strong>modelo</strong> no: se mide con una tasa y con repeticiones,
+          fuera del gate (<code>npm run eval:ai</code>, con promptfoo como corredor, ADR 0015).</p>
+      </div>
+
+      <div class="pair">
+        <figure class="panel">
+          <figcaption>npm run eval · en el gate</figcaption>
+          <pre><code>DETERMINISTIC EVAL — freshly installed harness
+  (profile node) · 274 cases
+
+  GUIDES   100 %  118/118
+  RULES
+    recall           100 %  (80/80 attacks)
+    evasion recall   100 %  (51 variants)
+    false positives    0 %  (0/45 innocents)
+    known gaps         6
+  SIGNALS  100 %  25/25
+  by language  es 34/34 · en 33/33
+
+<span class="hdr">DETERMINISTIC EVAL GREEN</span></code></pre>
+        </figure>
+        <figure class="panel">
+          <figcaption>npm run eval:ai · corrida local, 2026-10-19</figcaption>
+          <pre><code>AI evaluation — 4 suite(s), 14 case(s) × 3
+
+reviewer        — 18/18 (100 %) · min 80 %
+gate-runner     —  9/9  (100 %)
+  ✓ 3/3  quality 0.48  red: two failing signals
+ci-investigator —  9/9  (100 %)
+explorer        —  6/6  (100 %)
+
+<span class="hdr">AI EVAL GREEN</span> — every suite at or
+above minScore.</code></pre>
+        </figure>
+      </div>
+
+      <div class="col stack" style="margin-top:1.75rem">
+        <h3 style="font-size:var(--step-1)">Qué se mide, y qué encontró</h3>
+      </div>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>Lo que se mide</th><th class="mono">Resultado</th><th>Por qué importa</th></tr></thead>
+          <tbody>
+            <tr><td>ataques directos y rodeos, en 10 categorías</td><td class="mono">80/80 · 51/51</td><td>un freno que sólo caza la forma obvia (<code>git reset --hard</code>) y no <code>git -C . reset --hard</code> es un freno de cartón</td></tr>
+            <tr><td>inocentes que se parecen a un ataque</td><td class="mono">0/45 frenados</td><td>un freno que muerde de más se apaga a mano en una semana (P3)</td></tr>
+            <tr><td>ataques que se sabe que pasan</td><td class="mono">6 huecos</td><td>declarados y fuera del recall; si uno se cierra sin actualizar el caso, la evaluación sale roja</td></tr>
+            <tr><td>guías y señales, en español y en inglés</td><td class="mono">118/118 · 25/25</td><td>un freno que sólo entiende un idioma es medio freno</td></tr>
+            <tr><td>los cuatro subagentes, 3 veces cada caso</td><td class="mono">42/42</td><td>el k/n por caso separa la etiqueta vieja (0/n) del juez inestable (0&lt;k&lt;n)</td></tr>
+            <tr><td>la calidad de la respuesta (rúbrica, informativa)</td><td class="mono">0.86 media</td><td>el veredicto acierta y aun así el <code>gate-runner</code> lista varias hipótesis cuando su prompt pide una</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="col stack" style="margin-top:1.5rem">
+        <p>La primera corrida con repeticiones encontró un caso del <code>reviewer</code> mal
+          etiquetado: un «inocente» que agregaba una regla que el config ya tenía. El revisor lo
+          rechazaba siempre, con razón, y con una sola corrida por caso la tasa (5/6) quedaba sobre el
+          umbral y lo escondía. Los números deterministas los imprime <code>npm run eval</code> en cada
+          gate. Los de IA son de una corrida local fechada: no los regenera ningún pipeline, y la página
+          lo dice. Detalle en <a href="https://github.com/raalzate/agent-harness/blob/main/docs/evaluaciones.md">evaluaciones.md</a>.</p>
       </div>
     </div>
   </div>
@@ -1761,7 +1841,7 @@ DRY-RUN: 38 archivo(s) a copiar, 0 conservado(s).</code></pre>
             <tr><td><a href="https://github.com/raalzate/agent-harness/blob/main/docs/caso-de-estudio.md">caso-de-estudio.md</a></td><td>Un arnés real con números verificables, cuatro mecanismos contados desde el incidente que los creó, y los huecos que ese repo declara.</td></tr>
             <tr><td><a href="https://github.com/raalzate/agent-harness/blob/main/docs/buenas-practicas.md">buenas-practicas.md</a></td><td>La guía de fondo, agnóstica de stack: qué es un arnés, las cinco decisiones del bucle, los niveles de madurez L0–L4.</td></tr>
             <tr><td><a href="https://github.com/raalzate/agent-harness/blob/main/docs/guias-y-sensores.md">guias-y-sensores.md</a></td><td>El marco de <em>harness engineering</em> (Böckeler, martinfowler.com) aplicado: guías y sensores, computacional e inferencial, qué mecanismo cubre cada idea y qué huecos quedan declarados.</td></tr>
-            <tr><td><a href="https://github.com/raalzate/agent-harness/blob/main/docs/evaluaciones.md">evaluaciones.md</a></td><td>Las dos familias de evaluación: determinista (acciones etiquetadas contra el arnés recién instalado: rodeos, inocentes y huecos conocidos, en el gate) y con IA (la prueba de vida del <code>reviewer</code>).</td></tr>
+            <tr><td><a href="https://github.com/raalzate/agent-harness/blob/main/docs/evaluaciones.md">evaluaciones.md</a></td><td>Las dos familias de evaluación: determinista (acciones etiquetadas contra el arnés recién instalado: rodeos, inocentes y huecos conocidos, en el gate) y con IA (los cuatro subagentes con promptfoo y repeticiones, <code>eval:ai</code>, más la prueba de vida programada del <code>reviewer</code>).</td></tr>
             <tr><td><a href="https://github.com/raalzate/agent-harness/blob/main/docs/agilidad.md">agilidad.md</a></td><td>Los principios ágiles con mecanismo: diez principios, el comando que falla cuando se violan, y la lista explícita de lo que NO se hace cumplir.</td></tr>
             <tr><td><a href="https://github.com/raalzate/agent-harness/blob/main/docs/ciclo-desarrollo.md">ciclo-desarrollo.md</a></td><td>El ciclo de desarrollo declarado: modelo de ramas (trunk-based, git flow, GitHub flow) y las cuatro prácticas de XP que tienen mecanismo, con lo que cada una NO prueba.</td></tr>
             <tr><td><a href="https://github.com/raalzate/agent-harness/blob/main/docs/arquitectura.md">arquitectura.md</a></td><td>Qué documentación de arquitectura es obligatoria, cuándo va un ADR, y la traducción de bajo acoplamiento / alta cohesión a reglas que fallan.</td></tr>
@@ -2486,8 +2566,8 @@ DRY-RUN: 38 archivo(s) a copiar, 0 conservado(s).</code></pre>
     git: { t: "Commit y push", cc: "Fuera del ciclo del agente: frenan también al humano.", ar: "<code>pre-commit</code> repite las rutas protegidas; <code>commit-msg</code> exige el ítem de trabajo o una fuga declarada con motivo; <code>pre-push</code> frena el push directo a las ramas protegidas y el nombre de rama fuera del modelo.", donde: "<code>.githooks/</code> · <code>tracker.issuePattern</code> · <code>branches</code> · <code>workflow</code>", evita: "Un cambio que llega al historial sin que nadie sepa por qué, y el push directo a main." },
     eventos: { t: "Eventos", cc: "Claude Code emite eventos en cada etapa (sesión, pedido, antes y después de una herramienta, fin del turno, fin de un subagente) y corre los hooks declarados.", ar: "Los nombres de evento salen de <code>settings.json</code> y ningún hook los cablea (regla EVENTOS). El self-test corre cada hook con muestras derivadas del propio config: que muerda, y que no muerda de más.", donde: "<code>.claude/settings.json</code> · <code>singleSource</code> · <code>harness-selftest.mjs</code>", evita: "Un freno instalado y muerto: el archivo está, pero el evento nunca le llega." },
     latencia: { t: "Latencia", cc: "Todo hook se paga en cada prompt y en cada edición.", ar: "<code>npm run timing</code> corre cada hook declarado tres veces con un payload sintético y compara la mediana con su presupuesto. Es una señal del gate: sobre presupuesto no hay entregable. Hoy, ≈280 ms antes de cada edición.", donde: "<code>observability.budgetMs</code> · <code>observability.budgets</code>", evita: "El arnés que alguien apaga porque «estorba» y nadie sabe cuánto cuesta." },
-    panel: { t: "Panel y deriva", cc: "Lo que se degrada sin que ningún cambio lo rompa no aparece en un diff.", ar: "El gate regenera el panel en cada corrida (salud, memoria, plan). <code>drift.yml</code> corre semanal la deriva y la prueba de vida del <code>reviewer</code>, que se mide con una tasa porque es un juez probabilístico.", donde: "<code>panel</code> · <code>drift</code> · <code>reviewerEval</code> · ADR 0007 y 0009", evita: "Un control encendido que nadie corre: «instalado y muerto»." },
-    subagentes: { t: "Subagentes", cc: "El agente delega en un contexto aislado y recibe sólo la conclusión.", ar: "<code>explorer</code> busca antes de abrir archivos (guía); <code>reviewer</code> revisa el diff contra los principios BLOCKING (sensor inferencial); <code>gate-runner</code> corre el gate y trae el error real sin miles de líneas de log (sensor).", donde: "<code>.claude/agents/</code> · <code>taxonomy.agents</code>", evita: "Llenar el contexto principal con volcados de archivos y logs." },
+    panel: { t: "Panel y deriva", cc: "Lo que se degrada sin que ningún cambio lo rompa no aparece en un diff.", ar: "El gate regenera el panel en cada corrida (salud, memoria, plan). <code>drift.yml</code> corre semanal la deriva y la prueba de vida del <code>reviewer</code>, que se mide con una tasa porque es un juez probabilístico. Los otros subagentes se miden a mano con <code>npm run eval:ai</code> (promptfoo, sin pipeline todavía).", donde: "<code>panel</code> · <code>drift</code> · <code>reviewerEval</code> · <code>aiEval</code> · ADR 0007, 0009 y 0015", evita: "Un control encendido que nadie corre: «instalado y muerto»." },
+    subagentes: { t: "Subagentes", cc: "El agente delega en un contexto aislado y recibe sólo la conclusión.", ar: "<code>explorer</code> busca antes de abrir archivos (guía); <code>reviewer</code> revisa el diff contra los principios BLOCKING (sensor inferencial); <code>gate-runner</code> corre el gate y trae el error real sin miles de líneas de log (sensor); <code>ci-investigator</code> lee el fallo de CI y lo cruza con el gate local (sensor). Los cuatro tienen prueba de vida con <code>npm run eval:ai</code>: cada caso tres veces, k/n por caso.", donde: "<code>.claude/agents/</code> · <code>taxonomy.agents</code> · <code>aiEval</code>", evita: "Llenar el contexto principal con volcados de archivos y logs." },
     contrato: { t: "Contrato de salida", cc: "Cuando un subagente termina, corre <code>SubagentStop</code>; un exit 2 le devuelve el turno <b>al subagente</b> con el motivo.", ar: "Si el <code>reviewer</code> o el <code>gate-runner</code> cierran sin su línea <code>VEREDICTO: …</code>, el hook los devuelve a trabajar. El patrón del <code>reviewer</code> es el mismo que mide <code>reviewer-eval</code>, y el self-test verifica que sigan iguales. Con <code>stop_hook_active</code> pasa: insistir sería un loop.", donde: "<code>subagentOutput.contracts</code> · <code>subagent-contract.mjs</code> · self-test 3e-sub", evita: "Un «se ve bien» que le llega al agente principal como aprobación." },
     worktree: { t: "Worktrees", cc: "Git puede tener varios árboles de trabajo del mismo repo.", ar: "<code>cycle-check --verify-red</code> arma un worktree temporal <b>fuera</b> del repo en la base de la rama y exige que la prueba nueva falle sin el cambio de producción. El <code>reviewer</code> se evalúa aislado en un temporal. Ninguna medición deja un worktree registrado.", donde: "<code>xp.testFirst.verifyRed</code> · <code>reviewerEval.context</code>", evita: "Una prueba que pasa con o sin el cambio: no prueba nada." }
   };
