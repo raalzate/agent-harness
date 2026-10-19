@@ -21,6 +21,7 @@
     "timing:rules": "node scripts/hooks-timing.mjs --rules",
     "drift": "node scripts/drift-check.mjs",
     "ci:investigate": "node scripts/ci-investigate.mjs",
+    "eval": "node scripts/harness-eval.mjs",
     "eval:reviewer": "node scripts/reviewer-eval.mjs",
     "map": "node scripts/harness-map.mjs",
     "panel": "node scripts/panel/generar.mjs",

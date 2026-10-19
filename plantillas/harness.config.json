@@ -79,8 +79,8 @@
   },
   "protectedPaths": [
     {
-      "pattern": "^\\.env",
-      "reason": ".env* es la llave del reino: lo edita el humano, nunca el agente."
+      "pattern": "^\\.env(?!\\.(example|sample|template)$)",
+      "reason": ".env* es la llave del reino: lo edita el humano, nunca el agente. La plantilla sin valores (`.env.example`) es documentación y sí se edita."
     },
     {
       "pattern": "^(package-lock\\.json|yarn\\.lock|pnpm-lock\\.yaml|poetry\\.lock|go\\.sum|Cargo\\.lock)$",
@@ -107,36 +107,60 @@
         "reason": "el marcador y el libro del ciclo acotado (`loop`) los escribe el gate y los levanta el pedido del humano, y la tarea declarada (`task`) la escribe `scripts/task.mjs`. Reescribirlos a mano es saltarse la escalada o el alcance: para la tarea usá `node scripts/task.mjs`; para el presupuesto, pará y contale al humano qué falla."
       },
       {
-        "pattern": "--no-ver[i]fy",
-        "reason": "saltarse los hooks de verificación está prohibido. Si el gate estorba, se arregla el gate."
+        "$pattern": "La bandera suelta (no la palabra dentro de un mensaje de commit) y su forma corta: `-n` entre las banderas cortas de `git commit` es `--no-verify`. Las reglas de git aceptan opciones globales entre `git` y el subcomando (`git -C . reset --hard`): sin eso, la opción es el rodeo. Lo midió scripts/harness-eval.mjs.",
+        "pattern": "(^|\\s)--no-ver[i]fy(?=\\s|$)|\\bgit(?:\\s+(?:-[cC]\\s*\\S+|--[a-z][\\w-]*(?:=\\S+)?))*\\s+commit\\b[^|;&]*\\s-[a-zA-Z]*n[a-zA-Z]*(?=\\s|$)",
+        "reason": "saltarse los hooks de verificación está prohibido (`-n` es la misma bandera en corto). Si el gate estorba, se arregla el gate."
       },
       {
-        "pattern": "git\\s+push\\b.*\\s(--force|-f)(?![-\\w])",
-        "reason": "`--force` reescribe historia remota. Usá --force-with-lease y pedí confirmación."
+        "pattern": "\\bgit(?:\\s+(?:-[cC]\\s*\\S+|--[a-z][\\w-]*(?:=\\S+)?))*\\s+push\\b[^|;&]*\\s((--force|-f)(?![-\\w])|\\+[\\w/.-])",
+        "reason": "`--force` (o un `+` en el refspec) reescribe historia remota. Usá --force-with-lease y pedí confirmación."
       },
       {
-        "pattern": "git\\s+reset\\s+--hard",
+        "pattern": "\\bgit(?:\\s+(?:-[cC]\\s*\\S+|--[a-z][\\w-]*(?:=\\S+)?))*\\s+reset\\s+--hard",
         "reason": "destruye trabajo sin commitear. Usá `git stash` o pedí confirmación."
       },
       {
-        "pattern": "git\\s+clean\\s+-[a-z]*f",
+        "pattern": "\\bgit(?:\\s+(?:-[cC]\\s*\\S+|--[a-z][\\w-]*(?:=\\S+)?))*\\s+(checkout\\s+(\\S+\\s+)?--\\s+\\.(\\s|$)|restore\\b(?![^|;&]*--staged)[^|;&]*\\s\\.(\\s|$))",
+        "reason": "descarta todos los cambios del working tree (con `checkout -- .` o con `restore .`). Pedí confirmación explícita, o descartá archivos por nombre."
+      },
+      {
+        "pattern": "\\bgit(?:\\s+(?:-[cC]\\s*\\S+|--[a-z][\\w-]*(?:=\\S+)?))*\\s+clean\\b[^|;&]*\\s(-[a-zA-Z]*f|--force)",
         "reason": "borra archivos no rastreados. Dry-run primero: `git clean -n`."
       },
       {
-        "pattern": "git\\s+add\\s+(\\.|-A|--all)(\\s|$)",
+        "pattern": "\\bgit(?:\\s+(?:-[cC]\\s*\\S+|--[a-z][\\w-]*(?:=\\S+)?))*\\s+add\\s+(\\.|-A|--all)(\\s|$)",
         "reason": "arrastra artefactos y secretos. Agregá archivos por nombre."
+      },
+      {
+        "pattern": "\\bcore\\.hooksPath(=|\\s+)(?!\\.githooks(\\s|$))[^\\s|;&]|--unset(-all)?\\s+core\\.hooksPath\\b",
+        "reason": "apuntar los hooks de git a otro lado (o borrar la clave) apaga el pre-commit y el commit-msg sin que nada se ponga rojo. Se instalan con el comando de `gate.installHooksCommand`."
       },
       {
         "pattern": "\\bsed\\s+(-[a-zA-Z]*\\s+)*-i\\b.*\\b(src|lib|app)\\b",
         "reason": "edición masiva in-place sobre fuente. Usá el editor del agente, o commit + dry-run antes."
       },
       {
+        "pattern": "\\bperl\\s+-[a-zA-Z]*i\\b.*\\b(src|lib|app)\\b",
+        "reason": "edición masiva in-place sobre fuente, con perl. Usá el editor del agente."
+      },
+      {
+        "pattern": "\\brm\\s+-[a-zA-Z]*r[a-zA-Z]*f?\\s+[^|;&]*\\b(src|lib|app)\\b",
+        "reason": "borrado recursivo de un directorio fuente. Listá primero y pedí confirmación."
+      },
+      {
         "pattern": "\\bfind\\b[^|;&]*-delete",
         "reason": "borra sin mostrar. Corré el find sin -delete y confirmá la lista."
       },
       {
-        "pattern": "\\bcurl\\b[^|;&]*\\|\\s*(ba)?sh",
-        "reason": "ejecuta código remoto sin revisarlo. Bajá el script, leelo, después corrélo."
+        "pattern": "\\b(curl|wget)\\b[^|;&]*\\|\\s*(sudo\\s+)?(ba|z)?sh\\b|\\b(ba|z)?sh\\s+<\\(\\s*(curl|wget)\\b",
+        "reason": "ejecuta código remoto sin revisarlo (por tubería o por `<(…)`). Bajá el script, leelo, después corrélo."
+      }
+    ],
+    "ask": [
+      {
+        "$pattern": "Datos del repo hacia otro host: un archivo en el cuerpo de curl (`@archivo`, `-T`), `wget --post-file`, scp/rsync/sftp a `host:ruta`, o un socket crudo (nc, socat). Un GET, un cuerpo literal o un rsync a un directorio local no casan. Lo destapó scripts/harness-eval.mjs (categoría «data out»).",
+        "pattern": "\\bcurl\\b[^|;&]*\\s((-d|--data(-binary|-raw|-urlencode)?|-F|--form)\\s*=?\\s*['\"]?[^'\"\\s]*@|(-T|--upload-file)\\s)|\\bwget\\b[^|;&]*--post-file|\\b(scp|rsync|sftp)\\b[^|;&]*\\s[\\w.-]*@?[\\w.-]+:|\\b(nc|ncat|netcat|socat)\\b[^|;&]*<|\\|\\s*(nc|ncat|netcat)\\b",
+        "reason": "saca archivos del repo hacia otro host: lo que sale (un secreto, código) no vuelve. Si es lo pedido, que lo confirme el humano; si no, mostrá qué se mandaría y a dónde."
       }
     ]
   },
@@ -273,29 +297,35 @@
     "normalize": []
   },
   "askFirst": {
-    "$comment": "«Una pregunta se contesta; una acción se pide». Estas claves ACTIVAN `ask-first.mjs` + `action-guard.mjs`: sin ellas los dos hooks quedan instalados y muertos. Los patrones son del idioma (español), no de este repo — ajustalos si tu equipo trabaja en otro. La detección es ANGOSTA a propósito: un clasificador ancho bloquea instrucciones legítimas, y un freno que muerde de más se desactiva a mano en una semana.",
+    "$comment": "«Una pregunta se contesta; una acción se pide». Estas claves ACTIVAN `ask-first.mjs` + `action-guard.mjs`: sin ellas los dos hooks quedan instalados y muertos. Los patrones son del idioma, no de este repo: cubren español e inglés (la evaluación determinista mide los dos, `npm run eval`); sacá el que tu equipo no use o sumá el suyo. La detección es ANGOSTA a propósito: un clasificador ancho bloquea instrucciones legítimas, y un freno que muerde de más se desactiva a mano en una semana.",
     "marker": ".git/agent-answer-first",
     "questionPatterns": [
       "^\\s*¿",
       "\\?\\s*$",
       "^\\s*(qu[eé]|por\\s?qu[eé]|c[oó]mo|cu[aá]l(es)?|cu[aá]ndo|d[oó]nde|qui[eé]n|para\\s?qu[eé])(?=\\s|$|[,:])",
-      "^\\s*(hay|existe|sirve|conviene|se puede|pod[eé]s|sab[eé]s|vale la pena)(?=\\s|$|[,:])"
+      "^\\s*(hay|existe|sirve|conviene|se puede|pod[eé]s|sab[eé]s|vale la pena)(?=\\s|$|[,:])",
+      "^\\s*(what|why|how|which|when|where|who|whose)(?=\\s|$|[,:'])",
+      "^\\s*(is there|are there|is it|does it|do you know|can i|should i|should we)(?=\\s|$|[,:])"
     ],
     "actionPatterns": [
-      "\\b(arregl|corrig|implement|agreg|a[ñn]ad|cambi|escrib|cre[aá]|aplic|instal|port|actualiz|borr|elimin|quit|refactor|migr|public|commit|push|generá|genera|hacelo|haz|dale|proced)"
+      "\\b(arregl|corrig|implement|agreg|a[ñn]ad|cambi|escrib|cre[aá]|aplic|instal|port|actualiz|borr|elimin|quit|refactor|migr|public|commit|push|generá|genera|hacelo|haz|dale|proced)",
+      "\\b(fix|implement|add|change|write|create|apply|install|update|delete|remove|rename|refactor|migrate|publish|generate|go ahead|do it)\\b"
     ],
     "message": "Esto es una **pregunta**: contestala con lo que ya sabés o leyendo lo que haga falta. **No edites archivos del repo**: el hook `action-guard` los va a bloquear hasta el próximo pedido del humano.",
     "pastPatterns": [
       "\\b\\w+(aste|iste|aron|ieron|abas|amos|imos)(?=\\s|$|[,.?!])",
       "\\b\\w+(ó|ió)(?=\\s|$|[,.?!])",
-      "\\b(hab[ií]as|hiciste|dejaste|qued[oó])(?=\\s|$|[,.?!])"
+      "\\b(hab[ií]as|hiciste|dejaste|qued[oó])(?=\\s|$|[,.?!])",
+      "\\b(did you|have you|has it|was it|were you)\\b"
     ],
     "strongQuestionPatterns": [
       "^\\s*¿",
-      "^\\s*(qu[eé]|por\\s?qu[eé]|c[oó]mo|cu[aá]l(es)?|cu[aá]ndo|d[oó]nde|qui[eé]n|para\\s?qu[eé])(?=\\s|$|[,:])"
+      "^\\s*(qu[eé]|por\\s?qu[eé]|c[oó]mo|cu[aá]l(es)?|cu[aá]ndo|d[oó]nde|qui[eé]n|para\\s?qu[eé])(?=\\s|$|[,:])",
+      "^\\s*(what|why|how|which|when|where|who|whose)(?=\\s|$|[,:'])"
     ],
     "directRequestPatterns": [
-      "\\b(pod[eé]s|puedes|podr[ií]as|te pido|por favor|necesito que|quiero que)\\b"
+      "\\b(pod[eé]s|puedes|podr[ií]as|te pido|por favor|necesito que|quiero que)\\b",
+      "\\b(can you|could you|would you|will you|please|i need you to|i want you to)\\b"
     ]
   },
   "branches": {
@@ -344,7 +374,12 @@
           "\\bhistorias de usuario\\b",
           "\\breescrib(ir|e)\\b",
           "\\brearquitect",
-          "\\bmigrar (el|la|todo)\\b"
+          "\\bmigrar (el|la|todo)\\b",
+          "\\bnew (feature|screen|module|page)\\b",
+          "\\buser stories\\b",
+          "\\brewrite\\b",
+          "\\bre-?architect",
+          "\\bmigrate (the|all|everything)\\b"
         ],
         "message": "Pedido de tamaño FEATURE → ruta SDD: spec, plan y tareas antes de tocar producción. Si decidís saltarla, declaralo en una línea con el porqué."
       },
@@ -356,7 +391,11 @@
           "\\bno funciona\\b",
           "\\bse rompe\\b",
           "\\berror en\\b",
-          "\\bregresi[óo]n\\b"
+          "\\bregresi[óo]n\\b",
+          "\\b(doesn'?t|does not|isn'?t|is not) work(ing)?\\b",
+          "\\b(is broken|breaks)\\b",
+          "\\berror in\\b",
+          "\\bregression\\b"
         ],
         "message": "Falla sobre algo que ya existe → test rojo que la reproduzca ANTES de tocar producción."
       },
@@ -366,7 +405,11 @@
           "\\bno s[ée] si\\b",
           "\\balgo as[íi]\\b",
           "\\bcomo veas\\b",
-          "\\bmejorar (todo|esto)\\b"
+          "\\bmejorar (todo|esto)\\b",
+          "\\bnot sure (if|whether)\\b",
+          "\\bsomething like\\b",
+          "\\bwhatever you (think|prefer|like)\\b",
+          "\\bimprove (all|everything|this)\\b"
         ],
         "message": "Pedido ambiguo → preguntá UNA sola cosa antes de tocar archivos."
       },
@@ -379,7 +422,12 @@
           "\\bcapa(s)? (de|del)\\b",
           "\\bdependencia circular\\b",
           "\\bextraer (un |el )?(m[oó]dulo|servicio|paquete)\\b",
-          "\\brefactor"
+          "\\brefactor",
+          "\\barchitecture\\b",
+          "\\bcoupl",
+          "\\bcohesion\\b",
+          "\\bcircular dependenc",
+          "\\bextract (a |the )?(module|service|package)\\b"
         ],
         "message": "Cambio de DISEÑO: (1) medí el radio de impacto con el índice del código, no de memoria; (2) el movimiento tiene que BAJAR acoplamiento o SUBIR cohesión — decí cuál, y contra qué regla se mide (`purity`, `forbiddenDeps`, `singleSource`); (3) si cambia una decisión estructural, va un ADR en el mismo commit."
       },
@@ -403,7 +451,9 @@
           "\\brenombrar\\b",
           "\\bformatear\\b",
           "\\bdocumentar\\b",
-          "\\bexplicame\\b"
+          "\\bexplicame\\b",
+          "\\brename\\b",
+          "\\bexplain\\b"
         ],
         "message": ""
       }

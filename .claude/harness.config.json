@@ -79,6 +79,15 @@
         "why": "el self-test verifica la FORMA de un perfil; sólo un repo real de cada stack verifica el ENCAJE: que el matcher de DEPS case el XML de un .csproj, que PUREZA cace un `using`, y que el arnés recién instalado no apunte a la nada. Cazó dos bugs en su primera corrida"
       },
       {
+        "name": "harness eval (deterministic)",
+        "command": [
+          "node",
+          "scripts/harness-eval.mjs"
+        ],
+        "fastSkip": true,
+        "why": "the self-test checks every rule against a sample derived from the same rule: tautological. Only a separate labelled set sees the EVASION (`git -C . reset --hard`, `git commit -nm`, `wget | sh`) and the false positive (`.env.example`). On its first run, 14 attacks got through the template and one innocent action was blocked"
+      },
+      {
         "name": "harness cost (hook latency)",
         "command": [
           "node",
@@ -90,8 +99,8 @@
   },
   "protectedPaths": [
     {
-      "pattern": "^\\.env",
-      "reason": ".env* es la llave del reino: lo edita el humano, nunca el agente."
+      "pattern": "^\\.env(?!\\.(example|sample|template)$)",
+      "reason": ".env* es la llave del reino: lo edita el humano, nunca el agente. La plantilla sin valores (`.env.example`) es documentación y sí se edita."
     },
     {
       "pattern": "^package-lock\\.json$",
@@ -125,12 +134,13 @@
   "bash": {
     "deny": [
       {
-        "pattern": "--no-ver[i]fy",
-        "reason": "saltarse los hooks de verificación está prohibido. Si el gate estorba, se arregla el gate."
+        "$pattern": "La bandera suelta (no la palabra dentro de un mensaje de commit) y su forma corta: `-n` entre las banderas cortas de `git commit` es `--no-verify`. Las reglas de git aceptan opciones globales entre `git` y el subcomando (`git -C . reset --hard`): sin eso, la opción es el rodeo. Lo midió scripts/harness-eval.mjs.",
+        "pattern": "(^|\\s)--no-ver[i]fy(?=\\s|$)|\\bgit(?:\\s+(?:-[cC]\\s*\\S+|--[a-z][\\w-]*(?:=\\S+)?))*\\s+commit\\b[^|;&]*\\s-[a-zA-Z]*n[a-zA-Z]*(?=\\s|$)",
+        "reason": "saltarse los hooks de verificación está prohibido (`-n` es la misma bandera en corto). Si el gate estorba, se arregla el gate."
       },
       {
-        "pattern": "git\\s+push\\b.*\\s(--force|-f)(?![-\\w])",
-        "reason": "`--force` reescribe historia remota. Usá --force-with-lease y pedí confirmación."
+        "pattern": "\\bgit(?:\\s+(?:-[cC]\\s*\\S+|--[a-z][\\w-]*(?:=\\S+)?))*\\s+push\\b[^|;&]*\\s((--force|-f)(?![-\\w])|\\+[\\w/.-])",
+        "reason": "`--force` (o un `+` en el refspec) reescribe historia remota. Usá --force-with-lease y pedí confirmación."
       },
       {
         "pattern": "(\\b(rm|mv|cp|tee|truncate|unlink|del)\\b|>)[^|;&]*\\.git[\\\\/](gate-(escalate|attempts)|harness-task)",
@@ -141,20 +151,24 @@
         "reason": "mezclar sin esperar el CI deja entrar un rojo: #58 se mezcló con un check en rojo y Windows todavía corriendo. Esperalo en el mismo comando (`gh pr checks <n> --watch && gh pr merge <n> …`) o dejá que la forja espere (`gh pr merge <n> --auto …`)."
       },
       {
-        "pattern": "git\\s+reset\\s+--hard",
+        "pattern": "\\bgit(?:\\s+(?:-[cC]\\s*\\S+|--[a-z][\\w-]*(?:=\\S+)?))*\\s+reset\\s+--hard",
         "reason": "`reset --hard` destruye trabajo sin commitear. Usá `git stash` o pedí confirmación."
       },
       {
-        "pattern": "git\\s+checkout\\s+--\\s+\\.",
-        "reason": "descarta todos los cambios del working tree. Pedí confirmación explícita."
+        "pattern": "\\bgit(?:\\s+(?:-[cC]\\s*\\S+|--[a-z][\\w-]*(?:=\\S+)?))*\\s+(checkout\\s+(\\S+\\s+)?--\\s+\\.(\\s|$)|restore\\b(?![^|;&]*--staged)[^|;&]*\\s\\.(\\s|$))",
+        "reason": "descarta todos los cambios del working tree (con `checkout -- .` o con `restore .`). Pedí confirmación explícita, o descartá archivos por nombre."
       },
       {
-        "pattern": "git\\s+clean\\s+-[a-z]*f",
+        "pattern": "\\bgit(?:\\s+(?:-[cC]\\s*\\S+|--[a-z][\\w-]*(?:=\\S+)?))*\\s+clean\\b[^|;&]*\\s(-[a-zA-Z]*f|--force)",
         "reason": "borra archivos no rastreados. Dry-run primero: `git clean -n`."
       },
       {
-        "pattern": "git\\s+add\\s+(\\.|-A|--all)(\\s|$)",
+        "pattern": "\\bgit(?:\\s+(?:-[cC]\\s*\\S+|--[a-z][\\w-]*(?:=\\S+)?))*\\s+add\\s+(\\.|-A|--all)(\\s|$)",
         "reason": "`git add .` arrastra artefactos y secretos. Agregá archivos por nombre."
+      },
+      {
+        "pattern": "\\bcore\\.hooksPath(=|\\s+)(?!\\.githooks(\\s|$))[^\\s|;&]|--unset(-all)?\\s+core\\.hooksPath\\b",
+        "reason": "apuntar los hooks de git a otro lado (o borrar la clave) apaga el pre-commit y el commit-msg sin que nada se ponga rojo. Se instalan con `npm run hooks:install`."
       },
       {
         "pattern": "\\bsed\\s+(-[a-zA-Z]*\\s+)*-i\\b.*\\b(src|lib|scripts|app)\\b",
@@ -173,11 +187,16 @@
         "reason": "`find -delete` borra sin mostrar. Corré el find sin -delete y confirmá la lista."
       },
       {
-        "pattern": "\\bcurl\\b[^|;&]*\\|\\s*(ba)?sh",
-        "reason": "`curl | sh` ejecuta código remoto sin revisarlo. Bajá el script, leelo, después corrélo."
+        "pattern": "\\b(curl|wget)\\b[^|;&]*\\|\\s*(sudo\\s+)?(ba|z)?sh\\b|\\b(ba|z)?sh\\s+<\\(\\s*(curl|wget)\\b",
+        "reason": "`curl | sh` (o `wget`, o `bash <(curl …)`) ejecuta código remoto sin revisarlo. Bajá el script, leelo, después corrélo."
       }
     ],
     "ask": [
+      {
+        "$pattern": "Datos del repo hacia otro host: un archivo en el cuerpo de curl (`@archivo`, `-T`), `wget --post-file`, scp/rsync/sftp a `host:ruta`, o un socket crudo (nc, socat). Un GET, un cuerpo literal o un rsync a un directorio local no casan. Lo destapó scripts/harness-eval.mjs (categoría «data out»).",
+        "pattern": "\\bcurl\\b[^|;&]*\\s((-d|--data(-binary|-raw|-urlencode)?|-F|--form)\\s*=?\\s*['\"]?[^'\"\\s]*@|(-T|--upload-file)\\s)|\\bwget\\b[^|;&]*--post-file|\\b(scp|rsync|sftp)\\b[^|;&]*\\s[\\w.-]*@?[\\w.-]+:|\\b(nc|ncat|netcat|socat)\\b[^|;&]*<|\\|\\s*(nc|ncat|netcat)\\b",
+        "reason": "saca archivos del repo hacia otro host: lo que sale (un secreto, código) no vuelve. Si es lo pedido, que lo confirme el humano; si no, mostrá qué se mandaría y a dónde."
+      },
       {
         "$comment": "Lo destructivo que a veces es LO PEDIDO: decide el humano en el pedido de permiso de Claude Code (P9: mostrar, esperar, ejecutar). Un `deny` no se puede confirmar —el humano dice que sí y el hook vuelve a bloquear—, así que lo que es «pedí confirmación» vive acá.",
         "pattern": "git\\s+push\\s+.*--force-with-lease",
@@ -903,6 +922,13 @@
     "historyCommits": 400,
     "runner": ".github/workflows/drift.yml",
     "reason": "un veredicto viejo que se lee como actual es peor que no tener veredicto."
+  },
+  "harnessEval": {
+    "$comment": "THE DETERMINISTIC EVALUATION of the guards, sibling of `reviewerEval` (the model-based family). `scripts/harness-eval.mjs` installs the harness in a temporary repo (`harness-init --apply` with `profile`), runs every action in `cases` through the real hooks settings.json declares for its tool and compares the decision (block / approve / allow) with the label: recall, evasion recall, accuracy, false positives and known gaps, against the set's thresholds. Same input, same output, no network and no model: that is why it IS a gate signal. See docs/evaluaciones.md.",
+    "cases": ".claude/evals/deterministic/cases.json",
+    "schema": ".claude/evals/deterministic/cases.schema.json",
+    "reportSchema": ".claude/evals/deterministic/report.schema.json",
+    "profile": "node"
   },
   "reviewerEval": {
     "$comment": "LA PRUEBA DE VIDA DEL REVIEWER, el único sensor inferencial del arnés. `scripts/reviewer-eval.mjs` le pasa cada `diff` de `cases` con `command` (el prompt va por stdin) y compara el veredicto —el grupo 1 de `verdictPattern`— contra `expect`; `mustCite` exige además que nombre el principio. Un juez probabilístico se mide con una TASA contra `minScore`, no con todo o nada. NO es señal del gate (caro y no determinista): lo corre `runner`, el barrido programado. Si `command` no está instalado, sale OMITIDA — y omitido no es verde.",

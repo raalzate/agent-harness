@@ -916,6 +916,27 @@ sesión se lo imprime al agente como verdad de hoy); una regla de `patterns`/`re
 ninguna línea de los últimos `historyCommits` commits sale como **aviso** (¿sin cicatriz, o ya
 ganó?). No es señal del gate —depende del reloj—: lo corre `runner`, programado.
 
+## `harnessEval` — la evaluación determinista del arnés
+
+```json
+{
+  "cases": ".claude/evals/deterministic/cases.json",
+  "schema": ".claude/evals/deterministic/cases.schema.json",
+  "reportSchema": ".claude/evals/deterministic/report.schema.json",
+  "profile": "node"
+}
+```
+
+Lo lee `scripts/harness-eval.mjs` (`npm run eval`, señal del gate). Instala el arnés en un repo
+temporal (`harness-init --apply --profile <profile>`) y corre los tres grupos de `cases`:
+`guides` (lo que llega al agente antes de decidir, y los motivos de cada freno), `rules` (cada
+acción por los hooks de `PreToolUse`) y `signals` (`Stop`, `PostToolUse`, `SubagentStop` y un
+`git commit` real). Antes de medir valida `cases` contra `schema`; `--json` imprime un informe que
+sigue `reportSchema` (el self-test lo verifica). Los umbrales, los eventos de Claude Code
+(`events`) y el repo de juguete (`files`) los trae el conjunto. Sin `cases` o sin `schema` sale
+OMITIDA. Es la familia determinista; `reviewerEval` es la con IA. Ver
+[`evaluaciones.md`](evaluaciones.md).
+
 ## `reviewerEval` — la prueba de vida del reviewer
 
 ```json
@@ -1046,6 +1067,7 @@ sin control se informa como hueco. Ver [guias-y-sensores.md](guias-y-sensores.md
 | `coherence` | `scripts/repo-lint.mjs` (regla `COHERENCIA`), self-test (4e-bis) |
 | `drift` (y `status.file`, `patterns`, `reuse`) | `scripts/drift-check.mjs` (lo invoca `.github/workflows/drift.yml`), self-test (10a) |
 | `reviewerEval` | `scripts/reviewer-eval.mjs` (lo invoca `.github/workflows/drift.yml`), self-test (10b) |
+| `harnessEval` | `scripts/harness-eval.mjs` (la señal `harness eval (deterministic)` del gate), self-test (10e) |
 | `ci.investigate` (y `gate.registry`) | `scripts/ci-investigate.mjs` (lo corre el subagente `ci-investigator` y `/ci`), self-test (2: sus regex; 10d: la máquina con un CLI de mentira) |
 | `subagentOutput` | `subagent-contract.mjs` (SubagentStop), self-test (3e-sub) |
 | `taxonomy` | `scripts/harness-map.mjs`, el panel (pestaña Salud, misma función `construirMapa`), self-test (10c) |
