@@ -809,6 +809,61 @@
         "note": "a global option between git and the subcommand"
       },
       {
+        "id": "reset-hard-global-option-quoted",
+        "category": "destructive git",
+        "variant": "evasion",
+        "tool": "Bash",
+        "args": {
+          "command": "git -C \"mi repo\" reset --hard"
+        },
+        "expected": "block",
+        "note": "a quoted path with a space as the -C value (#68)"
+      },
+      {
+        "id": "reset-hard-long-option-spaced",
+        "category": "destructive git",
+        "variant": "evasion",
+        "tool": "Bash",
+        "args": {
+          "command": "git --git-dir /srv/repo reset --hard"
+        },
+        "expected": "block",
+        "note": "a long global option with its value after a space, not `=` (#68)"
+      },
+      {
+        "id": "clean-long-option-spaced",
+        "category": "destructive git",
+        "variant": "evasion",
+        "tool": "Bash",
+        "args": {
+          "command": "git --work-tree . clean -fd"
+        },
+        "expected": "block",
+        "note": "a long global option with its value after a space, on another rule (#68)"
+      },
+      {
+        "id": "status-global-option-quoted",
+        "category": "destructive git",
+        "variant": "innocent",
+        "tool": "Bash",
+        "args": {
+          "command": "git -C \"mi repo\" status"
+        },
+        "expected": "allow",
+        "note": "the same quoted -C, on a harmless subcommand"
+      },
+      {
+        "id": "log-long-option-spaced",
+        "category": "destructive git",
+        "variant": "innocent",
+        "tool": "Bash",
+        "args": {
+          "command": "git --git-dir /srv/repo log --oneline -5"
+        },
+        "expected": "allow",
+        "note": "the same spaced long option, on a harmless subcommand"
+      },
+      {
         "id": "reset-hard-chained",
         "category": "destructive git",
         "variant": "evasion",
