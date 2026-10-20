@@ -1,14 +1,15 @@
 diff --git a/.claude/harness.config.json b/.claude/harness.config.json
 --- a/.claude/harness.config.json
 +++ b/.claude/harness.config.json
-@@ -210,7 +210,11 @@
+@@ -210,7 +210,12 @@
        },
        {
          "pattern": "git\\s+stash\\s+(drop|clear)\\b",
          "reason": "descarta trabajo guardado en el stash, sin vuelta atrás."
 +      },
 +      {
-+        "pattern": "\\bgit(?:\\s+(?:-[cC]\\s*\\S+|--[a-z][\\w-]*(?:=\\S+)?))*\\s+worktree\\s+remove\\b[^|;&]*\\s(--force|-f+)(?=\\s|$)",
++        "pattern": "\\bgit(?:\\s+(?:-[cC]\\s*(?:\"[^\"]*\"|'[^']*'|\\S+)|--[a-z][\\w-]*(?:=\\S+|\\s+(?!-)(?:\"[^\"]*\"|'[^']*'|\\S+))?))*\\s+worktree\\s+remove\\b[^|;&]*\\s(--force|-f+)(?![-\\w])",
++        "$pattern": "`--force` o `-f` como bandera suelta: el cierre `(?![-\\w])` exige que no siga una letra ni un guion, así que `-f;echo`, `--force&&` y `(… --force)` casan y `--forced` no. Antes del subcomando, el mismo prefijo de opciones globales que las reglas de git de `deny` (`-C \"mi repo\"`, `--git-dir /x`). `git worktree remove wt` sin `--force` no casa: git ya se niega solo si hay cambios.",
 +        "reason": "`--force` borra el worktree con sus cambios sin commitear. Mostrá `git -C <ruta> status` y pedí confirmación."
        }
      ]
