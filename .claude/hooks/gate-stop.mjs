@@ -11,7 +11,6 @@
  * acotado corta: lo que corresponde es parar y escalar, y para escalar hay que poder cerrar.
  */
 import fs from "node:fs";
-import path from "node:path";
 import { readInput, loadConfig, deny, allow, rutaDeEstado } from "./harness.mjs";
 
 const input = await readInput();

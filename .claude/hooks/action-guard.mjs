@@ -19,7 +19,6 @@
  *    contestar y proponer, no reintentar.
  */
 import fs from "node:fs";
-import path from "node:path";
 import { readInput, loadConfig, deny, allow, targetPath, escribe, escrituraAmplia, rutaDeEstado } from "./harness.mjs";
 
 const input = await readInput();

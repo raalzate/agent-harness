@@ -475,6 +475,57 @@ if (corre("base")) {
   if (!rotos) ok(`${scripts.length} script(s) del arnés parsean`);
 }
 
+// 1e. Un import sin uso no rompe nada acá (el arnés no tiene linter: cero dependencias), pero
+//     viaja a repos que corren eslint con `no-unused-vars` y les pone el gate en rojo al portar
+//     (`import path` en action-guard y gate-stop, 7c358fd). Alcance conservador: los hooks
+//     siempre; los scripts sólo en el upstream (`harness-init.mjs`), nunca los propios de un repo.
+section("1e. imports sin uso");
+if (corre("base")) {
+  /** Nombres importados que el resto del archivo no vuelve a nombrar. */
+  const importsSinUso = (texto) => {
+    const sinUso = [];
+    for (const m of texto.matchAll(/^import\s+([\s\S]*?)\s+from\s+["'][^"']+["'];?/gm)) {
+      const resto = texto.slice(0, m.index) + texto.slice(m.index + m[0].length);
+      const nombres = m[1]
+        .replace(/[{}]/g, ",")
+        .split(",")
+        .map((n) => n.trim().replace(/^type\s+/, "").split(/\s+as\s+/).pop().replace(/^\*\s*/, "").trim())
+        .filter((n) => /^[A-Za-z_$][\w$]*$/.test(n));
+      // `obj.n` no es un uso de `n`; `...n` sí (el spread también empieza con punto).
+      for (const n of nombres) if (!new RegExp(`(^|[^\\w$.]|\\.\\.\\.)${n.replace(/\$/g, "\\$")}([^\\w$]|$)`).test(resto)) sinUso.push(n);
+    }
+    return sinUso;
+  };
+  const cebo =
+    'import fs from "node:fs";\nimport path from "node:path";\nimport { a, b as c, d, e } from "x";\n' +
+    "fs.readFileSync(c);\nconst o = { ...d() };\nconsole.log(o.e);\n";
+  const cazados = importsSinUso(cebo).join(",");
+  if (cazados !== "path,a,e") bad("imports sin uso (cebo)", `esperaba \`path,a,e\`, cazó \`${cazados}\``);
+  else ok("imports sin uso: el cebo (`path`, `a`, `e` sólo como `o.e`) es rojo; lo usado y el spread pasan");
+
+  const listar = (dir, recursivo) =>
+    !fs.existsSync(abs(dir))
+      ? []
+      : fs.readdirSync(abs(dir), { withFileTypes: true }).flatMap((e) => {
+          const rel = `${dir}/${e.name}`;
+          if (e.isDirectory()) return recursivo && e.name !== "node_modules" ? listar(rel, true) : [];
+          return e.name.endsWith(".mjs") ? [rel] : [];
+        });
+  const archivos = [
+    ...listar(".claude/hooks", false),
+    ...(fs.existsSync(abs("scripts/harness-init.mjs")) ? listar("scripts", true) : []),
+  ];
+  let conSobras = 0;
+  for (const f of archivos) {
+    const sobras = importsSinUso(fs.readFileSync(abs(f), "utf8"));
+    if (sobras.length) {
+      conSobras += 1;
+      bad(f, `importa y no usa: ${sobras.join(", ")}`);
+    }
+  }
+  if (!conSobras) ok(`${archivos.length} archivo(s) del arnés sin imports sin uso`);
+}
+
 // 1c. El analizador de comandos, contra formas reales de otros repos. Asumir «node <archivo>»
 //     daba FALSO ROJO sobre hooks que existían: un binario externo y `$CLAUDE_PROJECT_DIR`
 //     entre comillas (la forma que recomienda la documentación de Claude Code).
