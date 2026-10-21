@@ -17,7 +17,7 @@ varios, de advertencia concreta para quien lo instale en su repo.
 Síntoma: en una sesión de doctiling cada hook salió con `Cannot find module
          '<repo>/web/specs/<feature>/.claude/hooks/gate-stop.mjs'` y la etiqueta «non-blocking status code»;
          los frenos dejaron pasar todo durante varios turnos (2026-10-21).
-Causa:   `settings.json` declaraba `node .claude/hooks/x.mjs`, relativo. Claude Code corre el hook desde
+Causa:   `settings.json` declaraba cada hook como `node .claude/hooks/<hook>.mjs`, relativo. Claude Code corre el hook desde
          el cwd de la SESIÓN, y un `cd` del agente a una subcarpeta lo movió. MODULE_NOT_FOUND es exit 1,
          y exit 1 no bloquea: el freno falla abierto, en silencio.
 Regla:   todo hook declarado se ancla a la raíz con `node "$CLAUDE_PROJECT_DIR"/<ruta>`.
