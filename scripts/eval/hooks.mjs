@@ -89,7 +89,9 @@ export function exec(executable, argv, { cwd, input = "" } = {}) {
 
 /** Runs one hook command with `payload` on stdin, at the repo root. Never throws. */
 export async function runHook(root, command, payload) {
-  const [cmd, ...rest] = command.split(/\s+/);
+  // Claude Code expands `$CLAUDE_PROJECT_DIR` through its shell; there is no shell here, so resolve it.
+  const resolved = command.replace(/"?\$\{?CLAUDE_PROJECT_DIR\}?"?/g, root);
+  const [cmd, ...rest] = resolved.split(/\s+/);
   const executable = cmd === "node" ? process.execPath : cmd;
   return { command, ...(await exec(executable, rest, { cwd: root, input: JSON.stringify(payload) })) };
 }

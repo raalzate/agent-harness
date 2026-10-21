@@ -432,6 +432,23 @@ for (const [event, groups] of Object.entries(settings.hooks ?? {})) {
 if (!declared.length) {
   bad("hay hooks declarados", "settings.json no declara ninguno: el arnés está instalado y muerto");
 }
+// Claude Code corre cada hook desde el cwd de la SESIÓN, no desde la raíz: con `node .claude/hooks/x.mjs` // linkcheck:ignore (ficticio)
+// un `cd` a una subcarpeta deja todos los hooks en MODULE_NOT_FOUND (exit 1 = no bloqueante), o sea los
+// frenos dejan pasar sin decir nada (doctiling, 2026-10-21). La ruta tiene que anclarse a la raíz.
+const dependeDelCwd = (comando) => {
+  const info = analizarComando(comando);
+  return info?.tipo === "script" && !/\$\{?CLAUDE_PROJECT_DIR\}?/.test(comando) && !path.isAbsolute(info.file);
+};
+if (corre("base")) {
+  const cebos = ["node .claude/hooks/x.mjs", 'node "$CLAUDE_PROJECT_DIR"/.claude/hooks/x.mjs', "node ${CLAUDE_PROJECT_DIR}/.claude/hooks/x.mjs"]; // linkcheck:ignore (ficticio)
+  const marcados = cebos.map(dependeDelCwd).join(",");
+  if (marcados !== "true,false,false") bad("hooks anclados a la raíz (cebo)", `esperaba \`true,false,false\`, dio \`${marcados}\``);
+  const sueltos = declared.filter((d) => dependeDelCwd(d.command));
+  for (const d of sueltos) {
+    bad(`${d.event} → ${d.command}`, 'depende del cwd de la sesión: usá `node "$CLAUDE_PROJECT_DIR"/<ruta>` (un `cd` lo deja en MODULE_NOT_FOUND, que no bloquea)');
+  }
+  if (!sueltos.length && marcados === "true,false,false") ok(`los ${declared.length} hooks declarados no dependen del cwd de la sesión`);
+}
 // `hookFiles` (arriba) lo usan todas las partes y es barato; parsear cada hook, sólo la dueña.
 if (corre("base")) for (const d of declared) {
   if (!d.file) {

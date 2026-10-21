@@ -4,15 +4,15 @@
   "hooks": {
     "SessionStart": [
       {
-        "hooks": [{ "type": "command", "command": "node .claude/hooks/session-start.mjs" }]
+        "hooks": [{ "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/session-start.mjs" }]
       }
     ],
     "UserPromptSubmit": [
       {
         "hooks": [
-          { "type": "command", "command": "node .claude/hooks/ask-first.mjs" },
-          { "type": "command", "command": "node .claude/hooks/sdd-router.mjs" },
-          { "type": "command", "command": "node .claude/hooks/graph-first.mjs" }
+          { "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/ask-first.mjs" },
+          { "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/sdd-router.mjs" },
+          { "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/graph-first.mjs" }
         ]
       }
     ],
@@ -20,37 +20,37 @@
       {
         "matcher": "Write|Edit|MultiEdit|NotebookEdit|mcp__.*",
         "hooks": [
-          { "type": "command", "command": "node .claude/hooks/action-guard.mjs" },
-          { "type": "command", "command": "node .claude/hooks/protected-paths.mjs" },
-          { "type": "command", "command": "node .claude/hooks/reuse-guard.mjs" }
+          { "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/action-guard.mjs" },
+          { "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/protected-paths.mjs" },
+          { "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/reuse-guard.mjs" }
         ]
       },
       {
         "matcher": "Bash",
         "hooks": [
-          { "type": "command", "command": "node .claude/hooks/bash-guard.mjs" },
-          { "type": "command", "command": "node .claude/hooks/deploy-guard.mjs" }
+          { "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/bash-guard.mjs" },
+          { "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/deploy-guard.mjs" }
         ]
       },
       {
         "matcher": "mcp__.*",
-        "hooks": [{ "type": "command", "command": "node .claude/hooks/deploy-guard.mjs" }]
+        "hooks": [{ "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/deploy-guard.mjs" }]
       }
     ],
     "PostToolUse": [
       {
         "matcher": "Write|Edit|MultiEdit|mcp__.*",
-        "hooks": [{ "type": "command", "command": "node .claude/hooks/post-edit-check.mjs" }]
+        "hooks": [{ "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/post-edit-check.mjs" }]
       }
     ],
     "Stop": [
       {
-        "hooks": [{ "type": "command", "command": "node .claude/hooks/gate-stop.mjs" }]
+        "hooks": [{ "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/gate-stop.mjs" }]
       }
     ],
     "SubagentStop": [
       {
-        "hooks": [{ "type": "command", "command": "node .claude/hooks/subagent-contract.mjs" }]
+        "hooks": [{ "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/subagent-contract.mjs" }]
       }
     ]
   }
