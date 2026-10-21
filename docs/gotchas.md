@@ -12,6 +12,18 @@ varios, de advertencia concreta para quien lo instale en su repo.
 
 ---
 
+### GOTCHA: un `cd` del agente apagó todos los hooks sin bloquear nada
+
+Síntoma: en una sesión de doctiling cada hook salió con `Cannot find module
+         '<repo>/web/specs/<feature>/.claude/hooks/gate-stop.mjs'` y la etiqueta «non-blocking status code»;
+         los frenos dejaron pasar todo durante varios turnos (2026-10-21).
+Causa:   `settings.json` declaraba `node .claude/hooks/x.mjs`, relativo. Claude Code corre el hook desde
+         el cwd de la SESIÓN, y un `cd` del agente a una subcarpeta lo movió. MODULE_NOT_FOUND es exit 1,
+         y exit 1 no bloquea: el freno falla abierto, en silencio.
+Regla:   todo hook declarado se ancla a la raíz con `node "$CLAUDE_PROJECT_DIR"/<ruta>`.
+Mecanismo: self-test §1 «los hooks declarados no dependen del cwd de la sesión» (rojo con un comando
+         relativo, con su cebo); `scripts/eval/hooks.mjs` resuelve la variable como lo haría el shell.
+
 ### GOTCHA: escribir la config del arnés dispara el propio arnés
 
 Síntoma: crear `.claude/harness.config.json` con un heredoc del shell muere con
