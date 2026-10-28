@@ -434,7 +434,7 @@ if (!declared.length) {
 }
 // Claude Code corre cada hook desde el cwd de la SESIÓN, no desde la raíz: con `node .claude/hooks/x.mjs` // linkcheck:ignore (ficticio)
 // un `cd` a una subcarpeta deja todos los hooks en MODULE_NOT_FOUND (exit 1 = no bloqueante), o sea los
-// frenos dejan pasar sin decir nada (doctiling, 2026-10-21). La ruta tiene que anclarse a la raíz.
+// frenos dejan pasar sin decir nada (repo portado, 2026-10-21). La ruta tiene que anclarse a la raíz.
 const dependeDelCwd = (comando) => {
   const info = analizarComando(comando);
   return info?.tipo === "script" && !/\$\{?CLAUDE_PROJECT_DIR\}?/.test(comando) && !path.isAbsolute(info.file);
