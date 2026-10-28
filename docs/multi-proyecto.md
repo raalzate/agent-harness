@@ -160,4 +160,5 @@ auto-sincroniza al guardar, y queda fuera del repo porque es derivado.
 
 Ver también: [cicd.md](cicd.md) (el pipeline en cada forja), [codegraph.md](codegraph.md) (el
 índice), [arquitectura.md](arquitectura.md) (acoplamiento entre paquetes),
-[trazabilidad.md](trazabilidad.md) (el registro, en cualquier gestor).
+[trazabilidad.md](trazabilidad.md) (el registro, en cualquier gestor),
+[worktrees.md](worktrees.md) (varios agentes en paralelo sobre un mismo repo).

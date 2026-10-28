@@ -120,6 +120,12 @@ servían (P14). Por eso `pairing` viene **apagado** en este repo —con un agent
 fuga sería la regla— y su mecanismo se prueba igual con un cebo del self-test: el freno existe y
 muerde el día que alguien lo encienda.
 
+### Varias ramas a la vez
+
+Una rama por tarea, y si hay varios agentes trabajando en paralelo, **una carpeta por rama**: un
+worktree cada uno, fuera de la raíz del repo ([worktrees.md](worktrees.md)). El patrón de rama y la
+edad máxima se miden igual; lo que cambia es que ninguna tarea comparte archivos de trabajo con otra.
+
 ---
 
 ## Qué pasa cuando el freno muerde
