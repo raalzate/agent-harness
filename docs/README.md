@@ -45,6 +45,7 @@ El orden que funciona: **el método** (qué se hace y por qué) → **el caso** 
 | [despliegue.md](despliegue.md) | **Desplegar a cualquier nube.** Un camino con dry-run, precondiciones y registro; el agente despliega solo donde está declarado y el humano decide producción. |
 | [multiplataforma.md](multiplataforma.md) | **Windows, macOS y Linux.** Qué corre con qué intérprete, las seis trampas que hacían que un freno no fallara sino que desapareciera, y la matriz de CI que lo demuestra. |
 | [multi-proyecto.md](multi-proyecto.md) | **Varios proyectos.** Monorepo, varios repos o una plataforma entera: dónde va el gate, qué viaja entre repos y qué no, cómo se actualiza el arnés en N proyectos sin quedar desparejo. |
+| [worktrees.md](worktrees.md) | **Varios agentes a la vez sin pisarse.** Qué es un worktree, el ciclo completo con comandos (crear fuera del repo, sesión adentro, gate, PR, borrar), qué ya garantiza el arnés (tarea por worktree) y los huecos que ninguna máquina verifica todavía. |
 | [panel.md](panel.md) | **El panel del arnés.** Una página que se regenera en cada gate: la salud del arnés (mapa, frenos instalados y muertos, hooks, controles fuera del gate), la memoria del repo y lo que corrió de verdad en esta máquina. Cómo se configura en cualquier stack y cómo se conecta a tu gestor sin que el arnés conozca ninguna forja. |
 | [recetas.md](recetas.md) | Recetas por situación: cómo se ve el gate en cada stack, cómo se agrega una señal, cómo se mide si el arnés está vivo. |
 
