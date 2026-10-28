@@ -53,7 +53,7 @@ git worktree prune
 | La tarea declarada es **por worktree**: cada agente tiene su propio `alcance` y sus propios criterios | `task.file` vive en `.git/…`, que en un worktree se resuelve a **su** gitdir (`rutaDeEstado`); self-test 3e |
 | Los hooks de Claude Code corren desde el worktree | cada comando está anclado a `$CLAUDE_PROJECT_DIR` (ver el gotcha del `cd`) |
 | Los hooks de git corren en cada worktree | `core.hooksPath=.githooks` es relativo y `.githooks/` está versionado: `hooks-install` una vez por clone |
-| El panel, `hooks-timing` y `skipIfMissing` resuelven sus rutas `.git/…` al gitdir real, no al árbol | `panel/generar.mjs`, `hooks-timing.mjs`, `gate.mjs` (ver el hueco del registro más abajo) |
+| El gate (su registro de la corrida y `skipIfMissing`), el deploy, el panel y `hooks-timing` resuelven sus rutas `.git/…` al gitdir real, no al árbol | `gate.mjs`, `deploy.mjs`, `panel/generar.mjs`, `hooks-timing.mjs`; self-test 11g-bis |
 | La misma rama no se abre dos veces | lo impone git |
 | La medición `--verify-red` usa su propio worktree temporal, fuera del repo, y no deja ninguno registrado | `cycle-check.mjs`, self-test «ciclo (rojo sin el cambio)» |
 
@@ -87,7 +87,7 @@ self-test:
 | Un worktree dentro de la raíz no lo detecta el genérico | una señal del gate que liste `git worktree list` y falle por los que estén bajo el repo |
 | Worktrees huérfanos (rama ya integrada, carpeta viva) | la misma señal, en modo aviso |
 | El nombre de la carpeta | nada: convención |
-| El registro de la corrida (`gate.registry`, `.git/harness-gate.json`) no se escribe desde un worktree: el gate avisa `no pude escribir el registro … EEXIST` y sigue. Lo que lo lee (`deploy.mjs`, `ci-investigate.mjs`) no ve esa corrida | resolver esa ruta con `rutaDeEstado`, como ya hacen `task.mjs` y el panel (`gate.mjs:238`, `deploy.mjs:117`, `ci-investigate.mjs:198`), con su caso de self-test |
+| El panel lee el registro del gate con `path.join(raiz, …)` (`panel/leer-en-vivo.mjs`, `panel/sincronizar.mjs`): desde un worktree no lo encuentra y muestra la corrida como si no existiera | resolver esa ruta con el mismo criterio que `resolverSalida`, con su caso de self-test |
 
 ## Prueba de vida
 
