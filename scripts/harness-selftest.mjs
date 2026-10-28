@@ -4503,6 +4503,36 @@ if (corre("fuera")) {
       fs.rmSync(wt, { recursive: true, force: true });
     }
 
+    // 11g-bis. El registro de la corrida también va al gitdir real: desde un worktree real (no un
+    //      `.git` simulado), el gate lo escribe sin avisar de un EEXIST y el panel lo encuentra.
+    const principal = temporal("harness-registro-wt-");
+    const arbol = `${principal}-wt`;
+    try {
+      const gitP = (...args) => spawnSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", ...args], { cwd: principal, encoding: "utf8" });
+      gitP("init", "-q");
+      for (const rel of ["scripts/gate.mjs", ".claude/hooks/harness.mjs", "scripts/harness-map.mjs", ...modulos.map((f) => `scripts/panel/${f}`)]) {
+        escribir(principal, rel, fs.readFileSync(abs(rel), "utf8"));
+      }
+      escribir(principal, ".claude/harness.config.json", JSON.stringify({ gate: { signals: [{ name: "pasa", command: ["node", "-e", "process.exit(0)"], why: "cebo" }] }, panel: { tokens: false } }));
+      gitP("add", "-A");
+      gitP("commit", "-q", "-m", "base");
+      gitP("worktree", "add", "-q", arbol);
+      const r = spawnSync("node", ["scripts/gate.mjs"], { cwd: arbol, encoding: "utf8" });
+      const gitdir = spawnSync("git", ["rev-parse", "--path-format=absolute", "--git-dir"], { cwd: arbol, encoding: "utf8" }).stdout.trim();
+      let registro = null;
+      try {
+        registro = JSON.parse(fs.readFileSync(path.join(gitdir, "harness-gate.json"), "utf8"));
+      } catch {
+        registro = null;
+      }
+      const sinAviso = !`${r.stdout}${r.stderr}`.includes("no pude escribir el registro");
+      if (r.status === 0 && registro?.veredicto === "verde" && sinAviso) ok("registro del gate: desde un worktree se escribe en su gitdir real, sin EEXIST");
+      else bad("registro del gate en un worktree", `exit ${r.status}; registro ${registro ? registro.veredicto : "no escrito"}; aviso ${sinAviso ? "no" : "sí"}`);
+    } finally {
+      fs.rmSync(arbol, { recursive: true, force: true });
+      fs.rmSync(principal, { recursive: true, force: true });
+    }
+
     // 11i. El burn-down sale de los DATOS y de nada más. Un repo git temporal con commits de fecha
     //      fija: la serie tiene que ser exacta, un merge no puede contar dos veces lo que trae, lo
     //      tildado sin commitear se ve aparte, y dos corridas dan la misma versión (sin reloj).

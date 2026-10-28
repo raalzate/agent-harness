@@ -12,6 +12,19 @@ varios, de advertencia concreta para quien lo instale en su repo.
 
 ---
 
+### GOTCHA: el gate corrido desde un worktree no dejaba su registro
+
+Síntoma: `no pude escribir el registro .git/harness-gate.json: EEXIST … mkdir '<worktree>/.git'` al
+         final de cada gate verde en un worktree; lo que lee ese registro (el deploy, el panel) no veía
+         la corrida.
+Causa:   `gate.mjs` y `deploy.mjs` armaban la ruta con `path.join(REPO_ROOT, rel)`. En un worktree
+         `.git` es un ARCHIVO (`gitdir: …`), así que `.git/harness-gate.json` no se puede crear.
+         El gate no se ponía rojo —un registro que no se escribe es un panel con menos datos—, así
+         que el aviso pasaba como ruido.
+Regla:   toda ruta `.git/…` declarada en el config se resuelve con `rutaDeEstado`, no con `path.join`.
+Mecanismo: caso 11g-bis del self-test: un worktree real corre el gate y el registro tiene que quedar
+         en su gitdir, sin el aviso (rojo sin el cambio, verificado).
+
 ### GOTCHA: un `cd` del agente apagó todos los hooks sin bloquear nada
 
 Síntoma: en una sesión de doctiling cada hook salió con `Cannot find module

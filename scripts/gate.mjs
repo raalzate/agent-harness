@@ -236,7 +236,8 @@ if (fallidas.length) {
  */
 function registrar(veredicto) {
   const rel = config.gate?.registry ?? ".git/harness-gate.json";
-  const abs = path.join(REPO_ROOT, rel);
+  // `rutaDeEstado`: en un worktree `.git` es un archivo y `.git/harness-gate.json` no se puede crear.
+  const abs = rutaDeEstado(rel);
   const git = (...args) => {
     const r = spawnSync("git", args, { cwd: REPO_ROOT, encoding: "utf8", windowsHide: true });
     return r.status === 0 ? r.stdout.trim() : null;
