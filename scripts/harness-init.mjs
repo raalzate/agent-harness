@@ -245,6 +245,7 @@ const COPIAR = [
   "docs/agilidad.md",
   "docs/ciclo-desarrollo.md",
   "docs/multi-proyecto.md",
+  "docs/worktrees.md",
   "docs/multiplataforma.md",
   // Lo cita el panel (sus scripts y la página que genera).
   "docs/panel.md",
