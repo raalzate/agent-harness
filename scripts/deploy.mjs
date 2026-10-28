@@ -34,7 +34,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
-import { existeEjecutable, resolverEjecutable, REPO_ROOT } from "../.claude/hooks/harness.mjs";
+import { existeEjecutable, resolverEjecutable, rutaDeEstado, REPO_ROOT } from "../.claude/hooks/harness.mjs";
 
 const args = process.argv.slice(2);
 const RUTA_CONFIG_REL = ".claude/harness.config.json";
@@ -117,7 +117,7 @@ if (requiere.has("gate")) {
   const rel = config.gate?.registry ?? ".git/harness-gate.json";
   let reg = null;
   try {
-    reg = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, rel), "utf8"));
+    reg = JSON.parse(fs.readFileSync(rutaDeEstado(rel), "utf8"));
   } catch {
     reg = null;
   }
