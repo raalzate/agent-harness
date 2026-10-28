@@ -26,7 +26,7 @@ Mecanismo: ninguno en el arnés genérico todavía — hueco declarado en `docs/
 
 ### GOTCHA: un `cd` del agente apagó todos los hooks sin bloquear nada
 
-Síntoma: en una sesión de doctiling cada hook salió con `Cannot find module
+Síntoma: en una sesión de un repo portado cada hook salió con `Cannot find module
          '<repo>/web/specs/<feature>/.claude/hooks/gate-stop.mjs'` y la etiqueta «non-blocking status code»;
          los frenos dejaron pasar todo durante varios turnos (2026-10-21).
 Causa:   `settings.json` declaraba cada hook como `node .claude/hooks/<hook>.mjs`, relativo. Claude Code corre el hook desde
