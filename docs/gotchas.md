@@ -12,6 +12,19 @@ varios, de advertencia concreta para quien lo instale en su repo.
 
 ---
 
+### GOTCHA: en Windows un worktree dentro de la raíz se veía afuera
+
+Síntoma: CI rojo sólo en `gate (windows-latest)`: el caso 3g-wt del self-test esperaba exit 1 de
+         `worktree-check` con un worktree visible dentro de la raíz, y salió 0. Verde en macOS y Linux.
+Causa:   la carpeta temporal del runner llega con el nombre corto 8.3 (`C:\Users\RUNNER~1\…`).
+         `fs.realpathSync` lo deja así y `git worktree list` reporta el nombre largo
+         (`C:/Users/runneradmin/…`): `path.relative` daba una ruta con `..` y el worktree «estaba
+         afuera».
+Regla:   para comparar rutas propias con rutas que reporta git, `fs.realpathSync.native`, que en
+         Windows expande los nombres 8.3.
+Mecanismo: el caso 3g-wt del self-test, que corre en la matriz de CI con `windows-latest`: lo cazó
+         en el PR #76 y vuelve a ponerse rojo si la comparación pierde el `.native`.
+
 ### GOTCHA: el gate corrido desde un worktree no dejaba su registro
 
 Síntoma: `no pude escribir el registro .git/harness-gate.json: EEXIST … mkdir '<worktree>/.git'` al

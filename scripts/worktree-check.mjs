@@ -57,9 +57,12 @@ const worktrees = listado.out
   .filter((w) => w.ruta);
 
 // realpath on both sides: on macOS /tmp is /private/tmp, and git reports the resolved one.
+// `.native`: on Windows the temp folder can arrive as an 8.3 short name (`RUNNER~1`) that the JS
+// realpath keeps, while git reports the long one (`runneradmin`) — the worktree then looked
+// OUTSIDE the root and the check went green with a visible worktree (CI, windows-latest).
 const real = (p) => {
   try {
-    return fs.realpathSync(p);
+    return fs.realpathSync.native(p);
   } catch {
     return path.resolve(p);
   }
