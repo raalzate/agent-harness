@@ -3,7 +3,7 @@
 > GENERADO por `node scripts/library.mjs index`: no se edita a mano. Lo consulta el subagente
 > `librarian`; lo verifica la señal del gate `library index (docs)`.
 
-42 entradas en 6 bases · 42 documentos (no estructurado) · 0 tablas · 0 grafos (estructurado).
+44 entradas en 6 bases · 42 documentos (no estructurado) · 1 tablas · 1 grafos (estructurado).
 
 ## Bases de conocimiento
 
@@ -13,7 +13,7 @@
 | [diseno](#diseno) | Decisiones de diseño: arquitectura y ADR, con su porqué | la teoría general (metodo) y el uso diario (flujo) | 17 |
 | [instalacion](#instalacion) | Instalar y portar el arnés en otro repo, stack o plataforma | el trabajo diario una vez instalado (flujo) | 5 |
 | [flujo](#flujo) | El ciclo de trabajo: ramas, registro, SDD, CI/CD, despliegue y worktrees | cómo funciona cada pieza del arnés por dentro (referencia) | 6 |
-| [referencia](#referencia) | El arnés por dentro: claves del config, señales, índices, panel, evaluaciones y recetas | el porqué de fondo (metodo) y los incidentes (incidentes) | 8 |
+| [referencia](#referencia) | El arnés por dentro: claves del config, señales, índices, panel, evaluaciones y recetas | el porqué de fondo (metodo) y los incidentes (incidentes) | 10 |
 | [incidentes](#incidentes) | Incidentes reales del arnés en formato fijo: síntoma, causa, regla, mecanismo | decisiones de diseño tomadas sin incidente (diseno) | 1 |
 
 ## metodo
@@ -89,7 +89,9 @@
 | [El índice del código es obligatorio — codegraph](codegraph.md) | documento | La herramienta es codegraph: un grafo de conocimiento del repo (símbolos, llamadas, radio de impacto) en una base SQLite local, sin API keys y sin que el código salga de la máquina. El arnés no la conoce por dentro: la… |
 | [Referencia de `.claude/harness.config.json`](config-reference.md) | documento | El único archivo específico del repo. Los hooks y los scripts son genéricos: leen de acá. Portar el arnés = reescribir este archivo. |
 | [Evaluaciones del arnés: determinista y con IA](evaluaciones.md) | documento | Dos familias que no se mezclan, porque se prueban distinto: |
+| [Mapa del arnés](mapa-del-arnes.json) | grafo (46 nodos, 55 aristas) | GENERADO por `node scripts/harness-map.mjs --graph`: cada etapa del ciclo y las guías, frenos y sensores que actúan en ella, desde `taxonomy`. No se edita a mano. |
 | [El panel del arnés](panel.md) | documento | Una página HTML autocontenida que contesta de un vistazo tres preguntas: ¿el arnés está vivo?, ¿qué dice la memoria del repo? y ¿qué pasó de verdad en esta máquina?. Sin dependencias, sin red (salvo las sondas a localho… |
+| [Quién lee cada clave](quien-lee-cada-clave.md) | tabla | Claves del config y los scripts que las leen (42) |
 | [Recetas](recetas.md) | documento | Situaciones concretas, con el comando al lado. Todo lo de acá asume el arnés ya instalado (docs/portar.md). |
 
 ## incidentes

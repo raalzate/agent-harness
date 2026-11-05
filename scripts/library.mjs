@@ -116,6 +116,27 @@ function tokens(text) {
     .map(stem);
 }
 
+/**
+ * Synonyms: the ranking matches words, not meaning, so «despliegue» never found «deploy». Each
+ * group in `library.query.synonyms` is one concept; a term that belongs to a group matches any
+ * word of it. Natural-language words, so they live in the config, not here.
+ */
+const SYNONYMS = (lib.query?.synonyms ?? []).map((group) => [...new Set(group.flatMap((w) => tokens(w)))]);
+
+/** Each search term becomes its alternatives: itself plus its synonym group, if it has one. */
+function expand(words) {
+  return [...new Set(words)].map((q) => {
+    const group = SYNONYMS.find((alts) => alts.some((a) => a.startsWith(q) || q.startsWith(a)));
+    return group ? [...new Set([q, ...group])] : [q];
+  });
+}
+
+/** How many search terms (any of their alternatives) appear at the start of a word of `text`. */
+function countTerms(text, terms) {
+  const words = tokens(text ?? "");
+  return terms.filter((alts) => words.some((w) => alts.some((q) => w.startsWith(q)))).length;
+}
+
 // ── classification: one file → one kind ──────────────────────────────────────
 const isRow = (l) => /^\s*\|.*\|\s*$/.test(l);
 const isSeparator = (l) => /^\s*\|(\s*:?-{3,}:?\s*\|)+\s*$/.test(l);
@@ -397,10 +418,7 @@ function loadCatalog() {
 /** Where a topic matched inside one entry: sections, rows or nodes — the kind decides. */
 function locate(entry, terms) {
   const text = fs.existsSync(abs(entry.path)) ? read(entry.path) : "";
-  const hit = (s) => {
-    const t = tokens(s);
-    return terms.filter((q) => t.some((w) => w.startsWith(q))).length;
-  };
+  const hit = (s) => countTerms(s, terms);
   if (entry.kind === "table") {
     return parseTables(text)
       .flatMap((t) => t.rows.map((r) => ({ score: hit(r.cells.join(" ")) + hit(t.heading ?? ""), where: `${entry.path}:${r.line}`, text: clip(r.cells.join(" | "), 160) })))
@@ -442,31 +460,39 @@ function cmdQuery() {
     console.error('library: query needs a topic — `node scripts/library.mjs query "<topic>"`.');
     process.exit(2);
   }
-  const terms = [...new Set(tokens(topic))];
+  const terms = expand(tokens(topic));
   const catalog = loadCatalog();
   const concept = Object.fromEntries(BASES.map((b) => [b.id, `${b.concept} ${(b.keywords ?? []).join(" ")}`]));
   const kind = flag("kind");
   const base = flag("base");
+  // A boost says "this kind of question lives on that shelf" («qué se decidió» → the ADRs). It
+  // only reorders entries that already matched: it never brings in one with nothing on the topic.
+  const boosts = (lib.query?.boosts ?? []).filter((b) => {
+    try {
+      return new RegExp(b.when, "i").test(topic);
+    } catch {
+      return false;
+    }
+  });
   const scored = catalog.entries
     .filter((e) => (!kind || e.kind === kind) && (!base || e.base === base))
     .map((e) => {
-      const count = (s) => {
-        const t = tokens(s ?? "");
-        return terms.filter((q) => t.some((w) => w.startsWith(q))).length;
-      };
+      const count = (s) => countTerms(s, terms);
       const meta = count(e.title) * 5 + count(e.summary) * 2 + count((e.headings ?? []).join(" ")) * 2 + count(concept[e.base]) * 2 + count((e.tables ?? []).flatMap((t) => [t.heading, ...t.columns]).join(" ")) * 3 + count((e.nodeTypes ?? []).join(" ")) * 3;
       const where = locate(e, terms).sort((a, b) => b.score - a.score).slice(0, 4);
-      return { ...e, score: meta + where.reduce((s, w) => s + w.score, 0), where };
+      const found = meta + where.reduce((s, w) => s + w.score, 0);
+      const boost = found > 0 ? boosts.filter((b) => b.base === e.base).reduce((s, b) => s + Number(b.score ?? 0), 0) : 0;
+      return { ...e, score: found + boost, where };
     })
     .filter((e) => e.score > 0)
     .sort((a, b) => b.score - a.score || a.path.localeCompare(b.path))
     .slice(0, LIMIT);
   if (has("json")) {
-    console.log(JSON.stringify({ topic, terms, hits: scored }, null, 2));
+    console.log(JSON.stringify({ topic, terms: terms.map((t) => t.join("|")), hits: scored }, null, 2));
     return;
   }
   if (!scored.length) {
-    console.log(`library: nothing on "${topic}" (terms: ${terms.join(", ") || "none"}). Say so — do not answer from memory.`);
+    console.log(`library: nothing on "${topic}" (terms: ${terms.map((t) => t.join("|")).join(", ") || "none"}). Say so — do not answer from memory.`);
     return;
   }
   console.log(`library: "${topic}" → ${scored.length} hit(s)`);

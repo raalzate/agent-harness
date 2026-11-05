@@ -3097,7 +3097,9 @@ if (enParte("perfiles")) {
             } else {
               bad(
                 `perfil \`${perfil}\` → el arnés instalado no apunta a la nada`,
-                `\`docs-linkcheck\` del repo portado sale rojo el primer día:\n      ${(punteros.stdout ?? "").trim().split("\n").slice(0, 4).join("\n      ")}`,
+                // stdout Y stderr: el link-check imprime cada puntero roto por stderr, y mostrar sólo
+                // stdout dejaba el motivo vacío (pasó al citar una ruta que el instalador no copia).
+                `\`docs-linkcheck\` del repo portado sale rojo el primer día:\n      ${`${punteros.stderr ?? ""}\n${punteros.stdout ?? ""}`.trim().split("\n").filter(Boolean).slice(0, 4).join("\n      ")}`,
               );
             }
           }
@@ -3878,7 +3880,7 @@ process.exit(results.length ? 100 : 0);
 `,
       );
 
-      const bait = (agentName, { promptfoo = ["node", fake], minNode = "0.0.0", cases = null } = {}) => {
+      const bait = (agentName, { promptfoo = ["node", fake], minNode = "0.0.0", cases = null, extra = [] } = {}) => {
         const file = path.join(tmp, `config-${agentName}.json`);
         fs.writeFileSync(
           file,
@@ -3907,7 +3909,7 @@ process.exit(results.length ? 100 : 0);
             },
           }),
         );
-        const r = spawnSync("node", [script, "--config", file], { cwd: REPO_ROOT, encoding: "utf8" });
+        const r = spawnSync("node", [script, "--config", file, ...extra], { cwd: REPO_ROOT, encoding: "utf8" });
         return { status: r.status, out: `${r.stdout ?? ""}${r.stderr ?? ""}` };
       };
 
@@ -3923,6 +3925,25 @@ process.exit(results.length ? 100 : 0);
       else bad("AI eval: the rubric score is reported", good.out.trim().slice(0, 240));
 
       const lenient = bait("lenient");
+
+      // `--report`: the page is written even when the suite is RED (that is when it is read), with
+      // every run inside it and its verdict, and the data cannot close its own <script> tag.
+      const reportFile = path.join(tmp, "out", "report.html");
+      const detFile = path.join(tmp, "det.json");
+      fs.writeFileSync(detFile, JSON.stringify({ green: true, groups: { guides: { passed: 1, total: 1 } } }));
+      const reported = bait("lenient", { extra: ["--report", reportFile, "--with-deterministic", detFile] });
+      const page = fs.existsSync(reportFile) ? fs.readFileSync(reportFile, "utf8") : "";
+      const data = (() => {
+        try {
+          return JSON.parse(page.match(/<script id="data" type="application\/json">([\s\S]*?)<\/script>/)[1].replace(/<\\\//g, "</"));
+        } catch {
+          return null;
+        }
+      })();
+      const casos = data?.ai?.suites?.[0]?.cases ?? [];
+      if (reported.status === 1 && !page.includes("__DATA__") && casos.length === 2 && casos.every((c) => c.runs.length === 2) && casos.some((c) => c.runs.some((x) => !x.pass && x.why)) && data.det?.green === true)
+        ok("AI eval: `--report` writes one page even on RED, with every run, its verdict and why, plus the deterministic report when given");
+      else bad("AI eval: --report", `exit ${reported.status} · page ${page.length} bytes · ${JSON.stringify(casos.map((c) => [c.name, c.runs.map((x) => x.pass)]))} · det ${JSON.stringify(data?.det)}`);
       if (lenient.status === 1 && /AI EVAL RED/.test(lenient.out) && /0\/2.*label/.test(lenient.out))
         ok("AI eval: an agent that says green to everything goes RED, and a 0/n case points at the label too");
       else bad("AI eval: a lenient agent goes red", `exit ${lenient.status}: ${lenient.out.trim().slice(0, 240)}`);
@@ -4268,6 +4289,27 @@ if (corre("fuera")) {
       else bad("mapa del arnés caza lo no clasificado", `exit ${r.status}: ${`${r.stdout}${r.stderr}`.trim().slice(0, 200)}`);
     } finally {
       fs.rmSync(tmp, { recursive: true, force: true });
+    }
+
+    // The map as a library graph (`taxonomy.graphFile`): generated, so it must match what the
+    // generator gives TODAY. A graph that kept an old signal would answer the librarian with a
+    // control that no longer exists — the worst kind of index, one that looks structured.
+    const destino = config.taxonomy.graphFile;
+    if (!destino) skip("mapa del arnés como grafo", "el config no declara `taxonomy.graphFile`");
+    else {
+      try {
+        const { construirMapa, mapaComoGrafo } = await import(pathToFileURL(script).href);
+        const esperado = `${JSON.stringify(mapaComoGrafo(construirMapa({ config, settings }), config.library?.kinds?.graph), null, 2)}\n`;
+        const enDisco = fs.existsSync(abs(destino)) ? fs.readFileSync(abs(destino), "utf8").replace(/\r\n/g, "\n") : null;
+        const k = config.library?.kinds?.graph ?? {};
+        const grafo = JSON.parse(esperado);
+        const ids = new Set(grafo[k.nodesKey ?? "nodes"].map((n) => n[k.idKey ?? "id"]));
+        const colgadas = grafo[k.edgesKey ?? "edges"].filter((e) => !ids.has(e[k.fromKey ?? "from"]) || !ids.has(e[k.toKey ?? "to"]));
+        if (enDisco === esperado && !colgadas.length) ok(`mapa del arnés como grafo: \`${destino}\` coincide con el mapa de hoy y ninguna arista cuelga`);
+        else bad("mapa del arnés como grafo", enDisco === null ? `\`${destino}\` no existe: \`node scripts/harness-map.mjs --graph\`` : colgadas.length ? `${colgadas.length} arista(s) a nodos inexistentes` : `\`${destino}\` quedó viejo: \`node scripts/harness-map.mjs --graph\` y re-indexá la biblioteca`);
+      } catch (e) {
+        bad("mapa del arnés como grafo", e.message);
+      }
     }
   }
 }
@@ -4811,6 +4853,16 @@ if (corre("biblioteca")) {
       if (q.hits?.[0]?.path === "kb/team.md" && q.hits[0].where.some((x) => x.where === "kb/team.md:8") && g.hits?.[0]?.where?.[0]?.where === "kb/flow.json#charge" && /Luis \| payments/.test(fila) && !/Ana/.test(fila) && /edge charge → invoice/.test(nodo) && seccion.status === 2)
         ok("library: query answers a fact with the table row and a relation with the graph node; lookup reads by row, node and section (a `#` in a code fence is not one)");
       else bad("library: query and lookup", `${JSON.stringify(q.hits?.[0]?.where)} · ${JSON.stringify(g.hits?.[0]?.where)} · ${fila} · ${nodo} · section ${seccion.status}`);
+
+      // Synonyms and boosts: «cobro» finds the graph that says «charge»; a boost reorders what
+      // already matched and never brings in an entry with nothing on the topic.
+      cfg({ ...base, query: { synonyms: [["charge", "cobro"]], boosts: [{ when: "\\bhandles\\b", base: "team", score: 50 }] } });
+      const sinonimo = JSON.parse(lib("query", "cobro", "--kind", "graph", "--json").stdout || "{}");
+      const empuje = JSON.parse(lib("query", "handles payments", "--json").stdout || "{}");
+      cfg(base);
+      if (sinonimo.hits?.[0]?.path === "kb/flow.json" && empuje.hits?.[0]?.path === "kb/team.md" && !empuje.hits.some((h) => h.path === "kb/notes.md"))
+        ok("library: a synonym group finds «charge» when asked for «cobro»; a boost puts its base first without adding entries that did not match");
+      else bad("library: synonyms and boosts", `synonym ${JSON.stringify(sinonimo.hits?.map((h) => h.path))} · boost ${JSON.stringify(empuje.hits?.map((h) => [h.path, h.score]))}`);
 
       // Migrate: dry-run touches nothing; --apply refuses a dirty tree; then moves, relinks, skips protected.
       const seco = lib("migrate");

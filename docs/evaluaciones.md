@@ -235,7 +235,15 @@ node scripts/ai-eval.mjs --only=gate-runner       # una suite
 node scripts/ai-eval.mjs --case="<nombre>"        # un caso
 node scripts/ai-eval.mjs --repeat=5               # más repeticiones
 node scripts/ai-eval.mjs --keep                   # conserva la corrida para `promptfoo view`
+node scripts/harness-eval.mjs --json > det.json   # el informe determinista, para sumarlo al de abajo
+node scripts/ai-eval.mjs --report informe.html --with-deterministic det.json
 ```
+
+`--report` escribe **una página** con todo: por subagente y por caso, la entrada, cada respuesta,
+nuestro veredicto con su motivo y la razón del juez; arriba, lo que hay que mejorar, derivado de la
+corrida (0/n → revisá la etiqueta, k/n intermedio → el agente es inestable, calidad < 0,7 → el
+formato). Se escribe también cuando la suite sale roja, que es cuando más se lee. La plantilla es
+`scripts/eval/ai-report.html`; la ruta de salida la elige quien corre, nunca el árbol del repo.
 
 ### Qué mide
 

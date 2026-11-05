@@ -23,6 +23,10 @@ Cada entrada vive en **una sola base de conocimiento**. Una base es un concepto 
 es la prueba mecánica de que dos conceptos se pisan, y el `check` lo rechaza.
 
 Las bases de este repo, su concepto y sus entradas están en el apéndice: [INDICE.md](INDICE.md).
+La información estructurada de este repo: una tabla, [quien-lee-cada-clave.md](quien-lee-cada-clave.md)
+(cada clave del config y quién la lee), y un grafo, [mapa-del-arnes.json](mapa-del-arnes.json) (cada
+etapa del ciclo y las guías, frenos y sensores que actúan en ella). El grafo es **generado**
+(`node scripts/harness-map.mjs --graph`) y el self-test lo compara con el mapa de hoy.
 
 ## Dos índices, uno por lector
 
@@ -47,7 +51,9 @@ node scripts/library.mjs lookup <ruta> --section "Consecuencias" # un documento,
 node scripts/library.mjs migrate                       # dry-run: qué va a qué base
 ```
 
-`query` busca sin distinguir mayúsculas ni tildes, ignora `library.query.stopwords` y da puntos
+`query` busca sin distinguir mayúsculas ni tildes, ignora `library.query.stopwords`, expande cada
+término con su grupo de `library.query.synonyms` («despliegue» casa «deploy»), suma los `boosts`
+de la base que corresponde a la forma de la pregunta («qué se decidió» → `diseno`) y da puntos
 por título, resumen, secciones, concepto de la base, columnas y tipos de nodo; después lee cada
 candidato y devuelve la sección, la fila o el nodo donde casó, con `ruta:línea` o `ruta#nodo`.
 
@@ -113,7 +119,8 @@ nadie (P5). La prueba de vida está en la sección 12 del self-test.
 
 ## Qué NO hace
 
-- No entiende el contenido: el ranking es por términos, no semántico. La comprensión la pone el
+- No entiende el contenido: el ranking es por términos, no semántico; los sinónimos son los que
+  alguien declaró. La comprensión la pone el
   `librarian` al leer lo señalado; el índice sólo evita que lea de más.
 - No decide las bases: las sugiere. Un concepto bien delimitado lo escribe una persona.
 - No convierte prosa en tablas ni en grafos: eso lo propone el skill `library-migrate`, y lo

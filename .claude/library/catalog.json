@@ -30,7 +30,7 @@
       "id": "referencia",
       "concept": "El arnés por dentro: claves del config, señales, índices, panel, evaluaciones y recetas",
       "scope": "el porqué de fondo (metodo) y los incidentes (incidentes)",
-      "entries": 8
+      "entries": 10
     },
     {
       "id": "incidentes",
@@ -609,6 +609,21 @@
       ]
     },
     {
+      "path": "docs/mapa-del-arnes.json",
+      "kind": "graph",
+      "base": "referencia",
+      "title": "Mapa del arnés",
+      "summary": "GENERADO por `node scripts/harness-map.mjs --graph`: cada etapa del ciclo y las guías, frenos y sensores que actúan en ella, desde `taxonomy`. No se edita a mano.",
+      "nodes": 46,
+      "edges": 55,
+      "nodeTypes": [
+        "etapa",
+        "freno",
+        "guía",
+        "sensor"
+      ]
+    },
+    {
       "path": "docs/metodo.md",
       "kind": "document",
       "base": "metodo",
@@ -733,6 +748,23 @@
         "5. El gate: la única definición de «entregable» (1 min)",
         "6. Qué acabás de montar",
         "7. Y ahora, tu repo"
+      ]
+    },
+    {
+      "path": "docs/quien-lee-cada-clave.md",
+      "kind": "table",
+      "base": "referencia",
+      "title": "Quién lee cada clave",
+      "summary": "Claves del config y los scripts que las leen (42)",
+      "tables": [
+        {
+          "heading": "Claves del config y los scripts que las leen",
+          "columns": [
+            "Clave",
+            "Lo leen"
+          ],
+          "rows": 42
+        }
       ]
     },
     {

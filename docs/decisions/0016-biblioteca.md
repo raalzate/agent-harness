@@ -37,7 +37,8 @@ devuelve un párrafo donde hacía falta una fila.
 - Editar el título o el primer párrafo de un documento exige re-indexar (`library-index`). Es el
   costo de que el índice no mienta.
 - Un doc nuevo bajo `docs/` sin base pone el gate en rojo hasta que alguien decida su concepto.
-- El ranking no encuentra sinónimos: «despliegue» no casa «deploy». Las `keywords` de cada base
+- El ranking no encuentra sinónimos que nadie declaró. `library.query.synonyms` (grupos de
+  palabras de un mismo concepto) y `library.query.boosts` (la forma de la pregunta elige la base)
   son la mitigación declarada; un índice semántico necesitaría una dependencia.
 - Al portar, la plantilla trae `library` sin bases y sin la señal: primero se migra, después se
   enciende la señal. Encenderla antes sería un gate rojo de nacimiento.

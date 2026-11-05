@@ -151,8 +151,8 @@ npm run ci:investigate # ¿por qué falló CI? corrida, job, línea, y si el gat
 | incidentes | `docs/gotchas.md` (formato fijo, lo exige el lint) |
 | por qué está hecho así | `docs/decisions/` |
 
-Cuando agregues una clave al config, actualizá `docs/config-reference.md` **y** la tabla de "quién
-lee cada clave": esa tabla es lo que evita romper algo al tocar una clave.
+Cuando agregues una clave al config, actualizá `docs/config-reference.md` **y** la tabla de
+`docs/quien-lee-cada-clave.md`: esa tabla es lo que evita romper algo al tocar una clave.
 
 ## Estilo
 
