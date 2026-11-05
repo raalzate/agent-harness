@@ -5402,9 +5402,13 @@ if (corre("fuera")) {
       }
     }
 
-    // 11h. El contrato con el gestor, sin ninguna forja: las citas salen de `tracker.issuePattern`
+    // 11h. El contrato con el gestor, sin ninguna forja: las citas salen del patrón del gestor
     //      y un comando que falla es «sin dato» con su error, nunca una lista vacía.
-    const patron = config.tracker?.issuePattern ?? "(^|[^A-Za-z0-9_])#[0-9]+";
+    //      El patrón del CEBO es fijo: lo que se prueba es la máquina (citar, leer, caer), y las
+    //      citas del cebo tienen forma `#N`. Con el `tracker.issuePattern` del repo, un repo de
+    //      Azure Boards (`AB#N`) o de Jira (`PROJ-N`) salía rojo sin defecto — y portar EXIGE poner
+    //      el patrón propio (docs/trazabilidad.md). Que ese patrón case lo prueban los casos de commit-msg.
+    const patron = "(^|[^A-Za-z0-9_])#[0-9]+";
     const citas = leerCitas({ "STATUS.md": "bloqueado por #12 y por #7\n```\n#99 en código no cuenta\n```\n" }, [patron]);
     const spec = { command: ["gestor"], timeoutMs: 1000, closedStates: ["closed"] };
     const leido = leerGestor(REPO_ROOT, spec, ["#7"], () => ({ status: 0, stdout: JSON.stringify({ items: [{ id: "#7", title: "x", state: "closed" }] }), stderr: "" }));
