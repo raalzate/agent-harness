@@ -200,6 +200,8 @@ const COPIAR = [
   ".claude/commands/architecture.md",
   ".claude/commands/code-index.md",
   ".claude/commands/ci.md",
+  // `/lesson` cites the ledger, and `/bitacora` debugs it. Both say «off» without `status.events`.
+  ".claude/commands/bitacora.md",
   ".claude/skills/new-guardrail/SKILL.md",
   ".claude/skills/library-index/SKILL.md",
   ".claude/skills/library-migrate/SKILL.md",
@@ -219,6 +221,9 @@ const COPIAR = [
   // La tarea declarada: `protected-paths` lee su alcance y la señal «task» la verifica. Sin el
   // script, la plantilla declararía una señal que apunta a la nada.
   "scripts/task.mjs",
+  // The status ledger (`status.events`, opt-in): a ported repo keeps its prose STATUS.md until
+  // someone runs `node scripts/status.mjs migrate --apply`.
+  "scripts/status.mjs",
   // El único camino de despliegue: `deploy-guard` lo autoriza, y sin el script el agente quedaría
   // con un punto de entrada que no existe y sólo los CLIs crudos (que piden permiso).
   "scripts/deploy.mjs",

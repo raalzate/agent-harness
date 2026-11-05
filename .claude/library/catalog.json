@@ -12,7 +12,7 @@
       "id": "diseno",
       "concept": "Decisiones de diseño: arquitectura y ADR, con su porqué",
       "scope": "la teoría general (metodo) y el uso diario (flujo)",
-      "entries": 17
+      "entries": 18
     },
     {
       "id": "instalacion",
@@ -253,6 +253,7 @@
         "`incidents` — el formato del registro de gotchas",
         "`docs` — alcance del link-check",
         "`status` — el archivo de estado verificado",
+        "`status.events` — la bitácora (event sourcing)",
         "`branches` — cómo entra el trabajo",
         "`workflow` — el modelo de ramas",
         "`xp` — las prácticas de XP con mecanismo",
@@ -511,6 +512,20 @@
       ]
     },
     {
+      "path": "docs/decisions/0017-status-como-bitacora.md",
+      "kind": "document",
+      "base": "diseno",
+      "title": "ADR 0017 — STATUS.md es una bitácora y el estado es su proyección",
+      "summary": "STATUS.md es lo que el hook SessionStart le presenta al agente como verdad. Se editaba en el lugar: una fila de señal se reescribía sin dejar rastro de lo que decía antes, sin autor y con una sola fecha para todo el arc…",
+      "headings": [
+        "ADR 0017 — STATUS.md es una bitácora y el estado es su proyección",
+        "Contexto",
+        "Decisión",
+        "Consecuencias",
+        "Alternativas descartadas"
+      ]
+    },
+    {
       "path": "docs/despliegue.md",
       "kind": "document",
       "base": "flujo",
@@ -616,8 +631,8 @@
       "base": "referencia",
       "title": "Mapa del arnés",
       "summary": "GENERADO por `node scripts/harness-map.mjs --graph`: cada etapa del ciclo y las guías, frenos y sensores que actúan en ella, desde `taxonomy`. No se edita a mano.",
-      "nodes": 48,
-      "edges": 58,
+      "nodes": 49,
+      "edges": 60,
       "nodeTypes": [
         "etapa",
         "freno",
@@ -757,7 +772,7 @@
       "kind": "table",
       "base": "referencia",
       "title": "Quién lee cada clave",
-      "summary": "Claves del config y los scripts que las leen (44)",
+      "summary": "Claves del config y los scripts que las leen (45)",
       "tables": [
         {
           "heading": "Claves del config y los scripts que las leen",
@@ -765,7 +780,7 @@
             "Clave",
             "Lo leen"
           ],
-          "rows": 44
+          "rows": 45
         }
       ]
     },

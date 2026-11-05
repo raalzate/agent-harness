@@ -348,6 +348,50 @@ de este repo. Vacío = el hook arma uno con `gate.command`.
 Lo imprime el hook `SessionStart` (primeras 40 líneas). Sirve para no releer el repo entero para
 contestar "¿esto anda?". Sólo lo verificado con un comando; lo que se supone va en deuda conocida.
 
+### `status.events` — la bitácora (event sourcing)
+
+```json
+"events": {
+  "journal": ".git/harness-status-journal.jsonl",
+  "staleDays": 30,
+  "heartbeatDays": 7
+}
+```
+
+Con esta clave, `status.file` deja de editarse a mano. Es una **bitácora append-only**, una tabla
+`# · Timestamp · Autor · Evento · Clave · Qué pasó · Evidencia`. El estado actual (fecha, rama,
+veredicto, señales y deuda) es una **proyección** que `scripts/status.mjs` reproduce plegando los
+eventos en orden. Lo de arriba de la proyección (título e introducción) es del humano y se conserva.
+
+**Un solo archivo y ningún texto dos veces.** La proyección es un índice: la deuda primero, por
+título, para que entre en las 40 líneas que lee el hook de sesión; después una línea por señal con
+la palabra del veredicto, el `#` del evento y su fecha. El texto completo vive sólo en la fila de
+su evento (`log --key "<clave>"` la muestra entera). Un `incident.recorded` lleva el título del
+gotcha y el puntero `docs/gotchas.md:línea`, no una copia del síntoma.
+
+| Clave | Qué hace |
+|---|---|
+| `journal` | dónde anota el gate un `gate.verdict` cuando **cambia** el veredicto. Va en `.git/` (P7): el gate nunca escribe `STATUS.md`. `status.mjs sync` (o cualquier `record`) lo pasa a la bitácora |
+| `staleDays` | a partir de cuántos días una señal sin re-verificar o una deuda abierta salen como aviso de obsoleto. Default: `drift.statusMaxAgeDays` |
+| `heartbeatDays` | aunque el veredicto no cambie, el gate anota uno si el último tiene más de estos días: sin eso, meses de verde quietos dejan la fecha atrás y `drift` la da por vencida |
+| `labels` | (opcional) los títulos y columnas que se escriben, si el repo no es en español. Los campos de cabecera salen de `panel.status.fields` |
+
+Eventos (vocabulario cerrado): `gate.verdict`, `signal.verified`, `signal.retired`, `debt.opened`,
+`debt.closed`, `incident.recorded`, `incident.retired`, `note`. Un `*.retired` o
+`debt.closed` sobre una clave que no está abierta se rechaza: la historia no puede cerrar lo que
+nunca abrió.
+
+```bash
+node scripts/status.mjs record signal.verified "Self-test" "verde — 590 casos" --evidence "`node scripts/harness-selftest.mjs`"
+node scripts/status.mjs log --event debt --since 2026-10-01   # consultar la historia
+node scripts/status.mjs log --key "Self-test"                 # una sola coincidencia: la fila entera
+node scripts/status.mjs check                                 # la señal del gate
+node scripts/status.mjs migrate                               # STATUS.md en prosa → bitácora (dry-run)
+```
+
+Sin `status.events` el script no hace nada y `STATUS.md` sigue siendo prosa: un repo portado no se
+rompe por no tener la bitácora. La depuración guiada es `/bitacora`.
+
 ---
 
 ## `branches` — cómo entra el trabajo

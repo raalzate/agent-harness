@@ -2471,6 +2471,214 @@ if (enParte("reglas") && config.worktrees && fs.existsSync(abs("scripts/worktree
   }
 }
 
+// 3g-ledger. The status ledger (`status.events`): STATUS.md as an append-only log plus a projection
+//     replayed from it. A new class of check, so its proof of life is written by hand (P2): every
+//     red that `check` promises is provoked once, every green earned once (P3), in a throwaway
+//     git repo (blame needs history) with the script and the panel readers it imports copied.
+//     The gate half (a `gate.verdict` in the journal only when the verdict changes) runs the real
+//     gate.mjs in a second temp folder.
+if (enParte("reglas") && config.status?.events && fs.existsSync(abs("scripts/status.mjs"))) {
+  const tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "harness-ledger-")));
+  const tmpGate = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "harness-ledger-gate-")));
+  const caso = (cond, nombre, falla) => (cond ? ok(`ledger: ${nombre}`) : bad(`ledger: ${nombre}`, falla));
+  try {
+    const g = (...a) => spawnSync("git", a, { cwd: tmp, encoding: "utf8" });
+    g("init", "-q", "-b", "main");
+    g("config", "user.email", "selftest@example.com");
+    g("config", "user.name", "selftest");
+    for (const d of ["scripts/panel", ".claude/hooks", "docs"]) fs.mkdirSync(path.join(tmp, d), { recursive: true });
+    // status.mjs reads markdown with the panel's readers, which pull in the harness map.
+    for (const f of ["scripts/status.mjs", "scripts/harness-map.mjs", ".claude/hooks/harness.mjs"]) fs.copyFileSync(abs(f), path.join(tmp, f));
+    for (const f of fs.readdirSync(abs("scripts/panel")).filter((n) => n.endsWith(".mjs"))) fs.copyFileSync(abs(`scripts/panel/${f}`), path.join(tmp, "scripts", "panel", f));
+    const incidents = { file: "docs/gotchas.md", heading: "### GOTCHA", requiredLines: ["Síntoma:", "Causa:", "Regla:", "Mecanismo:"] };
+    const cfg = (events) =>
+      fs.writeFileSync(path.join(tmp, ".claude", "harness.config.json"), JSON.stringify({ gate: { command: "npm run gate" }, incidents, status: { file: "STATUS.md", ...(events ? { events } : {}) } }));
+    const events = { staleDays: 100000 };
+    cfg(events);
+    const gotcha = (t) => `### GOTCHA: ${t}\n\nSíntoma: algo se rompió.\nCausa: una causa.\nRegla: una regla para ${t}.\nMecanismo: un caso del self-test.\n\n`;
+    fs.writeFileSync(path.join(tmp, "docs", "gotchas.md"), `# Gotchas\n\n${gotcha("el primero")}`);
+    const legacy = [
+      "# STATUS — estado verificado",
+      "",
+      "Lo imprime el hook.",
+      "",
+      "- **Fecha del último gate completo:** 2026-01-02",
+      "- **Rama:** `main` (abc1234)",
+      "- **Veredicto:** VERDE (`npm run gate`)",
+      "",
+      "## Señales",
+      "",
+      "| Señal | Comando | Resultado |",
+      "|---|---|---|",
+      "| Lint | `node lint.mjs` | verde — con un `a \\| b` adentro |",
+      "| Tests | `node test.mjs` | verde — 3 pruebas |",
+      "",
+      "## Deuda conocida",
+      "",
+      "- **Sin Windows.** Nadie lo probó.",
+      "",
+    ].join("\n");
+    const st = path.join(tmp, "STATUS.md");
+    fs.writeFileSync(st, legacy);
+    g("add", "-A");
+    g("commit", "-qm", "base");
+    const run = (...a) => spawnSync(process.execPath, [path.join(tmp, "scripts", "status.mjs"), ...a], { cwd: tmp, encoding: "utf8" });
+    const read = () => fs.readFileSync(st, "utf8");
+    const out = (r) => `${r.stdout}${r.stderr}`;
+
+    const dry = run("migrate");
+    caso(dry.status === 0 && read() === legacy, "migrate is a dry-run by default: STATUS.md untouched", `exit ${dry.status}`);
+    // The reviewer's blocker: on a prose STATUS.md, sync/rebuild/record rewrote everything
+    // below the first `##` and emptied the journal. Now they refuse and touch nothing.
+    const journalLegacy = path.join(tmp, ".git", "harness-status-journal.jsonl");
+    const lineaGate = JSON.stringify({ ts: "2026-01-03T00:00:00+00:00", author: "gate", event: "gate.verdict", key: "main", what: "VERDE", evidence: "x" }) + "\n";
+    fs.writeFileSync(journalLegacy, lineaGate);
+    const sobreProsa = [run("sync"), run("rebuild"), run("record", "note", "x")];
+    caso(
+      sobreProsa.every((r) => r.status === 1 && /not a ledger/.test(out(r))) && read() === legacy && fs.readFileSync(journalLegacy, "utf8") === lineaGate,
+      "on a prose STATUS.md, sync · rebuild · record refuse and leave the file and the journal intact",
+      sobreProsa.map((r) => `exit ${r.status}`).join(" · "),
+    );
+    fs.rmSync(journalLegacy, { force: true });
+    const mig = run("migrate", "--apply");
+    const check1 = run("check");
+    caso(
+      mig.status === 0 && check1.status === 0 && /\| selftest \| signal\.verified \| Lint \|/.test(read()) && /a \\\| b/.test(read()) && /- \*\*Veredicto:\*\* VERDE/.test(read()) && /incident\.recorded \| el primero \| — \| docs\/gotchas\.md:\d+ \|/.test(read()),
+      "migrate --apply: legacy rows, debt and gotchas become events with git's author, escaped pipes survive, check is green",
+      `migrate ${mig.status} · check ${check1.status}: ${out(check1).slice(0, 200)}`,
+    );
+    // One file, no text twice: each long text appears exactly once, in its log row, and the gotcha's
+    // symptom stays in the register only. The projection is an index (verdict word + `#seq`).
+    const veces = (t, s) => t.split(s).length - 1;
+    caso(
+      veces(read(), "3 pruebas") === 1 && veces(read(), "Nadie lo probó") === 1 && !/algo se rompió/.test(read()) && /\| Tests \| `node test\.mjs` \| verde · #\d+ · \d{4}-/.test(read()) && /- \*\*Sin Windows\.\*\* · #\d+/.test(read()),
+      "no text twice: results and debt live only in their log row, a gotcha's symptom only in its register",
+      `«3 pruebas» ×${veces(read(), "3 pruebas")} · «Nadie lo probó» ×${veces(read(), "Nadie lo probó")} · symptom copied: ${/algo se rompió/.test(read())}`,
+    );
+
+    const migrado = read();
+    fs.writeFileSync(st, migrado.replace(/(\| Tests \| `node test\.mjs` \| )verde/, "$1rojo"));
+    const tocado = run("check");
+    caso(tocado.status === 1 && /edited by hand/.test(out(tocado)), "a hand edit of the projection is red and says so", `exit ${tocado.status}`);
+    caso(run("rebuild").status === 0 && run("check").status === 0, "rebuild replays the log and the hand edit is gone", "still red after rebuild");
+
+    const antes = read();
+    const cierre = run("record", "debt.closed", "no abierta", "x");
+    caso(cierre.status === 1 && read() === antes, "closing what was never opened is refused and writes nothing", `exit ${cierre.status}`);
+    const rec = run("record", "signal.verified", "Tests", "verde — 4 pruebas", "--evidence", "`node test.mjs`");
+    const proy = read().split("<!-- status:projection:end -->")[0];
+    const seqRec = /^status: #(\d+)/.exec(rec.stdout)?.[1];
+    const log = run("log", "--key", "Tests");
+    caso(
+      rec.status === 0 && new RegExp(`\\| Tests \\| \`node test\\.mjs\` \\| verde · #${seqRec} ·`).test(proy) && /3 pruebas/.test(out(log)) && /4 pruebas/.test(out(log)) && run("check").status === 0,
+      "record appends an event, the projection points to the newest #seq, and `log --key` shows both texts",
+      out(rec).slice(0, 160),
+    );
+
+    fs.appendFileSync(path.join(tmp, "docs", "gotchas.md"), gotcha("con a | b en el título"));
+    const sinEvento = run("check");
+    caso(sinEvento.status === 1 && /has no `incident\.recorded`/.test(out(sinEvento)), "a gotcha without its incident.recorded event is red", `exit ${sinEvento.status}`);
+    const inc = run("record", "incident.recorded", "con a | b en el título", "--evidence", "docs/gotchas.md");
+    caso(inc.status === 0 && run("check").status === 0, "recording the gotcha by title and pointer alone (with a `|` in the title) turns it green", out(run("check")).slice(0, 200));
+
+    fs.mkdirSync(path.join(tmp, ".git"), { recursive: true });
+    fs.writeFileSync(path.join(tmp, ".git", "harness-status-journal.jsonl"), JSON.stringify({ ts: "2099-01-01T00:00:00+00:00", author: "gate", event: "gate.verdict", key: "main", what: "ROJO — señales fallidas: Lint", evidence: "`npm run gate` @ def5678" }) + "\n");
+    const pendiente = run("check");
+    const sync = run("sync");
+    caso(
+      pendiente.status === 0 && /wait in the journal/.test(out(pendiente)) && sync.status === 0 && /\*\*Veredicto:\*\* ROJO \(`npm run gate`\) · #\d+/.test(read()) && /ROJO — señales fallidas: Lint/.test(read()) && !fs.existsSync(path.join(tmp, ".git", "harness-status-journal.jsonl")),
+      "a pending gate event is a warning; sync moves it into the log, the projection turns ROJO and the journal is emptied",
+      `check ${pendiente.status} · sync ${sync.status}`,
+    );
+
+    const filas = read().trimEnd().split("\n");
+    fs.writeFileSync(st, `${read().trimEnd()}\n${filas[filas.length - 1]}\n`);
+    const dup = run("check");
+    caso(dup.status === 1 && /duplicated/.test(out(dup)) && /--reseq/.test(out(dup)), "a duplicated seq (a merge of two branches) is red and names the fix", `exit ${dup.status}`);
+    caso(run("rebuild", "--reseq").status === 0 && run("check").status === 0, "rebuild --reseq renumbers and the ledger is green again", out(run("check")).slice(0, 200));
+
+    // Every other red that `check` promises, provoked once on a copy of the healthy ledger.
+    const sano = read();
+    const ultima = sano.trimEnd().split("\n").at(-1);
+    const n = Number(/^\| (\d+) \|/.exec(ultima)[1]);
+    const conFila = (fila) => fs.writeFileSync(st, `${sano.trimEnd()}\n${fila}\n`);
+    conFila(ultima.replace(/^\| \d+ \|/, `| ${n + 2} |`));
+    const salto = run("check");
+    const celdas = ultima.split(" | ");
+    celdas[0] = `| ${n + 1}`;
+    celdas[3] = "invented.event"; // # · Timestamp · Autor · EVENTO
+    conFila(celdas.join(" | "));
+    const desconocido = run("check");
+    fs.writeFileSync(st, sano);
+    const gotchasSanos = fs.readFileSync(path.join(tmp, "docs", "gotchas.md"), "utf8");
+    fs.writeFileSync(path.join(tmp, "docs", "gotchas.md"), gotchasSanos.split("### GOTCHA: con a | b")[0]);
+    const huerfano = run("check");
+    fs.writeFileSync(path.join(tmp, "docs", "gotchas.md"), gotchasSanos);
+    caso(
+      salto.status === 1 && /seq jumps/.test(out(salto)) && desconocido.status === 1 && /unknown event/.test(out(desconocido)) && huerfano.status === 1 && /no longer has it/.test(out(huerfano)) && run("check").status === 0,
+      "a seq gap, an unknown event and a recorded incident whose gotcha was removed are each red",
+      `gap ${salto.status} · unknown ${desconocido.status} · orphan ${huerfano.status}`,
+    );
+
+    // Warnings, never red: evidence pointing at an untracked path, and state older than staleDays.
+    cfg({ ...events, staleDays: 0 });
+    run("record", "signal.verified", "Fantasma", "verde", "--evidence", "`node scripts/no-existe.mjs`"); // linkcheck:ignore — ruta ficticia
+    const avisos = run("check");
+    cfg(events);
+    caso(
+      avisos.status === 0 && /obsolete\? signal «Fantasma»/.test(out(avisos)) && /not re-verified in more than 0 days/.test(out(avisos)) && /open for more than 0 days/.test(out(avisos)),
+      "obsolete evidence and stale signals/debt are warnings with their fix, and the ledger stays green",
+      out(avisos).slice(0, 240),
+    );
+
+    cfg(null);
+    caso(run("check").status === 0 && /ledger is off/.test(run("check").stdout), "without `status.events` the ledger is off, never red", "red without the key");
+
+    // The gate writes the journal, never STATUS.md, and only when the verdict changes.
+    for (const d of ["scripts", ".claude/hooks"]) fs.mkdirSync(path.join(tmpGate, d), { recursive: true });
+    fs.copyFileSync(abs("scripts/gate.mjs"), path.join(tmpGate, "scripts", "gate.mjs"));
+    fs.copyFileSync(abs(".claude/hooks/harness.mjs"), path.join(tmpGate, ".claude", "hooks", "harness.mjs"));
+    const senal = ["node", "-e", "process.exit(require('fs').readFileSync('msg.txt','utf8')==='ok'?0:1)"];
+    fs.writeFileSync(
+      path.join(tmpGate, ".claude", "harness.config.json"),
+      JSON.stringify({ gate: { command: "npm run gate", signals: [{ name: "cebo", command: senal, why: "selftest" }] }, panel: { enabled: false }, status: { file: "STATUS.md", events: { journal: ".git/journal.jsonl" } } }),
+    );
+    const journal = path.join(tmpGate, ".git", "journal.jsonl");
+    const gate = (msg, ...a) => {
+      fs.writeFileSync(path.join(tmpGate, "msg.txt"), msg);
+      return spawnSync(process.execPath, [path.join(tmpGate, "scripts", "gate.mjs"), ...a], { cwd: tmpGate, encoding: "utf8" });
+    };
+    const lineas = () => (fs.existsSync(journal) ? fs.readFileSync(journal, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l)) : []);
+    gate("ok");
+    gate("ok");
+    const verdes = lineas();
+    gate("roto");
+    gate("roto");
+    const rojos = lineas();
+    gate("ok", "fast");
+    caso(
+      verdes.length === 1 && verdes[0].event === "gate.verdict" && verdes[0].what === "VERDE" && rojos.length === 2 && /^ROJO — señales fallidas: cebo/.test(rojos[1].what) && lineas().length === 2 && !fs.existsSync(path.join(tmpGate, "STATUS.md")),
+      "the gate journals a verdict only when it changes, never in fast mode, and never writes STATUS.md",
+      `green runs → ${verdes.length} · red runs → ${rojos.length} · after fast → ${lineas().length}`,
+    );
+    // heartbeatDays: an unchanged verdict older than the heartbeat is journaled again, so steady
+    // green does not leave the date in STATUS.md behind for `drift` to call stale.
+    const registroGate = path.join(tmpGate, ".git", "harness-gate.json");
+    const reg = JSON.parse(fs.readFileSync(registroGate, "utf8"));
+    reg.bitacora.fecha = new Date(Date.now() - 8 * 86400000).toISOString();
+    fs.writeFileSync(registroGate, JSON.stringify(reg));
+    gate("roto");
+    const latido = lineas();
+    gate("roto");
+    caso(latido.length === 3 && lineas().length === 3, "an unchanged verdict older than `heartbeatDays` (default 7) is journaled once more, then quiet again", `after the old one → ${latido.length} · next run → ${lineas().length}`);
+  } catch (e) {
+    bad("ledger: cases", e.stack?.split("\n").slice(0, 3).join(" · ") ?? String(e));
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+    fs.rmSync(tmpGate, { recursive: true, force: true });
+  }
+}
+
 // 3g-coder. `coder-spawn`: one coder as a main session in a worktree OUTSIDE the root. A fake agent
 //     stands behind `coder.command` (no model, no network) and records where it ran and what it
 //     got by stdin. What is under test is our machine: dry-run by default, the branch pattern,

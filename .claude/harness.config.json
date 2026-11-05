@@ -101,6 +101,11 @@
         "why": "el librarian contesta con lo que el índice dice, y un índice viejo miente sin que nadie lo vea: un documento retitulado o movido sigue apareciendo como era. Ninguna otra señal mira además que cada documento esté en UNA sola base (dos bases que lo reclaman son un concepto sin delimitar), que una tabla sea sólo tabla ni que un grafo no tenga aristas a nodos inexistentes"
       },
       {
+        "name": "status ledger",
+        "command": ["node", "scripts/status.mjs", "check"],
+        "why": "STATUS.md is what the session hook tells the agent is true. As a ledger its top is a projection of the log: a hand edit there, a seq gap, an event closing something never opened or a gotcha with no `incident.recorded` event is a history that lies, and no other signal reads the log"
+      },
+      {
         "name": "harness cost (hook latency)",
         "command": [
           "node",
@@ -449,7 +454,13 @@
   },
   "status": {
     "file": "STATUS.md",
-    "reminder": "Recordá: nada se entrega sin `npm run gate` verde · índice de símbolos (Serena) antes de abrir archivos · lecciones con `/lesson`."
+    "reminder": "Recordá: nada se entrega sin `npm run gate` verde · índice de símbolos (Serena) antes de abrir archivos · lecciones con `/lesson`.",
+    "events": {
+      "$comment": "STATUS.md as event sourcing (scripts/status.mjs): an append-only log (seq · timestamp · author · event · key · what happened · evidence) and the current state as a projection replayed from it. `journal` is where the gate appends a `gate.verdict` event when the verdict CHANGES (or the last one is older than `heartbeatDays`, so the date in STATUS.md does not go stale under steady green) — under .git/ (P7), and `sync`/`record` move it into the log. One file, no text twice: the projection is an index (verdict word + `#seq` per signal, title per debt item) and the full text lives only in its log row; a gotcha's event carries its title and a pointer, not a copy. `staleDays` is when a signal not re-verified or a debt item still open becomes a warning. Without this key the ledger is off.",
+      "journal": ".git/harness-status-journal.jsonl",
+      "staleDays": 30,
+      "heartbeatDays": 7
+    }
   },
   "examples": {
     "$comment": "Configs de ejemplo por stack. Se publican para copiar, así que un regex roto ahí viaja igual que un script roto: el self-test las parsea, compila sus regex y exige que cada señal declare su `why`. También exige `forbiddenDeps.matcher` cuando el manifiesto no es clave-valor (un .csproj o un pom.xml sin matcher sale VERDE con la dependencia prohibida presente).",

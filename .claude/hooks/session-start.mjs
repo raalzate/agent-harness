@@ -9,7 +9,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
-import { readInput, loadConfig, allow, tareaActiva, rutaDeEstado, REPO_ROOT } from "./harness.mjs";
+import { readInput, loadConfig, allow, tareaActiva, rutaDeEstado, REPO_ROOT, DEFAULT_STATUS_JOURNAL } from "./harness.mjs";
 
 await readInput();
 const config = loadConfig() ?? {};
@@ -77,6 +77,23 @@ const statusFile = path.join(REPO_ROOT, config.status?.file ?? "STATUS.md");
 if (fs.existsSync(statusFile)) {
   const status = fs.readFileSync(statusFile, "utf8").split("\n").slice(0, 40).join("\n");
   lines.push("", "### STATUS.md (encabezado)", status);
+  // The ledger's journal (status.events): verdicts the gate recorded that STATUS.md does not show yet.
+  // Only when STATUS.md already IS a ledger: on a prose file, `sync` has nothing to append to, and
+  // pointing the agent there was the reviewer's blocker (it rewrote the prose).
+  if (config.status?.events) {
+    const journal = rutaDeEstado(config.status.events.journal ?? DEFAULT_STATUS_JOURNAL);
+    let pendientes = 0;
+    for (const f of [journal, `${journal}.ingesting`]) {
+      try {
+        pendientes += fs.readFileSync(f, "utf8").split("\n").filter(Boolean).length;
+      } catch {
+        /* no journal: nothing pending */
+      }
+    }
+    const esBitacora = fs.readFileSync(statusFile, "utf8").includes("<!-- status:projection:begin");
+    if (pendientes && esBitacora) lines.push("", `- ⚠️ ${pendientes} evento(s) del gate esperan en la bitácora: el encabezado de arriba está atrasado. \`node scripts/status.mjs sync\`.`);
+    else if (pendientes) lines.push("", `- ⚠️ ${pendientes} veredicto(s) del gate anotados, pero \`${config.status.file ?? "STATUS.md"}\` sigue en prosa: \`node scripts/status.mjs migrate\` (dry-run) antes de cualquier \`sync\`.`);
+  }
 } else {
   lines.push(`- ⚠️ Falta \`${config.status?.file ?? "STATUS.md"}\`: nadie sabe qué está verificado.`);
 }

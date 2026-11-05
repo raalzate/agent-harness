@@ -3,14 +3,14 @@
 > GENERADO por `node scripts/library.mjs index`: no se edita a mano. Lo consulta el subagente
 > `librarian`; lo verifica la señal del gate `library index (docs)`.
 
-44 entradas en 6 bases · 42 documentos (no estructurado) · 1 tablas · 1 grafos (estructurado).
+45 entradas en 6 bases · 43 documentos (no estructurado) · 1 tablas · 1 grafos (estructurado).
 
 ## Bases de conocimiento
 
 | Base | Concepto | Qué NO entra | Entradas |
 |---|---|---|---|
 | [metodo](#metodo) | Por qué existe el arnés: la teoría, el método y la evidencia | cómo se instala, cómo se configura, decisiones puntuales | 5 |
-| [diseno](#diseno) | Decisiones de diseño: arquitectura y ADR, con su porqué | la teoría general (metodo) y el uso diario (flujo) | 17 |
+| [diseno](#diseno) | Decisiones de diseño: arquitectura y ADR, con su porqué | la teoría general (metodo) y el uso diario (flujo) | 18 |
 | [instalacion](#instalacion) | Instalar y portar el arnés en otro repo, stack o plataforma | el trabajo diario una vez instalado (flujo) | 5 |
 | [flujo](#flujo) | El ciclo de trabajo: ramas, registro, SDD, CI/CD, despliegue y worktrees | cómo funciona cada pieza del arnés por dentro (referencia) | 6 |
 | [referencia](#referencia) | El arnés por dentro: claves del config, señales, índices, panel, evaluaciones y recetas | el porqué de fondo (metodo) y los incidentes (incidentes) | 10 |
@@ -51,6 +51,7 @@
 | [ADR 0014 — El self-test corre en abanico, y el grupo es la frontera del estado](decisions/0014-selftest-en-abanico.md) | documento | Después de 0006 el banco corría en paralelo, pero el gate seguía siendo, casi entero, arranque de procesos en serie (#32). Medido por dentro, con un perfilador de spawnSync por línea de llamada: |
 | [ADR 0015 — promptfoo evalúa a los subagentes como corredor, no como dependencia](decisions/0015-promptfoo-como-corredor.md) | documento | La prueba de vida del reviewer (scripts/reviewer-eval.mjs) corre cada caso una vez y sólo lee el veredicto. Una corrida con promptfoo y --repeat 3 destapó lo que eso esconde: el caso inocente «una regla nueva con su mot… |
 | [ADR 0016 — La documentación se indexa por tipo y se ubica por concepto](decisions/0016-biblioteca.md) | documento | El código tiene índice (codegraph, ADR 0005); la documentación no. Para contestar «qué dice la doc sobre X» el agente abría archivos enteros, y lo que no encontraba lo contestaba de memoria. Además la documentación mezc… |
+| [ADR 0017 — STATUS.md es una bitácora y el estado es su proyección](decisions/0017-status-como-bitacora.md) | documento | STATUS.md es lo que el hook SessionStart le presenta al agente como verdad. Se editaba en el lugar: una fila de señal se reescribía sin dejar rastro de lo que decía antes, sin autor y con una sola fecha para todo el arc… |
 
 ## instalacion
 
@@ -89,9 +90,9 @@
 | [El índice del código es obligatorio — codegraph](codegraph.md) | documento | La herramienta es codegraph: un grafo de conocimiento del repo (símbolos, llamadas, radio de impacto) en una base SQLite local, sin API keys y sin que el código salga de la máquina. El arnés no la conoce por dentro: la… |
 | [Referencia de `.claude/harness.config.json`](config-reference.md) | documento | El único archivo específico del repo. Los hooks y los scripts son genéricos: leen de acá. Portar el arnés = reescribir este archivo. |
 | [Evaluaciones del arnés: determinista y con IA](evaluaciones.md) | documento | Dos familias que no se mezclan, porque se prueban distinto: |
-| [Mapa del arnés](mapa-del-arnes.json) | grafo (48 nodos, 58 aristas) | GENERADO por `node scripts/harness-map.mjs --graph`: cada etapa del ciclo y las guías, frenos y sensores que actúan en ella, desde `taxonomy`. No se edita a mano. |
+| [Mapa del arnés](mapa-del-arnes.json) | grafo (49 nodos, 60 aristas) | GENERADO por `node scripts/harness-map.mjs --graph`: cada etapa del ciclo y las guías, frenos y sensores que actúan en ella, desde `taxonomy`. No se edita a mano. |
 | [El panel del arnés](panel.md) | documento | Una página HTML autocontenida que contesta de un vistazo tres preguntas: ¿el arnés está vivo?, ¿qué dice la memoria del repo? y ¿qué pasó de verdad en esta máquina?. Sin dependencias, sin red (salvo las sondas a localho… |
-| [Quién lee cada clave](quien-lee-cada-clave.md) | tabla | Claves del config y los scripts que las leen (44) |
+| [Quién lee cada clave](quien-lee-cada-clave.md) | tabla | Claves del config y los scripts que las leen (45) |
 | [Recetas](recetas.md) | documento | Situaciones concretas, con el comando al lado. Todo lo de acá asume el arnés ya instalado (docs/portar.md). |
 
 ## incidentes

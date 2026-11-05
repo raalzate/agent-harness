@@ -23,7 +23,7 @@ nada del repo.
 .claude/harness.config.json   la única fuente de especificidad
 .claude/hooks/                hooks genéricos (también frenan escrituras MCP); harness.mjs es la plomería
 .claude/agents/               explorer · librarian · reviewer · gate-runner · ci-investigator · coder
-.claude/commands/             /gate · /lesson · /harness-audit · /harness-port · /architecture · /code-index · /ci · /code
+.claude/commands/             /gate · /lesson · /bitacora · /harness-audit · /harness-port · /architecture · /code-index · /ci · /code
 .claude/skills/               new-guardrail (regla → freno) · library-index · library-migrate (la biblioteca)
 .claude/evals/reviewer/       los diffs con los que se le toma la prueba de vida al reviewer
 .claude/evals/<agente>/       las entradas de la evaluación con IA de gate-runner, ci-investigator y explorer
@@ -31,6 +31,7 @@ nada del repo.
 scripts/gate.sh               ejecuta gate.signals; no sabe de stacks
 scripts/repo-lint.mjs         9 clases de regla, todas configurables (COHERENCIA: guía vs. freno)
 scripts/cycle-check.mjs       ramas y prácticas XP; --verify-red: la prueba falla sin el cambio
+scripts/status.mjs            STATUS.md como bitácora (event sourcing): record · sync · check · log · rebuild
 scripts/task.mjs              la tarea declarada: alcance + criterios con evidencia, tasks.md y pruebas congeladas (lock)
 scripts/coder-spawn.mjs       un coder como sesión propia en su worktree, fuera de la raíz (/code)
 scripts/worktree-check.mjs    ningún worktree visible dentro de la raíz; avisa los huérfanos
@@ -107,6 +108,7 @@ npm run cycle          # ¿qué modelo de ramas y qué prácticas XP están acti
 npm run timing         # ¿cuánto cuesta el arnés en cada prompt y en cada edición?
 npm run timing:rules   # ¿qué presupuesto de latencia rige cada hook?
 npm run map            # ¿qué guía, freno o sensor actúa en cada etapa, y dónde hay huecos?
+npm run status:check   # ¿la bitácora de STATUS.md y los gotchas están sanos? (/bitacora la depura)
 npm run drift          # ¿algo se degradó sin que nadie lo tocara? (lo corre drift.yml, semanal)
 npm run panel          # la salud del arnés en una página (el gate ya lo regenera en cada corrida)
 npm run eval           # ¿los frenos aguantan un rodeo y dejan pasar lo inocente? (determinista: en el gate)

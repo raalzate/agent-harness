@@ -514,6 +514,17 @@ export function dentroDelAlcance(rel, entradas) {
   });
 }
 
+/** Where the gate leaves `gate.verdict` events for the status ledger (`status.events.journal`). */
+export const DEFAULT_STATUS_JOURNAL = ".git/harness-status-journal.jsonl";
+
+/** Local time with its offset: the ledger is read by people in a timezone, not in UTC. */
+export function isoLocal(d = new Date()) {
+  const pad = (n) => String(Math.abs(n)).padStart(2, "0");
+  const off = -d.getTimezoneOffset();
+  const sign = off >= 0 ? "+" : "-";
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}${sign}${pad(Math.trunc(off / 60))}:${pad(off % 60)}`;
+}
+
 /**
  * Dónde vive un archivo de estado declarado como `.git/<algo>`. En un worktree, `.git` no es un
  * directorio sino un ARCHIVO que dice `gitdir: <ruta>`: escribir en `.git/x` reventaba con

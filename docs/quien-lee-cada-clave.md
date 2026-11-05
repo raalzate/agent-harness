@@ -19,6 +19,7 @@
 | `examples`, `install` | self-test (sección 8): forma de cada ejemplo, y sus reglas `forbiddenDeps`/`purity` corridas con `--config` + stdin (ruteo y anchura) |
 | `docs` | `scripts/docs-linkcheck.mjs`, `scripts/repo-lint.mjs` (directorios a saltear) |
 | `status` (incluye `reminder`) | `session-start.mjs`, self-test |
+| `status.events` (y `incidents`, `gate.command`, `panel.status.fields`, `docs.ignoreMarker`) | `scripts/status.mjs` (señal «status ledger», `/bitacora`), `scripts/gate.mjs` (`journal`, `heartbeatDays`), `session-start.mjs` (`journal`: eventos pendientes), self-test (3g-ledger) |
 | `tracker` | `.githooks/commit-msg`, `scripts/artifacts-check.mjs`, self-test |
 | `commitMsg` | `.githooks/commit-msg`, self-test |
 | `sdd` | `sdd-router.mjs`, self-test |
