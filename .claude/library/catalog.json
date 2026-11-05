@@ -790,7 +790,7 @@
       "kind": "table",
       "base": "referencia",
       "title": "Quién lee cada clave",
-      "summary": "Claves del config y los scripts que las leen (47)",
+      "summary": "Claves del config y los scripts que las leen (48)",
       "tables": [
         {
           "heading": "Claves del config y los scripts que las leen",
@@ -798,7 +798,7 @@
             "Clave",
             "Lo leen"
           ],
-          "rows": 47
+          "rows": 48
         }
       ]
     },
