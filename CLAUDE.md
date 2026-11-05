@@ -29,7 +29,7 @@ nada del repo.
 .claude/evals/<agente>/       las entradas de la evaluación con IA de gate-runner, ci-investigator y explorer
 .claude/evals/deterministic/  la evaluación determinista: cases.json (guides · rules · signals, es/en) y sus esquemas
 scripts/gate.sh               ejecuta gate.signals; no sabe de stacks
-scripts/repo-lint.mjs         9 clases de regla, todas configurables (COHERENCIA: guía vs. freno)
+scripts/repo-lint.mjs         10 clases de regla, todas configurables (COHERENCIA: guía vs. freno; PORTABLE: rutas)
 scripts/cycle-check.mjs       ramas y prácticas XP; --verify-red: la prueba falla sin el cambio
 scripts/status.mjs            STATUS.md como bitácora (event sourcing): record · sync · check · log · rebuild
 scripts/task.mjs              la tarea declarada: alcance + criterios con evidencia, tasks.md y pruebas congeladas (lock)

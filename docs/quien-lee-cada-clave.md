@@ -20,7 +20,7 @@
 | `docs` | `scripts/docs-linkcheck.mjs`, `scripts/repo-lint.mjs` (directorios a saltear) |
 | `status` (incluye `reminder`) | `session-start.mjs`, self-test |
 | `status.events` (y `incidents`, `gate.command`, `panel.status.fields`, `docs.ignoreMarker`) | `scripts/status.mjs` (señal «status ledger», `/bitacora`), `scripts/gate.mjs` (`journal`, `heartbeatDays`), `session-start.mjs` (`journal`: eventos pendientes), self-test (3g-ledger) |
-| `tracker` | `.githooks/commit-msg`, `scripts/artifacts-check.mjs`, self-test |
+| `tracker` (incluye `issueNonExamples`) | `.githooks/commit-msg`, `scripts/artifacts-check.mjs`, self-test (3f-pre: contra-muestras; sección 8 en los ejemplos) |
 | `commitMsg` | `.githooks/commit-msg`, self-test |
 | `sdd` | `sdd-router.mjs`, self-test |
 | `askFirst` | `ask-first.mjs`, `action-guard.mjs`, self-test |
@@ -34,7 +34,9 @@
 | `workflow.sync` | `scripts/cycle-check.mjs` (`--push` desde `.githooks/pre-push`, y `--sync` = `npm run sync`), `session-start.mjs` (aviso sin red), self-test (3f-ter-bis) |
 | `xp` | `scripts/cycle-check.mjs` (lo invoca `.githooks/commit-msg`), self-test (una práctica por cebo) |
 | `preCommit.extra` | `.githooks/pre-commit` (después de rutas protegidas y lint), self-test (3f-quater) |
-| `postCommit` | `.githooks/post-commit` |
+| `postCommit` | `.githooks/post-commit`, self-test (3f-post) |
+| `portablePaths` | `scripts/repo-lint.mjs` (regla `PORTABLE`), self-test (4e-portable) |
+| `sample` (en cualquier regla con `pattern`) | self-test: la muestra con que muerde la regla, y que case su propio patrón (sección 2) |
 | `graph` | `graph-first.mjs`, la señal `índice del código` del gate, self-test (sus regex compilan) |
 | `observability` | `scripts/hooks-timing.mjs` (la señal `costo del arnés` del gate), `scripts/reviewer-eval.mjs` (`stateFiles`: la foto de la sesión), self-test (secciones 9 y 10) |
 | `xp.testFirst.verifyRed` | `scripts/cycle-check.mjs`, modo `--verify-red` (lo invoca `.github/workflows/ci.yml` en el PR), self-test (3f-ter) |

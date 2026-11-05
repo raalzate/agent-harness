@@ -135,7 +135,9 @@ const esTodoElRepo = (ruta) => /^(\.?\/?|\/|(\*+\/?)+(\*+\.?\*?)?)$/.test(String
  * «this test is frozen» never disagree about which file is the test. null = not declared.
  */
 function patronDePrueba() {
-  const fuente = spec.lockTests?.pattern || config.xp?.testFirst?.testPattern;
+  // Last resort `tests.filePattern`, the stack profile's: without it a ported repo whose
+  // `testFirst` declares no pattern (the template's default now) had nothing to freeze.
+  const fuente = spec.lockTests?.pattern || config.xp?.testFirst?.testPattern || config.tests?.filePattern;
   if (!fuente) return null;
   try {
     return new RegExp(fuente);
@@ -369,7 +371,7 @@ switch (orden) {
     // Adding NEW test files afterwards stays free: more tests never weaken the definition of done.
     const tarea = exigirTarea();
     const re = patronDePrueba();
-    if (!re) fallar("no hay patrón de pruebas: declarar `xp.testFirst.testPattern` o `task.lockTests.pattern`.");
+    if (!re) fallar("no hay patrón de pruebas: declarar `tests.filePattern` (lo trae el perfil del stack), `xp.testFirst.testPattern` o `task.lockTests.pattern`.");
     const listado = git("ls-files", "--cached", "--others", "--exclude-standard");
     if (listado === null) fallar("git no pudo listar los archivos: sin lista no hay bloqueo.");
     const pruebas = listado.split("\n").map((l) => l.trim()).filter((l) => l && re.test(l) && huella(l));

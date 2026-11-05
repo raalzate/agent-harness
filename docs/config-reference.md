@@ -119,7 +119,22 @@ Regex contra la línea de comandos completa. La lista genérica ya viene; lo que
 lo irreversible **de tu stack** (ver [portar.md](portar.md) paso 2).
 
 Ojo con el falso negativo obvio: el agente puede reformular. Esto no es un sandbox, es un
-guardarraíl — sube el costo del error accidental, no detiene a un adversario.
+guardarraíl: sube el costo del error accidental, no detiene a un adversario (límite declarado
+en [ADR 0018](decisions/0018-limites-por-diseno.md)). Este repo trae también los equivalentes de
+PowerShell (`Remove-Item -Recurse`, `iex (iwr …)`, `Get-ChildItem … | Remove-Item`).
+
+**`sample` (opcional, en cualquier regla con `pattern`).** Es el comando para el que existe la
+regla, escrito por quien la escribió:
+
+```json
+{ "pattern": "\\bgit(?:\\s+…)*\\s+reset\\s+--hard", "reason": "…", "sample": "git -C . reset --hard HEAD" }
+```
+
+El self-test hace morder cada regla con una muestra. Por defecto la deriva del patrón, pero un
+patrón con lookbehind, alternativas anidadas o comillas no se reduce a un ejemplo, y esa regla
+quedaba **omitida para siempre**: un freno sin prueba de vida. Con `sample`, el caso usa la
+muestra del autor. El self-test verifica aparte que cada `sample` declarado case con su propio
+patrón: una muestra que no casa probaría un comando que la regla nunca ve, y eso es rojo.
 
 ### `bash.ask` — que decida el humano (opcional)
 
@@ -707,6 +722,7 @@ sí frena `bash.deny` es borrar o reescribir el marcador y el libro. Decisión e
 |---|---|
 | `kind` | informativo, para quien lee el config. Ninguna máquina lo interpreta |
 | `issuePattern` | qué cuenta como referencia a un ítem de trabajo en un mensaje de commit. GitHub y GitLab usan `#123`; Azure Boards, `AB#123`; Jira, `PROJ-123` |
+| `issueNonExamples` | (opcional) texto que **no** es una referencia y que `issuePattern` no puede cazar, además de la lista por defecto (`UTF-8`, `ISO-8601`, `SHA-256`, `HTTP-2`, `color #fff`…). Una muestra derivada del patrón no detecta un patrón que caza de más, porque también caza su muestra. Las contra-muestras sí: el self-test es rojo si alguna casa, en este config y en cada ejemplo publicado |
 | `issueExample` | lo que se le muestra a quien quedó frenado |
 | `newIssueHint` | los comandos concretos para abrir el ítem, en el CLI de **tu** forja |
 | `artifactsIn` | `"tracker"` o `"repo"`: dónde viven spec, plan y tareas |
@@ -779,7 +795,39 @@ al historial de ninguna manera.
 ```
 
 Lo lee `.githooks/post-commit`. Sin esta clave, ese hook no hace nada. Si falla, el commit ya
-ocurrió y no se toca: lo derivado es una ayuda de lectura, no parte del entregable.
+ocurrió y no se toca: lo derivado es una ayuda de lectura, no parte del entregable. Este repo lo
+usa para `codegraph sync`, así el índice del código no queda viejo después de cada commit. El
+caso 3f-post del self-test lo prueba en un repo git real:
+
+- un commit que toca un `watch` refresca;
+- un `.md` no refresca;
+- un refresco que falla no deshace el commit;
+- sin la clave, no hace nada.
+
+Ese caso destapó que el primer commit de un repo nunca refrescaba: a `git diff-tree` le faltaba
+`--root`.
+
+---
+
+## `portablePaths` — rutas que se clonan en cualquier sistema (opcional)
+
+```json
+"portablePaths": { "maxLength": 200 }
+```
+
+Enciende la regla `PORTABLE` de `scripts/repo-lint.mjs`. En cada gate recorre `git ls-files` y
+marca cinco cosas:
+
+- nombres reservados de Windows (`CON`, `PRN`, `AUX`, `NUL`, `COM1-9`, `LPT1-9`, con o sin
+  extensión);
+- caracteres que Windows rechaza (`< > : " | ? * \`);
+- nombres que terminan en punto o espacio;
+- dos rutas que sólo difieren en mayúsculas;
+- rutas de más de `maxLength` caracteres.
+
+En la máquina que creó el archivo no se ve nada: el checkout falla en Windows, o uno de los dos
+archivos desaparece en macOS. `maxLength` deja lugar a la carpeta del clon bajo el MAX_PATH de
+Windows (260). Ver [multiplataforma.md](multiplataforma.md).
 
 ---
 

@@ -609,8 +609,8 @@
   "xp": {
     "$comment": "Prácticas de XP con mecanismo. TODAS viajan APAGADAS a propósito: una regla instalada sin cicatriz detrás se desactiva en una semana y se lleva puestas a las que servían (P14). Encendé la que tu equipo ya decidió, empezando por `testFirst`. Las lee `.githooks/commit-msg` → `node scripts/cycle-check.mjs --commit`. Ver docs/ciclo-desarrollo.md.",
     "testFirst": {
+      "$testPattern": "Sin `testPattern`: «qué es una prueba» lo dice `tests.filePattern`, que trae el perfil del stack. Un patrón acá viajaba con la forma de JS (`__tests__`, `.spec.ts`) a un repo .NET, y «test primero» y «refactor separado» reconocían pruebas distintas (lo cazó el banco con el gate del repo portado).",
       "enabled": false,
-      "testPattern": "(^|/)(__tests__|tests?)/|\\.(test|spec)\\.[cm]?[jt]sx?$",
       "escapeLine": "no-test:",
       "reason": "un arreglo sin prueba no tiene cómo demostrar que arregló algo."
     },

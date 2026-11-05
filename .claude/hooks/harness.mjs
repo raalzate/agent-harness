@@ -514,6 +514,15 @@ export function dentroDelAlcance(rel, entradas) {
   });
 }
 
+/**
+ * Text that is never a work-item reference, in any tracker: standard names a commit message
+ * mentions. `tracker.issuePattern` must match none of them (self-test). A pattern derived sample
+ * cannot catch a pattern that matches too much — it matches its own sample too — so the
+ * counter-examples are the proof that it does not bite where it should not. `tracker.issueNonExamples`
+ * adds the team's own (a product code that looks like `ABC-12`).
+ */
+export const DEFAULT_ISSUE_NON_EXAMPLES = ["UTF-8", "ISO-8601", "SHA-256", "HTTP-2", "TLS-1", "x86-64", "color #fff", "#!/bin/sh"];
+
 /** Where the gate leaves `gate.verdict` events for the status ledger (`status.events.journal`). */
 export const DEFAULT_STATUS_JOURNAL = ".git/harness-status-journal.jsonl";
 

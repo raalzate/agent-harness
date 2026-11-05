@@ -12,7 +12,7 @@
       "id": "diseno",
       "concept": "Decisiones de diseño: arquitectura y ADR, con su porqué",
       "scope": "la teoría general (metodo) y el uso diario (flujo)",
-      "entries": 18
+      "entries": 19
     },
     {
       "id": "instalacion",
@@ -268,6 +268,7 @@
         "`sdd` — ruteo del trabajo",
         "`preCommit.extra` — frenos propios del repo sobre el commit entero (opcional)",
         "`postCommit` — refrescar lo derivado (opcional)",
+        "`portablePaths` — rutas que se clonan en cualquier sistema (opcional)",
         "`graph` — el índice del código (OBLIGATORIO)",
         "`observability` — el costo del arnés, medido",
         "`panel` — el panel del arnés (opcional)",
@@ -526,6 +527,19 @@
       ]
     },
     {
+      "path": "docs/decisions/0018-limites-por-diseno.md",
+      "kind": "document",
+      "base": "diseno",
+      "title": "ADR 0018 — Límites por diseño: lo que el arnés no hace a propósito",
+      "summary": "La «Deuda conocida» de STATUS.md mezclaba dos cosas distintas:",
+      "headings": [
+        "ADR 0018 — Límites por diseño: lo que el arnés no hace a propósito",
+        "Contexto",
+        "Decisión",
+        "Consecuencias"
+      ]
+    },
+    {
       "path": "docs/despliegue.md",
       "kind": "document",
       "base": "flujo",
@@ -696,7 +710,7 @@
         "Lo que se arregló, y cómo se ve cuando falta",
         "La prueba: CI en las tres plataformas",
         "Al portar el arnés a un repo",
-        "Lo que sigue sin cubrirse"
+        "Rutas y PowerShell: lo que antes no se cubría"
       ]
     },
     {
@@ -772,7 +786,7 @@
       "kind": "table",
       "base": "referencia",
       "title": "Quién lee cada clave",
-      "summary": "Claves del config y los scripts que las leen (45)",
+      "summary": "Claves del config y los scripts que las leen (47)",
       "tables": [
         {
           "heading": "Claves del config y los scripts que las leen",
@@ -780,7 +794,7 @@
             "Clave",
             "Lo leen"
           ],
-          "rows": 45
+          "rows": 47
         }
       ]
     },

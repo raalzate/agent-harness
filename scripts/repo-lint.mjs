@@ -25,10 +25,12 @@
  *   INCIDENTE    todo gotcha declara su MECANISMO                   config → incidents
  *   PERFIL       un perfil de stack no lleva reglas de otro repo    config → profiles
  *   COHERENCIA   lo que una guía recomienda, ningún freno lo veda  config → coherence
+ *   PORTABLE     toda ruta se puede clonar en Windows/macOS/Linux   config → portablePaths
  */
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { spawnSync } from "node:child_process";
 // La lista de extensiones «esto es código» es UNA y vive con los hooks: tener una copia acá
 // es tener dos verdades, y ya divergieron (un `.pyi` ensuciaba el gate y el barrido no lo leía).
 // `firstMatch` es el MISMO evaluador que usa `bash-guard`: COHERENCIA pregunta «¿lo bloquearía
@@ -278,6 +280,43 @@ function checkInvariants() {
 }
 
 /**
+ * PORTABLE — every tracked path can be checked out on Windows, macOS and Linux.
+ *
+ * A file named `CON.md`, `aux`, `nota?.md` or `a.` is legal on Linux and macOS and makes the
+ * checkout FAIL on Windows; a path past MAX_PATH (260, counting the clone folder) fails there too;
+ * two paths that differ only in case collide on the default macOS and Windows filesystems, and one
+ * of them silently disappears. None of that shows on the machine that created the file. Generic:
+ * these are filesystem facts, not a stack's. `portablePaths.maxLength` leaves room for the clone
+ * folder (default 200).
+ */
+const RESERVADO_WINDOWS = /^(con|prn|aux|nul|com[0-9]|lpt[0-9])(\.[^/]*)?$/i;
+const CARACTER_INVALIDO = /[<>:"|?*\u0000-\u001f\\]/;
+function checkPortablePath(relPath) {
+  const spec = config.portablePaths;
+  if (!spec) return;
+  const max = Number.isInteger(spec.maxLength) ? spec.maxLength : 200;
+  for (const seg of relPath.split("/")) {
+    if (RESERVADO_WINDOWS.test(seg)) fail(relPath, 0, "PORTABLE", `«${seg}» es un nombre reservado de Windows: el checkout falla ahí. Renombralo.`);
+    else if (CARACTER_INVALIDO.test(seg)) fail(relPath, 0, "PORTABLE", `«${seg}» tiene un carácter que Windows no admite en un nombre (< > : " | ? * \\ o de control).`);
+    else if (/[. ]$/.test(seg)) fail(relPath, 0, "PORTABLE", `«${seg}» termina en punto o espacio: Windows lo recorta y el archivo no se puede abrir.`);
+  }
+  if (relPath.length > max) fail(relPath, 0, "PORTABLE", `ruta de ${relPath.length} caracteres (máximo ${max}, \`portablePaths.maxLength\`): con la carpeta del clon pasa MAX_PATH (260) en Windows.`);
+}
+function checkPortablePaths() {
+  if (!config.portablePaths) return;
+  const r = spawnSync("git", ["ls-files", "-z"], { cwd: REPO_ROOT, encoding: "utf8", windowsHide: true, maxBuffer: 64 * 1024 * 1024 });
+  if (r.status !== 0) return; // without git there is no list of tracked paths: nothing to measure
+  const rutas = r.stdout.split("\0").filter(Boolean);
+  const vistas = new Map();
+  for (const p of rutas) {
+    checkPortablePath(p);
+    const clave = p.toLowerCase();
+    if (vistas.has(clave)) fail(p, 0, "PORTABLE", `choca con «${vistas.get(clave)}»: sólo difieren en mayúsculas, y en macOS y Windows uno pisa al otro.`);
+    else vistas.set(clave, p);
+  }
+}
+
+/**
  * INCIDENTE — todo gotcha declara su MECANISMO.
  *
  * Lo que una máquina puede verificar del principio «cada incidente deja infraestructura»
@@ -484,6 +523,7 @@ if (process.argv.includes("--rules")) {
     ["PATRON", `${(config.patterns ?? []).length} patrón(es)`, (config.patterns ?? []).map((r) => r.id).join(", ")],
     ["INCIDENTE", config.incidents?.file ? "activa" : "inactiva", config.incidents?.file ?? "—"],
     ["PERFIL", config.profiles?.dir ? "activa" : "inactiva", config.profiles?.dir ?? "—"],
+    ["PORTABLE", config.portablePaths ? "activa" : "inactiva", config.portablePaths ? `nombres reservados · caracteres · ≤ ${config.portablePaths.maxLength ?? 200} · mayúsculas` : "—"],
     ["COHERENCIA", reComando ? `${(COHERENCIA.guides ?? []).length} guía(s)` : "inactiva", reComando ? `${(COHERENCIA.guides ?? []).join(", ")} + reason/message del config` : "—"],
   ];
   console.log("Reglas activas (todas salen de .claude/harness.config.json):\n");
@@ -508,6 +548,7 @@ if (single) {
   else if (enPerfiles) checkProfiles(relPath, contenidoStdin);
   else if (relPath === ".claude/harness.config.json" || relPath === rel(CONFIG_PATH)) checkCoherenceConfig(contenidoStdin);
   else checkFile(relPath, contenidoStdin);
+  checkPortablePath(relPath);
   if (esGuia(relPath)) checkCoherenceGuide(relPath, contenidoStdin ?? (fs.existsSync(path.join(REPO_ROOT, relPath)) ? read(relPath) : ""));
 } else {
   for (const f of sourceFiles()) checkFile(f);
@@ -515,6 +556,7 @@ if (single) {
   checkInvariants();
   checkIncidents();
   checkProfiles();
+  checkPortablePaths();
   for (const g of guideFiles()) checkCoherenceGuide(g, read(g));
   checkCoherenceConfig();
 }

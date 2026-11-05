@@ -35,7 +35,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 // El mismo helper que usan el hook y el lint: comparar contra la lista DECLARADA dejaba pasar
 // justo el caso del incidente (el gate declara una extensión que el default agnóstico no tiene).
-import { codeExtensions, depsMatcher, importSyntax, segmentosDeRuta, relativaDesdeRaiz, esUnidadPelada, parseHookCommand, firstMatch, existeEjecutable, writeTools, escribe , rutaDeEstado , tareaActiva } from "../.claude/hooks/harness.mjs";
+import { codeExtensions, depsMatcher, importSyntax, segmentosDeRuta, relativaDesdeRaiz, esUnidadPelada, parseHookCommand, firstMatch, existeEjecutable, writeTools, escribe , rutaDeEstado , tareaActiva, DEFAULT_ISSUE_NON_EXAMPLES } from "../.claude/hooks/harness.mjs";
 
 const REPO_ROOT = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
 const abs = (p) => path.join(REPO_ROOT, p);
@@ -264,6 +264,19 @@ function sampleFromPattern(pattern) {
 }
 
 /**
+ * The sample a rule is tested with: the author's `sample` when the rule declares one, else the
+ * one derived from its pattern. Some patterns (lookbehind, nested alternations with quoting) no
+ * generator reduces, and they used to be OMITTED forever — a brake with no proof of life. The
+ * author knows a command the rule exists for; `sample` lets them write it down. A declared sample
+ * that does not match its own pattern is checked separately and is RED: it would prove nothing.
+ */
+function muestraDe(regla, campo = "pattern") {
+  const declarada = campo === "pattern" ? regla?.sample : null;
+  if (typeof declarada === "string" && declarada.trim()) return declarada;
+  return sampleFromPattern(regla?.[campo] ?? "");
+}
+
+/**
  * Qué ejecuta un hook declarado en settings.json.
  *
  * La implementación vive en `harness.mjs`, junto con los otros defaults compartidos: la
@@ -272,6 +285,23 @@ function sampleFromPattern(pattern) {
  * uno de los dos miente. Acá queda el alias para no tocar los casos de abajo.
  */
 const analizarComando = parseHookCommand;
+
+/**
+ * The counter-examples a work-item pattern catches — and must not. A derived sample cannot catch
+ * a pattern that matches too much (it matches its own sample too): `\b[A-Z]{2,}-[0-9]+\b` passed
+ * every check while «UTF-8» counted as a reference (docs/gotchas.md). Default list plus the
+ * team's `tracker.issueNonExamples`.
+ */
+function referenciasFalsas(tracker) {
+  if (!tracker?.issuePattern) return [];
+  let re;
+  try {
+    re = new RegExp(tracker.issuePattern);
+  } catch {
+    return [];
+  }
+  return [...DEFAULT_ISSUE_NON_EXAMPLES, ...(tracker.issueNonExamples ?? [])].filter((s) => re.test(s));
+}
 
 // ¿El ejecutable existe? La pregunta vive en `.claude/hooks/harness.mjs` (`existeEjecutable`):
 // acá había una copia sin la búsqueda de Windows (PATHEXT), la misma falla que tenían
@@ -652,6 +682,36 @@ if (!regexMalos) ok(`${patronesDelConfig.filter(([, p]) => p).length} regex del 
     });
   if (!mentirosas.length) ok("todas las muestras derivadas del config casan su patrón");
   else bad("las muestras derivadas casan su patrón", mentirosas.map(([d, p, m]) => `${d}: \`${p}\` → \`${m}\``).join("\n      "));
+
+  // A declared `sample` (any rule, anywhere in the config) must match its own pattern: a sample
+  // that does not would make the brake's case test a command the rule never sees.
+  const muestrasDeclaradas = (raiz) => {
+    const declaradas = [];
+    const recorrer = (nodo, donde) => {
+      if (Array.isArray(nodo)) nodo.forEach((n, i) => recorrer(n, `${donde}[${i}]`));
+      else if (nodo && typeof nodo === "object") {
+        if (typeof nodo.sample === "string" && typeof nodo.pattern === "string") declaradas.push([donde, nodo]);
+        for (const [k, v] of Object.entries(nodo)) if (!k.startsWith("$")) recorrer(v, donde ? `${donde}.${k}` : k);
+      }
+    };
+    recorrer(raiz, "");
+    const falsas = declaradas.filter(([, r]) => {
+      try {
+        return !new RegExp(r.pattern, "i").test(r.sample);
+      } catch {
+        return true;
+      }
+    });
+    return { declaradas, falsas };
+  };
+  const { declaradas, falsas } = muestrasDeclaradas(config);
+  if (!declaradas.length) skip("los `sample` declarados casan su patrón", "ninguna regla declara `sample`");
+  else if (!falsas.length) ok(`los ${declaradas.length} \`sample\` declarados casan su patrón`);
+  else bad("un `sample` declarado no casa su patrón", falsas.map(([d, r]) => `${d}: \`${r.sample}\``).join("\n      "));
+  // Proof of life of the check itself: a bait config with one honest and one lying sample.
+  const cebo = muestrasDeclaradas({ bash: { deny: [{ pattern: "\\bgit\\s+reset\\s+--hard", sample: "git reset --hard" }, { pattern: "\\bgit\\s+reset\\s+--hard", sample: "git reset --soft" }] } });
+  if (cebo.declaradas.length === 2 && cebo.falsas.length === 1 && cebo.falsas[0][0] === "bash.deny[1]") ok("un `sample` que no casa su patrón se detecta y se nombra (cebo)");
+  else bad("el chequeo de `sample` muerde", `cebo: ${cebo.declaradas.length} declaradas, ${cebo.falsas.length} falsas`);
 }
 
 const rutasDelConfig = [
@@ -681,7 +741,7 @@ section("3. los frenos muerden");
 
 // 3a. Rutas protegidas: una muestra por regla.
 if (enParte("frenos")) for (const regla of config.protectedPaths ?? []) {
-  let muestra = sampleFromPattern(regla.pattern);
+  let muestra = muestraDe(regla);
   if (!muestra) {
     skip(`protectedPaths \`${regla.pattern}\``, "el patrón no se puede reducir a un ejemplo; probalo a mano");
     continue;
@@ -813,9 +873,9 @@ if (enParte("frenos") && hookFiles.has("bash-guard.mjs") && (config.bash?.deny ?
 }
 if (enParte("frenos") && hookFiles.has("bash-guard.mjs")) {
   for (const regla of config.bash?.deny ?? []) {
-    const muestra = sampleFromPattern(regla.pattern);
+    const muestra = muestraDe(regla);
     if (!muestra) {
-      skip(`bash.deny \`${regla.pattern}\``, "el patrón no se puede reducir a un ejemplo; probalo a mano");
+      skip(`bash.deny \`${regla.pattern}\``, "el patrón no se puede reducir a un ejemplo: declarale un `sample`");
       continue;
     }
     const r = runHook("bash-guard.mjs", {
@@ -838,9 +898,9 @@ if (enParte("frenos") && hookFiles.has("bash-guard.mjs")) {
   //     `permissionDecision: "ask"`: un exit 2 acá sería un bloqueo que el sí del humano no
   //     levanta, que es justo el defecto que este nivel existe para arreglar.
   for (const regla of config.bash?.ask ?? []) {
-    const muestra = sampleFromPattern(regla.pattern);
+    const muestra = muestraDe(regla);
     if (!muestra) {
-      skip(`bash.ask \`${regla.pattern}\``, "el patrón no se puede reducir a un ejemplo; probalo a mano");
+      skip(`bash.ask \`${regla.pattern}\``, "el patrón no se puede reducir a un ejemplo: declarale un `sample`");
       continue;
     }
     const r = runHook("bash-guard.mjs", { hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command: muestra } });
@@ -877,7 +937,7 @@ if (enParte("frenos") && hookFiles.has("bash-guard.mjs")) {
     if (libre.status === 0 && !libre.pregunta) ok(`bash-guard deja pasar sin preguntar la forma segura \`${ejemplo}\``);
     else bad(`bash.ask exento: \`${ejemplo}\``, `exit ${libre.status}, ${libre.pregunta ? "preguntó igual" : "bloqueó"}: la exención no aplica`);
 
-    const muestra = sampleFromPattern(regla.pattern);
+    const muestra = muestraDe(regla);
     const encadenado = pedir(`${ejemplo} && ${muestra ?? ejemplo}`);
     if (encadenado.pregunta || encadenado.status === 2) ok("bash-guard: la exención no se hereda encadenando otro comando");
     else bad("bash.ask exento encadenado", `\`${ejemplo} && …\` pasó sin preguntar: \`exempt\` no está anclado`);
@@ -885,7 +945,7 @@ if (enParte("frenos") && hookFiles.has("bash-guard.mjs")) {
 
   // Sin `hook_event_name` el JSON de «ask» no se reconoce y el comando correría sin preguntar:
   // hacia el lado seguro, bloquea.
-  const regla = (config.bash?.ask ?? []).map((r) => sampleFromPattern(r.pattern)).find((m) => m && !firstMatch(config.bash?.deny, m));
+  const regla = (config.bash?.ask ?? []).map((r) => muestraDe(r)).find((m) => m && !firstMatch(config.bash?.deny, m));
   if (regla) {
     const sinEvento = runHook("bash-guard.mjs", { tool_name: "Bash", tool_input: { command: regla } });
     if (sinEvento.status === 2) ok("bash-guard bloquea un «ask» que no puede preguntar (sin evento)");
@@ -914,6 +974,7 @@ if (corre("frenos") && config.deploy && hookFiles.has("deploy-guard.mjs")) {
   // podrían estar mal escritas sin que nadie se entere. Se prueba cada pedazo que casa solo.
   const muestras = (reglas) =>
     (reglas ?? []).flatMap((r) => {
+      if (r.sample) return [[r, muestraDe(r)]];
       const cruda = sampleFromPattern(r.pattern);
       if (!cruda) return [[r, null]];
       const piezas = cruda.split("|").map((p) => p.trim()).filter((p) => p && firstMatch([r], p));
@@ -1936,6 +1997,63 @@ const huerfanasDe = (cfg) => {
       "lo de afuera del repo se ve como afuera",
       [...malosAfuera.map(([, r]) => `${r} se vio DENTRO`), ...malosAdentro.map(([, r]) => `${r} se vio FUERA`)].join(" · "),
     );
+}
+
+// 3f-post. `.githooks/post-commit` (`postCommit`): after a commit that touches a `watch` extension it
+//     runs the refresh; a commit that touches none does not; a refresh that fails never undoes
+//     the commit; without the key it does nothing. A real temp git repo with the hook installed
+//     through `core.hooksPath`, and a fake refresh that leaves a mark (no codegraph needed).
+if (enParte("registro") && config.postCommit && fs.existsSync(abs(".githooks/post-commit"))) {
+  if (!HAY_BASH) skip("post-commit refresca lo derivado", "no hay bash en esta máquina (en Windows lo trae Git for Windows)");
+  else {
+    const tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "harness-postcommit-")));
+    try {
+      const g = (...a) => spawnSync("git", a, { cwd: tmp, encoding: "utf8" });
+      g("init", "-q", "-b", "main");
+      g("config", "user.email", "selftest@example.com");
+      g("config", "user.name", "selftest");
+      fs.mkdirSync(path.join(tmp, ".githooks"), { recursive: true });
+      fs.mkdirSync(path.join(tmp, ".claude"), { recursive: true });
+      fs.copyFileSync(abs(".githooks/post-commit"), path.join(tmp, ".githooks", "post-commit"));
+      fs.chmodSync(path.join(tmp, ".githooks", "post-commit"), 0o755);
+      g("config", "core.hooksPath", ".githooks");
+      const marca = path.join(tmp, "refrescado.txt");
+      const cfg = (postCommit) => fs.writeFileSync(path.join(tmp, ".claude", "harness.config.json"), JSON.stringify(postCommit ? { postCommit } : {}));
+      const refresco = { name: "cebo", command: ["node", "-e", `require('fs').appendFileSync(${JSON.stringify(marca)}, 'x')`], watch: [".mjs"] };
+      const commit = (archivo) => {
+        fs.writeFileSync(path.join(tmp, archivo), String(Math.random()));
+        g("add", archivo);
+        return g("commit", "-qm", `toca ${archivo}`);
+      };
+      const veces = () => (fs.existsSync(marca) ? fs.readFileSync(marca, "utf8").length : 0);
+      cfg(refresco);
+      const conCodigo = commit("a.mjs");
+      const despuesCodigo = veces();
+      commit("nota.md");
+      const despuesDoc = veces();
+      cfg({ ...refresco, command: ["node", "-e", "process.exit(3)"] });
+      const falla = commit("b.mjs");
+      const head = g("log", "-1", "--format=%s").stdout.trim();
+      cfg(null);
+      commit("c.mjs");
+      if (conCodigo.status === 0 && despuesCodigo === 1 && despuesDoc === 1 && falla.status === 0 && /falló/.test(`${falla.stdout}${falla.stderr}`) && head === "toca b.mjs" && veces() === 1)
+        ok("post-commit refresca tras tocar un `watch`, calla con un .md, un refresco que falla no deshace el commit, y sin la clave no hace nada");
+      else bad("post-commit refresca lo derivado", `code→${despuesCodigo} · doc→${despuesDoc} · failing refresh exit ${falla.status} «${`${falla.stdout}${falla.stderr}`.trim().slice(0, 120)}» head «${head}» · without key→${veces()}`);
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  }
+}
+
+// 3f-pre. The reference pattern does not bite where it should not (P3 for `issuePattern`): none of
+//     the counter-examples counts as a work item. The bait is the gotcha's own pattern.
+if (enParte("registro") && config.tracker?.issuePattern) {
+  const anchas = referenciasFalsas(config.tracker);
+  if (!anchas.length) ok(`\`tracker.issuePattern\` no caza ninguna de las ${DEFAULT_ISSUE_NON_EXAMPLES.length + (config.tracker.issueNonExamples ?? []).length} contra-muestras (UTF-8, ISO-8601…)`);
+  else bad("`tracker.issuePattern` caza de más", `caza ${anchas.map((s) => `«${s}»`).join(", ")}: un commit que lo mencione «tiene referencia»`);
+  const cebo = referenciasFalsas({ issuePattern: "\\b[A-Z]{2,}-[0-9]+\\b" });
+  if (cebo.includes("UTF-8") && !referenciasFalsas({ issuePattern: "\\b(PROJ|OPS)-[0-9]+\\b" }).length) ok("un `issuePattern` ancho (`[A-Z]{2,}-[0-9]+`) se detecta, y uno con prefijos reales pasa (cebo)");
+  else bad("el chequeo de `issuePattern` ancho muerde", `cebo ancho → ${cebo.join(",") || "nada"}`);
 }
 
 // 3f. El trabajo queda registrado: `.githooks/commit-msg` en un repo git DE VERDAD.
@@ -3143,6 +3261,41 @@ if (config.profiles?.dir) {
   }
 }
 
+// 4e-portable. PORTABLE: every tracked path can be checked out on Windows, macOS and Linux. Per
+//     path by stdin (the virtual path is the case, nothing is written); the whole-repo half
+//     (case collisions, length) in a temp git repo whose index gets the paths through
+//     `update-index --cacheinfo` — a case-insensitive disk could not even hold both files.
+if (enParte("reglas") && config.portablePaths) {
+  // Under `fixture/`, a root this repo does not have: the link-check does not read these as citations.
+  const muerde = [["fixture/CON.md", "nombre reservado"], ["fixture/lpt1", "nombre reservado sin extensión"], ["fixture/a?b.md", "carácter inválido"], ["fixture/punto.", "punto final"]];
+  const malas = muerde.filter(([p]) => !lint(p, "x").out.includes("PORTABLE"));
+  if (!malas.length) ok(`lint PORTABLE caza ${muerde.map(([, d]) => d).join(" · ")}`);
+  else bad("lint PORTABLE muerde", `pasaron: ${malas.map(([p]) => p).join(", ")}`);
+  const inocentes = ["fixture/console.md", "fixture/auxiliar.md", "fixture/com.md", "fixture/v1.2/notas.md"];
+  const deMas = inocentes.filter((p) => lint(p, "x").out.includes("PORTABLE"));
+  if (!deMas.length) ok(`lint PORTABLE no muerde de más (${inocentes.join(", ")})`);
+  else bad("lint PORTABLE muerde de más", deMas.join(", "));
+
+  const tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "harness-portable-")));
+  try {
+    const g = (...a) => spawnSync("git", a, { cwd: tmp, encoding: "utf8", input: a[0] === "hash-object" ? "x" : undefined });
+    g("init", "-q");
+    for (const d of ["scripts", ".claude/hooks"]) fs.mkdirSync(path.join(tmp, d), { recursive: true });
+    fs.copyFileSync(abs("scripts/repo-lint.mjs"), path.join(tmp, "scripts", "repo-lint.mjs"));
+    fs.copyFileSync(abs(".claude/hooks/harness.mjs"), path.join(tmp, ".claude", "hooks", "harness.mjs"));
+    fs.writeFileSync(path.join(tmp, ".claude", "harness.config.json"), JSON.stringify({ portablePaths: { maxLength: 40 } }));
+    const blob = g("hash-object", "-w", "--stdin").stdout.trim();
+    const largo = `fixture/${"x".repeat(40)}.md`;
+    for (const p of ["fixture/Guia.md", "fixture/guia.md", largo]) g("update-index", "--add", "--cacheinfo", `100644,${blob},${p}`);
+    const r = spawnSync(process.execPath, [path.join(tmp, "scripts", "repo-lint.mjs")], { cwd: tmp, encoding: "utf8" });
+    const out = `${r.stdout}${r.stderr}`;
+    if (r.status === 1 && /choca con «fixture\/Guia\.md»/.test(out) && out.includes(`${largo}:0  [PORTABLE]  ruta de`)) ok("lint PORTABLE caza dos rutas que sólo difieren en mayúsculas y una ruta más larga que `maxLength`");
+    else bad("lint PORTABLE sobre el repo entero", `exit ${r.status}: ${out.slice(0, 240)}`);
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+}
+
 // 4f. El arnés no escribe temporales dentro del árbol de fuentes. En el abanico esto corre
 //     mientras las otras partes siguen trabajando, así que el padre lo repite al final, con
 //     todas terminadas: es la única pasada que ve lo que dejó CUALQUIER parte (P7).
@@ -3590,6 +3743,9 @@ if (corre("perfiles") && config.examples?.dir) {
     if (huerfanas.length) {
       problemas.push(`\`${huerfanas.join(", ")}\` ensucian el gate y el barrido del lint no las lee (declaralas en \`lint.sourceExtensions\`)`);
     }
+
+    const anchas = referenciasFalsas(ej.tracker);
+    if (anchas.length) problemas.push(`\`tracker.issuePattern\` caza ${anchas.map((s) => `«${s}»`).join(", ")}: cualquier commit que lo mencione «tiene referencia»`);
 
     const dep = ej.forbiddenDeps;
     if (dep?.manifest && (dep.packages ?? []).length && !dep.matcher && !esClaveValor(dep.manifest)) {
