@@ -404,6 +404,9 @@ node scripts/status.mjs check                                 # la señal del ga
 node scripts/status.mjs migrate                               # STATUS.md en prosa → bitácora (dry-run)
 ```
 
+La clave de un `gate.verdict` es una rama, no una ruta: el link-check no la lee como puntero
+(una rama `docs/…` ya borrada quedaría roja para siempre en una bitácora que no se edita).
+
 Sin `status.events` el script no hace nada y `STATUS.md` sigue siendo prosa: un repo portado no se
 rompe por no tener la bitácora. La depuración guiada es `/bitacora`.
 
@@ -473,8 +476,8 @@ config: [ciclo-desarrollo.md](ciclo-desarrollo.md).
 
 | Práctica | Qué verifica en el commit | Fuga declarada |
 |---|---|---|
-| `testFirst` | si el commit toca código (`codePattern`, o el de `commitMsg`) también toca un archivo de prueba (`testPattern`, o el de `tests.filePattern`) | `no-test: <motivo>` |
-| `smallBatch` | archivos y líneas bajo `maxFiles` / `maxLines`; `ignorePattern` saca del conteo lo que crece por naturaleza | `big-batch: <motivo>` |
+| `testFirst` | si el commit toca código (`codePattern`, o el de `commitMsg`) también toca un archivo de prueba (`testPattern`, o el de `tests.filePattern`). También alcanza con que la tarea activa (`task.file`) tenga pruebas congeladas por `lock` que ya estén en `HEAD`. `library.catalog` y `library.appendix` no cuentan como código | `no-test: <motivo>` |
+| `smallBatch` | archivos y líneas bajo `maxFiles` / `maxLines`; `ignorePattern` saca del conteo lo que crece por naturaleza, y el índice regenerado de la biblioteca (`library.catalog`, `library.appendix`) nunca cuenta | `big-batch: <motivo>` |
 | `refactorSeparate` | un commit cuyo asunto casa `subjectPattern` no toca pruebas | `mixed-refactor: <motivo>` |
 | `pairing` | el mensaje trae `trailer` (`Co-authored-by:`) | `solo: <motivo>` |
 

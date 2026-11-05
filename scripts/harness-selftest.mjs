@@ -2194,13 +2194,28 @@ if (corre("registro")) {
     // Repo git NUEVO por caso, igual que en commit-msg: lo staged de un caso anterior
     // contaminaría el siguiente. `--config` permite el CEBO de una práctica apagada acá
     // sin escribir nada en el árbol de fuentes (P7).
-    const correr = (archivos, mensaje, configOverride) => {
+    // `previo`: lo que ya estaba en la historia antes del commit que se juzga (un commit inicial),
+    // y `tarea`: la tarea declarada en su gitdir. Hacen falta para el ciclo con pruebas congeladas.
+    const correr = (archivos, mensaje, configOverride, { previo = null, tarea = null } = {}) => {
       const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "harness-ciclo-"));
       try {
         const git = (...a) => spawnSync("git", a, { cwd: tmp, encoding: "utf8" });
         git("init", "-q");
         git("config", "user.email", "selftest@example.com");
         git("config", "user.name", "selftest");
+        if (previo) {
+          for (const [rel, contenido] of Object.entries(previo)) {
+            fs.mkdirSync(path.dirname(path.join(tmp, rel)), { recursive: true });
+            fs.writeFileSync(path.join(tmp, rel), contenido);
+            git("add", rel);
+          }
+          git("commit", "-q", "--no-verify", "-m", "previo");
+        }
+        if (tarea && (configOverride ?? config).task?.file) {
+          const dest = path.join(tmp, (configOverride ?? config).task.file);
+          fs.mkdirSync(path.dirname(dest), { recursive: true });
+          fs.writeFileSync(dest, JSON.stringify(tarea));
+        }
         const rutaCfg = path.join(tmp, "cfg.json");
         fs.writeFileSync(rutaCfg, JSON.stringify(configOverride ?? config));
         for (const [rel, contenido] of Object.entries(archivos)) {
@@ -2254,12 +2269,28 @@ if (corre("registro")) {
       skip("ciclo (XP): prácticas del equipo", "`commitMsg.codePattern` o el patrón de tests no se reducen a un ejemplo");
     } else {
       const archivoCodigo = `${prefijo}ejemplo.mjs`;
+      const tareaCongelada = { item: "1", alcance: [], criterios: [], lock: { at: "2026-01-01T00:00:00Z", files: { [archivoTest]: "sha" } } };
+      // El cebo trae su propio `task.file`: un repo sin `task` (el config del quick start) no tiene
+      // dónde congelar, y el caso tiene que probar el mecanismo igual.
+      const conTarea = { ...conXp("testFirst", {}), task: { ...(config.task ?? {}), file: config.task?.file ?? ".git/harness-task.json" } };
+      // Sólo si el catálogo cae bajo lo que cuenta como código: si no, el caso no prueba nada.
+      const catalogo = config.library?.catalog && new RegExp(config.commitMsg?.codePattern ?? "$^").test(config.library.catalog) ? config.library.catalog : null;
+      if (!catalogo) skip("ciclo (XP): el índice de la biblioteca no cuenta como código", "`library.catalog` no cae bajo `commitMsg.codePattern`: no hay nada que eximir");
       const casos = [
         // test primero: la prueba y el cambio entran juntos, o se declara por qué no
         ["XP test primero: código sin prueba no entra", { [archivoCodigo]: "// x\n" }, "fix: algo", conXp("testFirst", {}), 1],
         ["XP test primero: código CON su prueba entra", { [archivoCodigo]: "// x\n", [archivoTest]: "// caso\n" }, "fix: algo", conXp("testFirst", {}), 0],
         ["XP test primero: la fuga con motivo entra", { [archivoCodigo]: "// x\n" }, `fix: algo\n\n${reglasXp.testFirst?.escapeLine ?? "no-test:"} typo en un comentario`, conXp("testFirst", {}), 0],
         ["XP test primero: la fuga SIN motivo no alcanza", { [archivoCodigo]: "// x\n" }, `fix: algo\n\n${reglasXp.testFirst?.escapeLine ?? "no-test:"}`, conXp("testFirst", {}), 1],
+        // pruebas congeladas: la roja entró en el commit anterior y la tarea la congeló (hallazgo 11)
+        ["XP test primero: el arreglo de una prueba roja CONGELADA y commiteada entra", { [archivoCodigo]: "// x\n" }, "fix: algo", conTarea, 0, { previo: { [archivoTest]: "// roja\n" }, tarea: tareaCongelada }],
+        ["XP test primero: congelada pero NO commiteada no cuenta", { [archivoCodigo]: "// x\n" }, "fix: algo", conTarea, 1, { tarea: tareaCongelada }],
+        ["XP test primero: una tarea sin `lock` no exime", { [archivoCodigo]: "// x\n" }, "fix: algo", conTarea, 1, { previo: { [archivoTest]: "// roja\n" }, tarea: { ...tareaCongelada, lock: undefined } }],
+        // derivados: el índice regenerado de la biblioteca no es comportamiento ni lote (hallazgo 13)
+        ...(catalogo ? [
+          ["XP test primero: el índice regenerado de la biblioteca no pide prueba", { [catalogo]: "{}\n" }, "docs: reindexar", conXp("testFirst", {}), 0],
+          ["XP lote chico: el índice regenerado no suma al lote", { [archivoCodigo]: "// x\n", [catalogo]: "{}\n".repeat(50) }, "feat: una cosa", conXp("smallBatch", { maxFiles: 1, maxLines: 10 }), 0],
+        ] : []),
         // lote chico: el límite sale del config, el cebo lo baja a 1 archivo
         ["XP lote chico: un lote sobre el límite no entra", { [archivoCodigo]: "// x\n", [`${prefijo}otro.mjs`]: "// y\n" }, "feat: dos cosas", conXp("smallBatch", { maxFiles: 1, maxLines: 0 }), 1],
         ["XP lote chico: declarado con motivo, entra", { [archivoCodigo]: "// x\n", [`${prefijo}otro.mjs`]: "// y\n" }, `feat: dos cosas\n\n${reglasXp.smallBatch?.escapeLine ?? "big-batch:"} movimiento mecánico de un renombre`, conXp("smallBatch", { maxFiles: 1, maxLines: 0 }), 0],
@@ -2272,8 +2303,8 @@ if (corre("registro")) {
         ["XP de a dos: con el trailer de co-autoría, entra", { [archivoCodigo]: "// x\n" }, `feat: algo\n\n${reglasXp.pairing?.trailer ?? "Co-authored-by:"} Par <par@ejemplo.com>`, conXp("pairing", {}), 0],
       ];
 
-      for (const [nombre, archivos, mensaje, cfg, esperado] of casos) {
-        const res = correr(archivos, mensaje, cfg);
+      for (const [nombre, archivos, mensaje, cfg, esperado, extra] of casos) {
+        const res = correr(archivos, mensaje, cfg, extra);
         if (res.status === esperado) ok(`ciclo: ${nombre}`);
         else bad(`ciclo: ${nombre}`, `esperaba exit ${esperado}, salió ${res.status}. stderr: ${res.stderr.trim().slice(0, 200)}`);
       }
@@ -2959,6 +2990,22 @@ if (corre("reglas")) {
       if (!existia) fs.rmSync(dir, { recursive: true, force: true });
     }
   }
+}
+
+// 3-bitácora. La rama de un `gate.verdict` no es una ruta: con el patrón de ramas de la plantilla
+// (`docs/…`) el link-check la daba por puntero muerto, y en una bitácora append-only ese rojo no se
+// podía corregir nunca. El otro lado: una ruta muerta en otra fila de la MISMA bitácora sigue roja.
+if (enParte("estado") && config.status?.events) {
+  const statusFile = config.status.file ?? "STATUS.md";
+  const fila = (n, evento, clave, que) => `| ${n} | 2026-01-01T00:00:00Z | selftest | ${evento} | ${clave} | ${que} | x |`;
+  const linkcheck = (texto) =>
+    spawnSync("node", [abs("scripts/docs-linkcheck.mjs"), "--file", statusFile, "--stdin"], { cwd: REPO_ROOT, encoding: "utf8", input: texto });
+  const rama = linkcheck(`- **Rama:** \`docs/rama-ya-borrada\` (abc1234)\n\n${fila(1, "gate.verdict", "docs/rama-ya-borrada", "VERDE")}\n`); // linkcheck:ignore — rama del cebo
+  if (rama.status === 0) ok("link-check: la rama de un `gate.verdict` en la bitácora no se lee como ruta");
+  else bad("link-check: la rama de un `gate.verdict` no es una ruta", `salió rojo: ${(rama.stdout || rama.stderr || "").trim().split("\n")[0]}`);
+  const muerta = linkcheck(`${fila(1, "gate.verdict", "docs/rama-ya-borrada", "VERDE")}\n${fila(2, "note", "x", "ver \`docs/no-existe-en-ningun-lado.md\`")}\n`); // linkcheck:ignore — puntero del cebo
+  if (muerta.status !== 0) ok("link-check: una ruta muerta en otra fila de la bitácora sigue roja");
+  else bad("link-check: la exención de ramas no tapa rutas muertas", "salió verde con un puntero a un archivo inexistente");
 }
 
 // ── 4. Las reglas del lint muerden (por stdin: no escribe archivos) ──────────

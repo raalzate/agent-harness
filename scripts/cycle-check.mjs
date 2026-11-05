@@ -204,6 +204,42 @@ function revisarSincronia(rama, sha, { manual = false } = {}) {
 // ────────────────────────────────── prácticas XP ──────────────────────────────────
 
 /**
+ * Lo que un comando del arnés regenera y el repo versiona: el índice de la biblioteca y su
+ * apéndice. Ni es comportamiento ni lo revisa nadie línea por línea, y contarlo como código
+ * obligaba al primer `library.mjs index` a declarar `no-test:` y `big-batch:` (hallazgo 13 del
+ * taller). Lo que lo verifica es su señal del gate (`library.mjs check`), no estas prácticas.
+ */
+function derivados() {
+  return new Set([config.library?.catalog, config.library?.appendix].filter(Boolean).map((p) => String(p).split("\\").join("/")));
+}
+
+/**
+ * El ciclo con pruebas inmutables pone la prueba roja en un commit y el arreglo en el siguiente
+ * (`task.mjs lock` entre los dos). «Test primero» mira el commit suelto, así que el commit verde
+ * —el del propio `coder`— salía bloqueado y empujaba a un `no-test:` en cada arreglo: una fuga
+ * declarada como ritual (hallazgo 11 del taller). Cuenta como prueba del cambio la que la tarea
+ * activa congeló, siempre que ya esté en la historia: congelar no es commitear, y una prueba que
+ * sólo existe en el árbol no demuestra nada a quien lee el historial.
+ */
+function pruebasCongeladasEnLaHistoria() {
+  const rel = config.task?.file;
+  if (!rel) return false;
+  // La tarea del repo que se commitea (cwd), y en un worktree la de SU gitdir: `--git-path`
+  // resuelve las dos cosas. La raíz del script no sirve: el hook puede correr sobre otro repo.
+  const norm = String(rel).split("\\").join("/");
+  const ruta = norm.startsWith(".git/") ? git("rev-parse", "--git-path", norm.slice(".git/".length)) : norm;
+  let tarea = null;
+  try {
+    tarea = JSON.parse(fs.readFileSync(ruta, "utf8"));
+  } catch {
+    return false; // sin tarea, o ilegible: no hay pruebas congeladas que contar
+  }
+  const congeladas = Object.keys(tarea?.lock?.files ?? {});
+  if (!congeladas.length) return false;
+  return congeladas.every((rel) => spawnSync("git", ["cat-file", "-e", `HEAD:${rel}`], { encoding: "utf8" }).status === 0);
+}
+
+/**
  * Test primero. No prueba que el test se haya escrito ANTES —nada lo prueba desde acá—,
  * sino que el cambio de comportamiento y su prueba entran juntos al historial. Es el
  * mínimo verificable, y es el que se saltea.
@@ -216,9 +252,11 @@ function revisarTestPrimero(msg, staged) {
   if (!reCodigo || !reTest) return;
 
   const ignoradas = regla.ignoreExtensions ?? config.commitMsg?.ignoreExtensions ?? [".md"];
-  const codigo = staged.filter((f) => reCodigo.test(f) && !ignoradas.some((e) => f.endsWith(e)) && !reTest.test(f));
+  const generados = derivados();
+  const codigo = staged.filter((f) => reCodigo.test(f) && !ignoradas.some((e) => f.endsWith(e)) && !reTest.test(f) && !generados.has(f));
   if (!codigo.length) return;
   if (staged.some((f) => reTest.test(f))) return;
+  if (pruebasCongeladasEnLaHistoria()) return;
 
   const fuga = regla.escapeLine ?? "no-test:";
   if (declarada(msg, fuga)) return;
@@ -243,11 +281,14 @@ function revisarLote(msg, staged, numstat) {
   const fuga = regla.escapeLine ?? "big-batch:";
   if (declarada(msg, fuga)) return;
 
-  const ignoradas = (regla.ignorePattern && compila(regla.ignorePattern)) || null;
-  const cuentan = ignoradas ? staged.filter((f) => !ignoradas.test(f)) : staged;
+  const re = (regla.ignorePattern && compila(regla.ignorePattern)) || null;
+  // Un lote grande se aprueba sin leerlo; un índice regenerado no se lee nunca: no suma al lote.
+  const generados = derivados();
+  const ignoradas = { test: (f) => generados.has(f) || Boolean(re?.test(f)) };
+  const cuentan = staged.filter((f) => !ignoradas.test(f));
 
   const lineas = numstat
-    .filter(([, , f]) => !ignoradas || !ignoradas.test(f))
+    .filter(([, , f]) => !ignoradas.test(f))
     .reduce((acc, [mas, menos]) => acc + mas + menos, 0);
 
   const excesos = [];

@@ -497,3 +497,46 @@ Regla:   todo `spawn` que escribe en stdin atiende `child.stdin.on("error")`: lo
 Mecanismo: caso de la sección 10e del self-test: un hook que sale sin leer, con un payload más
          grande que el buffer del pipe, hace el EPIPE determinista; el corredor tiene que resolver
          con el exit, no caerse.
+
+
+### GOTCHA: el commit verde del ciclo con pruebas congeladas salía bloqueado por «test primero»
+
+Síntoma: en el taller (módulo 8.2), después de commitear la prueba roja y `task.mjs lock`, el
+         commit del arreglo salió con `ciclo (XP · test primero): este commit cambia
+         comportamiento y no trae ninguna prueba`. Cada arreglo del `coder` exigía `no-test:`.
+Causa:   `xp.testFirst` miraba el commit suelto, y el ciclo rojo → `lock` → verde pone la prueba
+         a propósito en el commit anterior. Las dos piezas eran correctas por separado; ningún
+         caso del self-test las corría juntas.
+Regla:   «test primero» cuenta como prueba del cambio las que la tarea activa congeló, si ya están
+         en `HEAD`: congelar no es commitear. Una fuga que se declara en cada commit es un ritual.
+Mecanismo: `pruebasCongeladasEnLaHistoria` en `scripts/cycle-check.mjs` y tres casos de la sección
+         de prácticas XP del self-test (congelada y commiteada entra; congelada sin commitear y
+         tarea sin `lock` no alcanzan).
+
+
+### GOTCHA: el índice regenerado de la biblioteca contaba como código para las prácticas XP
+
+Síntoma: en el taller (módulo 8.9), el primer `library.mjs index` no se pudo commitear sin
+         `no-test:` y `big-batch:`: `.claude/library/catalog.json` sumaba 270 líneas al lote.
+Causa:   el catálogo vive bajo `.claude/`, que cae en `commitMsg.codePattern`, y `xp.smallBatch`
+         sólo excluye `ignorePattern` (`^docs/` en la plantilla): un derivado versionado se medía
+         como comportamiento escrito a mano.
+Regla:   lo que un comando del arnés regenera no lo miden las prácticas que existen para que una
+         persona lea el cambio: lo verifica su propia señal del gate (`library.mjs check`).
+Mecanismo: `derivados()` en `scripts/cycle-check.mjs` (`library.catalog` y `library.appendix`) y
+         dos casos del self-test, uno por práctica.
+
+
+### GOTCHA: una rama con prefijo de carpeta dejó el link-check rojo desde la bitácora
+
+Síntoma: después de un gate verde en una rama `docs/…`, `docs-linkcheck` salió rojo con
+         `STATUS.md: ruta citada → docs/<rama>`, sin que nadie hubiera tocado un documento.
+Causa:   el gate anota un `gate.verdict` cuya clave es la rama, y la proyección la repite en la
+         cabecera. El patrón de ramas de la plantilla admite `docs/…` y `scripts/…`, que el
+         link-check reconoce como raíces de ruta. La bitácora es append-only: borrada la rama, el
+         rojo quedaba para siempre, sin forma legítima de corregirlo.
+Regla:   lo que una herramienta del arnés escribe en un documento no puede ponerle rojo a otra
+         herramienta del arnés. Un nombre de rama no es un puntero.
+Mecanismo: `ramasDeLaBitacora` en `scripts/docs-linkcheck.mjs` (lee la columna del evento, que
+         tiene vocabulario cerrado) y el caso «3-bitácora» del self-test, que además exige que una
+         ruta muerta en otra fila de la misma bitácora siga roja.
