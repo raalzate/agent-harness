@@ -136,6 +136,20 @@ quedaba **omitida para siempre**: un freno sin prueba de vida. Con `sample`, el 
 muestra del autor. El self-test verifica aparte que cada `sample` declarado case con su propio
 patrón: una muestra que no casa probaría un comando que la regla nunca ve, y eso es rojo.
 
+**`flags` (opcional, en las reglas de `bash.deny`, `bash.ask` y `deploy.bash`/`deploy.mcp`).** Las
+banderas con las que se compila el `pattern`. Sin la clave rige `"i"`, como siempre: no distingue
+mayúsculas, y ningún repo ya portado cambia de comportamiento. Con `"flags": ""` la regla
+distingue mayúsculas, que es lo que hace falta cuando la mayúscula ES la diferencia:
+
+```json
+{ "pattern": "git\\s+branch\\s+(-D|--delete\\s+--force)\\b", "flags": "", "reason": "…" }
+```
+
+Sin `flags`, esa regla escalaba también `git branch -d` (el borrado seguro) y no había forma de
+escribir la diferencia. El `exempt` de una regla de `ask` hereda sus `flags`. El self-test
+verifica que los `flags` declarados compilen (una bandera inválida deja la regla sin morder, en
+silencio) y que el `sample` declarado case con ellos.
+
 ### `bash.ask` — que decida el humano (opcional)
 
 ```json

@@ -661,6 +661,30 @@ for (const [donde, pattern] of patronesDelConfig) {
 }
 if (!regexMalos) ok(`${patronesDelConfig.filter(([, p]) => p).length} regex del config compilan`);
 
+// `flags` por regla: `firstMatch` compila en un try/catch y una bandera inválida (`"zz"`) deja la
+// regla sin morder nada, en silencio. Este es el único lugar donde puede fallar en voz alta.
+{
+  const conFlags = [
+    ...(config.bash?.deny ?? []).map((r) => ["bash.deny", r]),
+    ...(config.bash?.ask ?? []).map((r) => ["bash.ask", r]),
+    ...(config.deploy?.bash?.deny ?? []).map((r) => ["deploy.bash.deny", r]),
+    ...(config.deploy?.bash?.ask ?? []).map((r) => ["deploy.bash.ask", r]),
+    ...(config.deploy?.mcp?.deny ?? []).map((r) => ["deploy.mcp.deny", r]),
+    ...(config.deploy?.mcp?.ask ?? []).map((r) => ["deploy.mcp.ask", r]),
+  ].filter(([, r]) => r && "flags" in r);
+  const malas = conFlags.filter(([, r]) => {
+    if (typeof r.flags !== "string") return true;
+    try {
+      new RegExp(r.pattern, r.flags);
+      return false;
+    } catch {
+      return true;
+    }
+  });
+  if (malas.length) bad("`flags` de las reglas compilan", malas.map(([d, r]) => `${d}: \`${r.pattern}\` con flags ${JSON.stringify(r.flags)}`).join("\n      "));
+  else if (conFlags.length) ok(`los \`flags\` de ${conFlags.length} regla(s) compilan`);
+}
+
 // Invariante del generador: la muestra que fabrica DEBE casar el patrón del que salió, o ser
 // null. Sin él, una reducción imperfecta produce un falso rojo sobre un freno que funciona —
 // pasó con `\brm\b[^|;&]*tareas\.json`, que se reducía a «rmtareas.json».
@@ -697,7 +721,9 @@ if (!regexMalos) ok(`${patronesDelConfig.filter(([, p]) => p).length} regex del 
     recorrer(raiz, "");
     const falsas = declaradas.filter(([, r]) => {
       try {
-        return !new RegExp(r.pattern, "i").test(r.sample);
+        // Con los `flags` de la regla, como la evalúa `firstMatch`: con `i` fijo, un `sample` en
+        // minúsculas «casaba» una regla que distingue mayúsculas y probaba un comando que pasa.
+        return !new RegExp(r.pattern, typeof r.flags === "string" ? r.flags : "i").test(r.sample);
       } catch {
         return true;
       }
@@ -941,6 +967,45 @@ if (enParte("frenos") && hookFiles.has("bash-guard.mjs")) {
     const encadenado = pedir(`${ejemplo} && ${muestra ?? ejemplo}`);
     if (encadenado.pregunta || encadenado.status === 2) ok("bash-guard: la exención no se hereda encadenando otro comando");
     else bad("bash.ask exento encadenado", `\`${ejemplo} && …\` pasó sin preguntar: \`exempt\` no está anclado`);
+  }
+
+  // `flags` por regla. Antes todo se evaluaba con `i` fijo y una regla `ask` sobre `git branch -D`
+  // (borrado forzado) escalaba también `git branch -d` (el seguro): no había forma de escribir la
+  // diferencia. Muerde (con `flags: ""`, `-D` pregunta y `-d` pasa) y no muerde de más (sin
+  // `flags`, el comportamiento de siempre, sin distinguir mayúsculas: ningún repo portado cambia).
+  // El hook COPIADO a un repo temporal con un config cebo: `REPO_ROOT` sale de su ubicación (P7).
+  {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "harness-flags-"));
+    try {
+      fs.mkdirSync(path.join(tmp, ".claude", "hooks"), { recursive: true });
+      for (const h of ["harness.mjs", "bash-guard.mjs"]) fs.copyFileSync(abs(`.claude/hooks/${h}`), path.join(tmp, ".claude", "hooks", h));
+      const decide = (bashCfg, command) => {
+        fs.writeFileSync(path.join(tmp, ".claude", "harness.config.json"), JSON.stringify({ bash: bashCfg }));
+        const r = spawnSync(process.execPath, [path.join(tmp, ".claude", "hooks", "bash-guard.mjs")], {
+          input: JSON.stringify({ hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command } }),
+          encoding: "utf8",
+        });
+        if (r.status === 2) return "block";
+        return r.status === 0 && r.stdout.includes('"ask"') ? "ask" : r.status === 0 ? "pass" : `exit ${r.status}`;
+      };
+      const forzado = { pattern: "git\\s+branch\\s+-D\\b", reason: "cebo" };
+      const casos = [
+        ["`ask` con `flags: \"\"` pregunta por `git branch -D`", { ask: [{ ...forzado, flags: "" }] }, "git branch -D vieja", "ask"],
+        ["`ask` con `flags: \"\"` deja pasar `git branch -d` (el borrado seguro)", { ask: [{ ...forzado, flags: "" }] }, "git branch -d vieja", "pass"],
+        ["`deny` con `flags: \"\"` bloquea `git branch -D`", { deny: [{ ...forzado, flags: "" }] }, "git branch -D vieja", "block"],
+        ["`deny` con `flags: \"\"` deja pasar `git branch -d`", { deny: [{ ...forzado, flags: "" }] }, "git branch -d vieja", "pass"],
+        ["`exempt` hereda los `flags` de su regla", { ask: [{ pattern: "git\\s+branch\\b", flags: "", exempt: "^git\\s+branch\\s+-d\\s+\\S+$" }] }, "git branch -D vieja", "ask"],
+        ["sin `flags`, el default de siempre: `-d` también pregunta", { ask: [forzado] }, "git branch -d vieja", "ask"],
+        ["sin `flags`, el default de siempre: mayúsculas cruzadas casan", { ask: [forzado] }, "GIT BRANCH -D vieja", "ask"],
+      ];
+      const fallas = casos
+        .map(([nombre, cfg, cmd, esperado]) => [nombre, cmd, esperado, decide(cfg, cmd)])
+        .filter(([, , esperado, real]) => esperado !== real);
+      if (!fallas.length) for (const [nombre] of casos) ok(`bash-guard: ${nombre}`);
+      else bad("bash-guard respeta `flags` por regla", fallas.map(([n, c, e, r]) => `${n}: \`${c}\` → ${r}, se esperaba ${e}`).join("\n      "));
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
   }
 
   // Sin `hook_event_name` el JSON de «ask» no se reconoce y el comando correría sin preguntar:
@@ -4725,6 +4790,20 @@ if (corre("fuera")) {
       const r = spawnSync(process.execPath, ["--input-type=module", "-e", probe], { encoding: "utf8" });
       if (r.status === 0 && /resolved 0/.test(r.stdout)) ok("deterministic eval: a hook that exits without reading stdin does not crash the runner (EPIPE)");
       else bad("deterministic eval: a hook that closes stdin early", `exit ${r.status}: ${`${r.stderr}`.trim().split("\n").find((l) => /Error/.test(l)) ?? r.stdout.trim()}`);
+
+      // The report names the hook by the FILE it runs. Taking the last word of the command named
+      // `node …/tools/ado.mjs hook edit` as `edit` (found porting to a real repo); the hooks
+      // without arguments must keep the name they always had.
+      const nombres = `import { hookName } from ${JSON.stringify(pathToFileURL(runner).href)};\n` +
+        `console.log(JSON.stringify([` +
+        `'node "$CLAUDE_PROJECT_DIR"/tools/ado.mjs hook edit',` +
+        `'node "$CLAUDE_PROJECT_DIR"/.claude/hooks/bash-guard.mjs',` +
+        `'node .claude/hooks/gate-stop.mjs'` +
+        `].map((command) => hookName({ command }))));\n`;
+      const n = spawnSync(process.execPath, ["--input-type=module", "-e", nombres], { encoding: "utf8" });
+      const esperado = JSON.stringify(["ado.mjs", "bash-guard.mjs", "gate-stop.mjs"]);
+      if (n.status === 0 && n.stdout.trim() === esperado) ok("deterministic eval: a hook with arguments is named by its file (`ado.mjs`, not `edit`), and one without keeps its name");
+      else bad("deterministic eval: hookName names the file the hook runs", `expected ${esperado}, got ${n.stdout.trim() || n.stderr.trim().split("\n").pop()}`);
     }
   }
 }

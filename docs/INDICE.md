@@ -93,7 +93,7 @@
 | [Evaluaciones del arnés: determinista y con IA](evaluaciones.md) | documento | Dos familias que no se mezclan, porque se prueban distinto: |
 | [Mapa del arnés](mapa-del-arnes.json) | grafo (49 nodos, 60 aristas) | GENERADO por `node scripts/harness-map.mjs --graph`: cada etapa del ciclo y las guías, frenos y sensores que actúan en ella, desde `taxonomy`. No se edita a mano. |
 | [El panel del arnés](panel.md) | documento | Una página HTML autocontenida que contesta de un vistazo tres preguntas: ¿el arnés está vivo?, ¿qué dice la memoria del repo? y ¿qué pasó de verdad en esta máquina?. Sin dependencias, sin red (salvo las sondas a localho… |
-| [Quién lee cada clave](quien-lee-cada-clave.md) | tabla | Claves del config y los scripts que las leen (47) |
+| [Quién lee cada clave](quien-lee-cada-clave.md) | tabla | Claves del config y los scripts que las leen (48) |
 | [Recetas](recetas.md) | documento | Situaciones concretas, con el comando al lado. Todo lo de acá asume el arnés ya instalado (docs/portar.md). |
 
 ## incidentes

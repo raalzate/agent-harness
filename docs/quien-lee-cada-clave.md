@@ -11,6 +11,7 @@
 | `writeTools` | `harness.mjs` (`escribe`, `targetPath`, `proposedContent`) → `protected-paths.mjs`, `action-guard.mjs`, `reuse-guard.mjs`, `post-edit-check.mjs`; self-test (3b-bis) |
 | `bash.deny` | `bash-guard.mjs`, self-test |
 | `bash.ask` | `bash-guard.mjs` (después de `deny`), self-test (3c-bis) |
+| `bash.*[].flags`, `deploy.{bash,mcp}.*[].flags` | `harness.mjs` (`firstMatch`: sin la clave rige `i`) → `bash-guard.mjs` (también para `exempt`), `deploy-guard.mjs`, `scripts/repo-lint.mjs` (COHERENCIA), `scripts/task.mjs` (evidencia vedada); self-test (compilan, el `sample` casa con ellos, y el caso a mano `-D`/`-d` de 3c-bis) |
 | `deploy` | `deploy-guard.mjs` (`bash`, `mcp`, `entry`, `targets.*.approval`), `scripts/deploy.mjs` (`targets`, `ledger`, `remote`, `reason`; y `gate.registry`/`gate.marker` para la precondición `gate`), self-test (3c-ter, 3c-quater) |
 | `reuse` | `reuse-guard.mjs`, self-test |
 | `lint` (incluye `sourceExtensions`) | `post-edit-check.mjs`, `scripts/repo-lint.mjs`, `.githooks/pre-commit`, self-test |

@@ -250,6 +250,8 @@
       },
       {
         "pattern": "git\\s+branch\\s+(-D|--delete\\s+--force)\\b",
+        "flags": "",
+        "$flags": "Distingue mayúsculas: sin esto, `git branch -d` (el borrado seguro, que git rechaza si la rama no está mergeada) también le preguntaba al humano.",
         "reason": "borra la rama aunque no esté mergeada: los commits que sólo viven ahí quedan huérfanos."
       },
       {
