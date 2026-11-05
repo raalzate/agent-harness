@@ -40,13 +40,33 @@ const panorama = config.graph.reportFile
     ? `Panorama: \`${config.graph.panoramaCommand}\`.`
     : "";
 
+// La frontera entre los dos índices es la FUENTE, no la forma de la pregunta: el código es de
+// este índice (y del `explorer`); lo que vive bajo `library.root` es de la biblioteca (y de su
+// subagente). Sin nombrarlo acá, «¿dónde está documentado X?» casa `questionPatterns` y el agente
+// buscaba docs en el grafo del código. Si el pedido además casa la ruta de la biblioteca, es
+// mixto: los dos subagentes, en paralelo, cada uno con su fuente.
+const lib = config.library;
+const docsAgent = lib ? (lib.agent ?? "librarian") : null;
+const docsRoute = lib ? (config.sdd?.routes ?? []).find((r) => r.route === (lib.route ?? "library")) : null;
+const mixta =
+  docsRoute &&
+  (docsRoute.patterns ?? []).some((p) => {
+    try {
+      return new RegExp(p, "i").test(prompt);
+    } catch {
+      return false;
+    }
+  });
+
 allow(
   [
     "## Índice del repo (hook graph-first)",
     `- Hay grafo construido en \`${config.graph.graphFile}\`: **consultalo antes de abrir archivos**.`,
     `- \`${config.graph.queryCommand}\` devuelve un subgrafo (símbolo, archivo, relación, radio de impacto) en vez del árbol completo.`,
     `- Abrir archivos es el ÚLTIMO recurso, y sólo el fragmento que el índice señaló: leer de más es la forma cara de contestar con la mitad del mapa.`,
-    `- El subagente \`explorer\` sigue valiendo para lo que el índice no cubre (strings, comentarios, config).`,
+    `- El subagente \`explorer\` sigue valiendo para lo que el índice no cubre en el CÓDIGO (strings, comentarios, config).`,
+    docsAgent ? `- La documentación (\`${lib.root ?? "docs"}/\`) NO es de este índice: es del subagente \`${docsAgent}\`, que consulta la biblioteca.` : null,
+    mixta ? `- **Pregunta mixta (código y documentación):** lanzá \`explorer\` y \`${docsAgent}\` en PARALELO, en el mismo mensaje, cada uno con su fuente; después cruzá las dos respuestas.` : null,
     panorama ? "" : null,
     panorama || null,
   ]

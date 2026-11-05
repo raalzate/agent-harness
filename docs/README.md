@@ -55,6 +55,7 @@ El orden que funciona: **el método** (qué se hace y por qué) → **el caso** 
 |---|---|
 | [arnes.md](arnes.md) | Cómo está montado el arnés **de este repo**, señal por señal y hook por hook. Es el ejemplo de referencia: se audita a sí mismo. |
 | [sdd.md](sdd.md) | Cuándo el trabajo arranca con spec y cuándo no, y por qué saltarse la ruta se declara en vez de omitirse. |
+| [biblioteca.md](biblioteca.md) | **La documentación como biblioteca.** Grafos, tablas y documentos agrupados en bases de conocimiento; el subagente `librarian` que la consulta; indexar, re-indexar y migrar. El apéndice generado: [INDICE.md](INDICE.md). |
 | [gotchas.md](gotchas.md) | Incidentes reales del arnés, en formato fijo (síntoma · causa · regla · mecanismo). |
 
 ## 4. Para copiar

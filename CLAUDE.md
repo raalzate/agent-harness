@@ -22,9 +22,9 @@ nada del repo.
 ```
 .claude/harness.config.json   la única fuente de especificidad
 .claude/hooks/                hooks genéricos (también frenan escrituras MCP); harness.mjs es la plomería
-.claude/agents/               explorer · reviewer · gate-runner · ci-investigator
+.claude/agents/               explorer · librarian · reviewer · gate-runner · ci-investigator
 .claude/commands/             /gate · /lesson · /harness-audit · /harness-port · /architecture · /code-index · /ci
-.claude/skills/               new-guardrail: una regla en prosa → un freno con su prueba de vida
+.claude/skills/               new-guardrail (regla → freno) · library-index · library-migrate (la biblioteca)
 .claude/evals/reviewer/       los diffs con los que se le toma la prueba de vida al reviewer
 .claude/evals/<agente>/       las entradas de la evaluación con IA de gate-runner, ci-investigator y explorer
 .claude/evals/deterministic/  la evaluación determinista: cases.json (guides · rules · signals, es/en) y sus esquemas
@@ -40,6 +40,7 @@ scripts/ai-eval.mjs           la evaluación con IA de los subagentes: promptfoo
 scripts/ci-investigate.mjs    el fallo de CI leído con el CLI de la forja, cruzado con el gate local
 scripts/harness-selftest.mjs  prueba de vida: genera los casos DESDE el config
 scripts/harness-bench.mjs     el arnés instalado en un repo real de cada stack (el encaje)
+scripts/library.mjs           la biblioteca: docs indexados por tipo y por base de conocimiento
 scripts/harness-init.mjs      instalador en otro repo (dry-run por defecto, con perfil de stack)
 scripts/hooks-timing.mjs      el costo del arnés: latencia de cada hook contra su presupuesto
 scripts/deploy.mjs            el único camino de despliegue: dry-run, precondiciones, registro
@@ -82,6 +83,16 @@ Abrir archivos es el último recurso, y sólo el fragmento que el índice señal
 diseño decidido sin medir el radio de impacto es una estimación de memoria, y así se rompe
 lo lejano. La señal del gate sale **OMITIDA** hasta que alguien corra `codegraph init` — omitido
 no es verde.
+
+## Leer la documentación: el bibliotecario
+
+Una pregunta sobre lo que **dice** la documentación («qué dice la doc sobre X», «qué se decidió
+sobre Y») se delega al subagente `librarian`: consulta el índice de la biblioteca (`library`)
+por tipo, lee sólo lo señalado y cita `ruta:línea`. **La frontera con el `explorer` es la
+fuente:** el código es del `explorer` (codegraph), `library.root` del `librarian`; una pregunta
+mixta lanza a los dos en paralelo, en el mismo mensaje. Un doc nuevo, movido o retitulado bajo `docs/`
+se re-indexa (skill `library-index`) y va en **una** base de conocimiento (`library-migrate`): la
+señal `library index (docs)` del gate lo exige. Guía: `docs/biblioteca.md`.
 
 ## Antes de dar algo por terminado
 
@@ -136,6 +147,7 @@ npm run ci:investigate # ¿por qué falló CI? corrida, job, línea, y si el gat
 | el arnés de ESTE repo | `docs/arnes.md` |
 | el panel del arnés (salud, memoria, esta máquina) | `docs/panel.md` |
 | recetas concretas | `docs/recetas.md` |
+| la biblioteca de docs y el bibliotecario | `docs/biblioteca.md` (apéndice generado: `docs/INDICE.md`) |
 | incidentes | `docs/gotchas.md` (formato fijo, lo exige el lint) |
 | por qué está hecho así | `docs/decisions/` |
 

@@ -191,6 +191,7 @@ const COPIAR = [
   ".claude/agents/reviewer.md",
   ".claude/agents/gate-runner.md",
   ".claude/agents/ci-investigator.md",
+  ".claude/agents/librarian.md",
   ".claude/commands/gate.md",
   ".claude/commands/lesson.md",
   ".claude/commands/harness-audit.md",
@@ -198,6 +199,8 @@ const COPIAR = [
   ".claude/commands/code-index.md",
   ".claude/commands/ci.md",
   ".claude/skills/new-guardrail/SKILL.md",
+  ".claude/skills/library-index/SKILL.md",
+  ".claude/skills/library-migrate/SKILL.md",
   "scripts/gate.mjs",
   "scripts/gate.sh",
   "scripts/hooks-install.mjs",
@@ -220,6 +223,9 @@ const COPIAR = [
   // Leer el fallo de CI con el CLI de la forja (`ci.investigate`): lo corre el subagente
   // `ci-investigator`. Genérico: la forja sale del config.
   "scripts/ci-investigate.mjs",
+  // La biblioteca: la consulta el subagente `librarian` y la escriben sus dos skills. Genérico:
+  // la raíz, los tipos y las bases salen de `library` en el config.
+  "scripts/library.mjs",
   // El panel: se regenera en cada corrida del gate, así que sin estos archivos el gate del
   // repo destino dice «Panel: no instalado». Genérico: sin la clave `panel` sale con defaults.
   "scripts/panel/generar.mjs",

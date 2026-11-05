@@ -444,6 +444,24 @@
         "message": "Toca el pipeline: CI corre **el mismo** `gate.command` que el humano — si verifica algo distinto, una de las dos señales miente y gana la que deja mergear. Ninguna etapa saltea la verificación ni marca el gate como tolerante a fallos; el despliegue va DETRÁS del gate verde, no al lado."
       },
       {
+        "$comment": "La biblioteca: una pregunta sobre lo que DICE la documentación se delega al subagente `librarian`, que consulta el índice (grafos, tablas, documentos por base de conocimiento) y cita ruta:línea. Existe porque sin esta guía el agente abre docs a mano: diez archivos para una fila de tabla, y contesta de memoria lo que no encontró.",
+        "route": "library",
+        "patterns": [
+          "\\bqu[ée] dice (la |el )?(doc|documentaci[óo]n|adr|gu[íi]a)",
+          "\\b(en|seg[úu]n) (la )?(doc|documentaci[óo]n)\\b",
+          "\\bd[óo]nde (est[áa]|se|queda) document",
+          "\\bbiblioteca\\b",
+          "\\bbases? de conocimiento\\b",
+          "\\b(re-?)?index[a-záé]*\\s.*\\bdoc",
+          "\\bqu[ée] (se )?decidi[óo]\\b",
+          "\\bwhat do(es)? the docs?\\b",
+          "\\bin the docs?\\b",
+          "\\bknowledge base\\b",
+          "\\b(re-?)?index (the )?doc"
+        ],
+        "message": "Pregunta sobre la DOCUMENTACIÓN → delegala al subagente `librarian` (`docs/biblioteca.md`): consulta el índice de `library` por tipo (tabla para un dato, grafo para una relación, documento para un porqué), lee sólo lo señalado y contesta con ruta:línea y `COBERTURA:`. No abras los docs a mano ni contestes de memoria. Si la pregunta TAMBIÉN toca código, es mixta: lanzá `explorer` (código, codegraph) y `librarian` (docs) en PARALELO, en el mismo mensaje, y cruzá las dos respuestas — la frontera es la fuente, no la forma de la pregunta. Indexar o migrar: skills `library-index` y `library-migrate`."
+      },
+      {
         "route": "none",
         "patterns": [
           "\\btypo\\b",
@@ -615,6 +633,10 @@
       "ci-investigator": {
         "mustMatch": "VEREDICTO:\\W*(ROJO|VERDE|OMITIDO|EN CURSO)",
         "reason": "si CI bloquea el merge se decide con esa línea; OMITIDO tiene que decirse, porque no es verde."
+      },
+      "librarian": {
+        "mustMatch": "COBERTURA:\\W*(COMPLETA|PARCIAL|SIN RESULTADOS)",
+        "reason": "una respuesta de la biblioteca sin cobertura declarada no distingue lo citado de lo recordado."
       }
     }
   },
@@ -641,7 +663,8 @@
       "explorer": { "direction": "guía", "kind": "inferencial", "stage": "pedido" },
       "reviewer": { "direction": "sensor", "kind": "inferencial", "stage": "fin del turno" },
       "gate-runner": { "direction": "sensor", "kind": "computacional", "stage": "fin del turno" },
-      "ci-investigator": { "direction": "sensor", "kind": "inferencial", "stage": "integración" }
+      "ci-investigator": { "direction": "sensor", "kind": "inferencial", "stage": "integración" },
+      "librarian": { "direction": "guía", "kind": "inferencial", "stage": "pedido" }
     },
     "$guides": "Agregá `CLAUDE.md` (etapa `sesión`) cuando exista: el instalador no lo copia, porque cada repo escribe el suyo.",
     "guides": {
@@ -794,6 +817,16 @@
       ]
     }
   },
+  "library": {
+    "$comment": "La biblioteca: los docs indexados por tipo (graph · table · document) y ubicados en bases de conocimiento. Recién instalada no tiene bases: corré `node scripts/library.mjs migrate` (dry-run) y declará las bases que propone, con `concept` y `scope`. Cuando `node scripts/library.mjs check` salga verde, sumá la señal `library index (docs)` a `gate.signals`. Guía: docs/biblioteca.md del repo agent-harness.",
+    "agent": "librarian",
+    "route": "library",
+    "root": "docs",
+    "appendix": "docs/INDICE.md",
+    "catalog": ".claude/library/catalog.json",
+    "ignore": [],
+    "bases": []
+  },
   "install": {
     "activators": {
       "scripts/cycle-check.mjs": "workflow.branchPattern",
@@ -801,7 +834,8 @@
       "scripts/drift-check.mjs": "drift",
       ".claude/hooks/deploy-guard.mjs": "deploy.bash.ask",
       "scripts/deploy.mjs": "deploy.entry",
-      "scripts/ci-investigate.mjs": "ci.investigate.listCommand"
+      "scripts/ci-investigate.mjs": "ci.investigate.listCommand",
+      "scripts/library.mjs": "library.root"
     }
   }
 }

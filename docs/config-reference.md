@@ -1046,6 +1046,30 @@ imprime el entorno; del error del CLI muestra sólo la primera línea. No es se�
 de la red y de una cuenta. El self-test (10d) prueba la máquina con un CLI de mentira, y sus regex
 compilan en la sección 2. Plantillas de GitLab, Azure, Bitbucket y Jenkins en [cicd.md](cicd.md).
 
+## `library` — la biblioteca de documentación (opcional)
+
+Indexa `root` por tipo y ubica cada entrada en una base de conocimiento. Lo lee
+`scripts/library.mjs` (`index` · `check` · `query` · `lookup` · `migrate`), y lo consulta el
+subagente `librarian`. Guía completa: [biblioteca.md](biblioteca.md).
+
+| Clave | Qué hace |
+|---|---|
+| `agent` | el subagente dueño de esta fuente (default `librarian`). Lo nombra `graph-first`: la frontera con el `explorer` es la fuente |
+| `route` | qué entrada de `sdd.routes` detecta una pregunta sobre docs (default `library`). `graph-first` la usa para pedir los dos subagentes en paralelo cuando la pregunta es mixta |
+| `root` | la raíz que se indexa (default `docs`) |
+| `appendix` | el apéndice legible que se genera (default `<root>/INDEX.md`). Se excluye del índice |
+| `catalog` | el catálogo JSON que consulta el `librarian` (default `.claude/library/catalog.json`). Generado: nunca se edita |
+| `ignore` | globs bajo `root` que no son biblioteca (un JSON de datos que no es grafo) |
+| `kinds.graph` | `extensions` y los nombres de clave del grafo: `nodesKey`, `edgesKey`, `idKey`, `labelKey`, `typeKey`, `fromKey`, `toKey` |
+| `kinds.table` · `kinds.document` | `extensions` de cada tipo. Una tabla es un archivo con sólo títulos y tablas |
+| `query.limit` · `query.stopwords` | cuántos resultados, y qué palabras no puntúan (son del idioma del repo, no del script) |
+| `bases[]` | `{ id, concept, scope, keywords, include, dir }`: `concept` qué es, `scope` qué NO entra, `include` globs (base lógica), `dir` carpeta bajo `root` (base física: `migrate --apply` mueve ahí) |
+
+Sin la clave, todo comando dice «skipped» y sale con 0. Con ella, `check` es rojo si el índice está
+viejo, si un archivo está en ninguna o en dos bases, si una base está vacía o sin `concept`, o si
+un grafo tiene aristas a nodos que no existen. `migrate` es dry-run por defecto; `--apply` exige el
+árbol limpio y nunca mueve una ruta de `protectedPaths`.
+
 ## `subagentOutput` — el contrato de salida de los subagentes
 
 ```json
@@ -1119,6 +1143,7 @@ sin control se informa como hueco. Ver [guias-y-sensores.md](guias-y-sensores.md
 | `aiEval` | `scripts/ai-eval.mjs` (a mano, `npm run eval:ai`) y `scripts/eval/ai-provider.mjs` (por el config que genera), self-test (10f) |
 | `harnessEval` | `scripts/harness-eval.mjs` (la señal `harness eval (deterministic)` del gate), self-test (10e) |
 | `ci.investigate` (y `gate.registry`) | `scripts/ci-investigate.mjs` (lo corre el subagente `ci-investigator` y `/ci`), self-test (2: sus regex; 10d: la máquina con un CLI de mentira) |
+| `library` (y `protectedPaths`, que `migrate` respeta; `library.agent` y `library.route` los lee además `graph-first.mjs`) | `scripts/library.mjs` (la señal `library index (docs)` del gate; lo corre el subagente `librarian` y los skills `library-index` / `library-migrate`), self-test (12) |
 | `subagentOutput` | `subagent-contract.mjs` (SubagentStop), `scripts/ai-eval.mjs` (el veredicto de cada suite), self-test (3e-sub, 10f) |
 | `taxonomy` | `scripts/harness-map.mjs`, el panel (pestaña Salud, misma función `construirMapa`), self-test (10c) |
 | `panel` (y `status`, `incidents`, `tracker`, `tests`, `docs.proseRoots`, `install.activators`, toda clave con `runner`; `panel.memory.promptSources` apunta a otras, como `sdd.routes`) | `scripts/panel/` (lo invoca `scripts/gate.mjs` al final de cada corrida), self-test (11) |
