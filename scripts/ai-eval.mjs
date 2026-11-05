@@ -31,6 +31,8 @@
  *   node scripts/ai-eval.mjs --case=<name>       # one case
  *   node scripts/ai-eval.mjs --repeat=<n>        # override aiEval.repeat
  *   node scripts/ai-eval.mjs --keep              # keep the run dir to open it with `promptfoo view`
+ *   node scripts/ai-eval.mjs --report <file.html> [--with-deterministic <harness-eval --json output>]
+ *                                                # one page with every answer and the judge's reason
  *   [--config <path>]                            # bait configs of the self-test (P7)
  *
  * Exit: 0 = every suite at or above minScore, or SKIPPED · 1 = a suite below minScore (RED), a
@@ -58,6 +60,8 @@ const base = flag("--config") ? path.dirname(configPath) : REPO_ROOT;
 const ONLY = flag("--only");
 const CASE = flag("--case");
 const KEEP = args.includes("--keep");
+const REPORT = flag("--report");
+const REPORT_TEMPLATE = path.join(REPO_ROOT, "scripts", "eval", "ai-report.html");
 
 const fail = (msg) => {
   console.error(`ai-eval: ${msg}`);
@@ -210,21 +214,28 @@ function judge(s, c, output) {
 }
 
 let red = false;
+// What `--report` renders: every run with its answer, our verdict and the judge's reason.
+const model = { date: new Date().toISOString().slice(0, 10), repeat, minScore: Number(spec.minScore ?? 1), suites: [] };
 for (const [i, s] of suites.entries()) {
   let hits = 0;
   let total = 0;
   const lines = [];
+  const reported = { agent: s.agent, cases: [] };
+  model.suites.push(reported);
   for (const c of s.cases) {
     const mine = rows.filter((x) => x.testCase?.metadata?.suite === i && x.testCase?.metadata?.case === c.name);
     const misses = [];
     const quality = [];
+    const runs = [];
     for (const x of mine) {
       const why = judge(s, c, String(x.response.output));
       if (why) misses.push(why);
       // The rubric score lives in the grading of each row: weight-0 metrics read 0 in namedScores.
       const q = (x.gradingResult?.componentResults ?? []).find((p) => p.assertion?.type === "llm-rubric");
       if (typeof q?.score === "number") quality.push(q.score);
+      runs.push({ pass: !why, why, quality: typeof q?.score === "number" ? q.score : null, judge: q?.reason ?? "", output: String(x.response.output), latencyMs: x.latencyMs ?? 0 });
     }
+    reported.cases.push({ name: c.name, expect: c.expect ?? null, mustMatch: c.mustMatch ?? [], input: String(c.input).slice(0, 6000), runs });
     const k = mine.length - misses.length;
     hits += k;
     total += mine.length;
@@ -242,6 +253,33 @@ for (const [i, s] of suites.entries()) {
   console.log("");
 }
 cleanup();
+if (REPORT) writeReport(REPORT);
+
+/**
+ * `--report <file.html>`: one self-contained page with every answer, so reading why a case scored
+ * low is not a `promptfoo view` session. `--with-deterministic <file.json>` (the output of
+ * `harness-eval.mjs --json`) adds the other family. The path is the caller's: never the tree's (P7).
+ */
+function writeReport(dest) {
+  let det = null;
+  const detFile = flag("--with-deterministic");
+  if (detFile) {
+    try {
+      det = JSON.parse(fs.readFileSync(path.resolve(detFile), "utf8"));
+    } catch (e) {
+      console.error(`ai-eval: --with-deterministic could not read ${detFile} (${e.message}); the report goes without it.`);
+    }
+  }
+  const data = {
+    date: model.date,
+    det: det && { green: det.green, guides: det.groups?.guides, rules: det.groups?.rules, signals: det.groups?.signals, byLanguage: det.byLanguage, latency: det.latency },
+    ai: model,
+  };
+  const page = fs.readFileSync(REPORT_TEMPLATE, "utf8").replace("__DATA__", () => JSON.stringify(data).replace(/<\//g, "<\\/"));
+  fs.mkdirSync(path.dirname(path.resolve(dest)), { recursive: true });
+  fs.writeFileSync(path.resolve(dest), page);
+  console.log(`Report written to ${dest}`);
+}
 if (red) {
   console.error(
     "AI EVAL RED — a suite is below minScore. Read the ✗ cases: a 0/n is usually a label the config overtook; " +

@@ -1,0 +1,1 @@
+¿Por qué el self-test corre en partes paralelas? Quiero la decisión que se tomó y su porqué, según la documentación.

@@ -1,0 +1,1 @@
+¿En qué función de scripts/library.mjs se calcula el puntaje de una consulta, y qué la llama?

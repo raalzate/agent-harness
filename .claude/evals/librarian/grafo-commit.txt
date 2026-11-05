@@ -1,0 +1,1 @@
+¿Qué piezas del arnés actúan en la etapa del commit, y cuáles son guía y cuáles sensor? Contestá desde la documentación.

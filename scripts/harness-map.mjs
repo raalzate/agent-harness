@@ -105,6 +105,40 @@ export function construirMapa({ config, settings, raiz = REPO_ROOT }) {
   return { etapas, piezas, huecos, sinClasificar, totales };
 }
 
+/**
+ * The map as a GRAPH in the library's format (`library.kinds.graph`: nodes with id/label/type,
+ * edges from/to): each stage is a node, each piece a node of its direction, an edge says where a
+ * piece acts and another the order of the stages. Generated from the same map, so the librarian
+ * answers «what acts at commit?» with nodes instead of a paragraph, and it cannot drift: the
+ * self-test compares the file in `taxonomy.graphFile` against this output.
+ */
+export function mapaComoGrafo(mapa, keys = {}) {
+  const k = { nodesKey: "nodes", edgesKey: "edges", idKey: "id", labelKey: "label", typeKey: "type", fromKey: "from", toKey: "to", ...keys };
+  const slug = (s) => String(s).normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  const nodes = mapa.etapas.map((e) => ({ [k.idKey]: `etapa-${slug(e)}`, [k.labelKey]: e, [k.typeKey]: "etapa" }));
+  const edges = mapa.etapas.slice(1).map((e, i) => ({ [k.fromKey]: `etapa-${slug(mapa.etapas[i])}`, [k.toKey]: `etapa-${slug(e)}`, [k.labelKey]: "sigue" }));
+  const vistos = new Map();
+  for (const p of mapa.piezas) {
+    const id = slug(p.nombre);
+    if (!vistos.has(id)) {
+      vistos.set(id, new Set());
+      nodes.push({ [k.idKey]: id, [k.labelKey]: p.nombre, [k.typeKey]: p.dir, kind: p.tipo });
+    }
+    // A piece declared on two events (deploy-guard) is one node acting at each of its stages.
+    for (const e of p.etapas) {
+      if (vistos.get(id).has(e)) continue;
+      vistos.get(id).add(e);
+      edges.push({ [k.fromKey]: id, [k.toKey]: `etapa-${slug(e)}`, [k.labelKey]: "actúa en" });
+    }
+  }
+  return {
+    title: "Mapa del arnés",
+    description: "GENERADO por `node scripts/harness-map.mjs --graph`: cada etapa del ciclo y las guías, frenos y sensores que actúan en ella, desde `taxonomy`. No se edita a mano.",
+    [k.nodesKey]: nodes,
+    [k.edgesKey]: edges,
+  };
+}
+
 const esPrincipal = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 if (esPrincipal) principal();
 
@@ -133,6 +167,20 @@ function principal() {
     process.exit(0);
   }
   const { etapas, piezas, huecos, sinClasificar, totales } = mapa;
+
+  // `--graph`: write the map as a library graph to `taxonomy.graphFile` and stop.
+  if (args.includes("--graph")) {
+    const destino = config.taxonomy?.graphFile;
+    if (!destino) {
+      console.log("harness-map: OMITIDO — `--graph` necesita `taxonomy.graphFile` en el config.");
+      process.exit(0);
+    }
+    const grafo = mapaComoGrafo(mapa, config.library?.kinds?.graph);
+    fs.mkdirSync(path.dirname(abs(destino)), { recursive: true });
+    fs.writeFileSync(abs(destino), `${JSON.stringify(grafo, null, 2)}\n`);
+    console.log(`harness-map: grafo escrito en ${destino} (${grafo.nodes?.length ?? 0} nodos). Re-indexá la biblioteca: \`node scripts/library.mjs index\`.`);
+    process.exit(0);
+  }
 
   console.log("Mapa del arnés — dirección · tipo · etapa (sale de `taxonomy` en el config)\n");
   for (const etapa of etapas) {

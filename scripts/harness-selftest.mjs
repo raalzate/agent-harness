@@ -71,6 +71,7 @@ const PARTES = [
   { id: "perfiles", grupo: "perfiles" }, // §8: perfiles y ejemplos instalados en temporales
   { id: "costo", grupo: "estado" }, //      §9: mide hooks reales → mismo grupo que `estado`
   { id: "fuera", grupo: "fuera" }, //       §10–§11: deriva, revisor, mapa, panel
+  { id: "biblioteca", grupo: "biblioteca" }, // §12: la biblioteca de docs, en repos temporales
 ];
 const MARCA_PARTE = "__SELFTEST_PARTE__ ";
 const argValor = (nombre) => process.argv.find((a) => a.startsWith(`--${nombre}=`))?.slice(nombre.length + 3);
@@ -3096,7 +3097,9 @@ if (enParte("perfiles")) {
             } else {
               bad(
                 `perfil \`${perfil}\` → el arnés instalado no apunta a la nada`,
-                `\`docs-linkcheck\` del repo portado sale rojo el primer día:\n      ${(punteros.stdout ?? "").trim().split("\n").slice(0, 4).join("\n      ")}`,
+                // stdout Y stderr: el link-check imprime cada puntero roto por stderr, y mostrar sólo
+                // stdout dejaba el motivo vacío (pasó al citar una ruta que el instalador no copia).
+                `\`docs-linkcheck\` del repo portado sale rojo el primer día:\n      ${`${punteros.stderr ?? ""}\n${punteros.stdout ?? ""}`.trim().split("\n").filter(Boolean).slice(0, 4).join("\n      ")}`,
               );
             }
           }
@@ -3877,7 +3880,7 @@ process.exit(results.length ? 100 : 0);
 `,
       );
 
-      const bait = (agentName, { promptfoo = ["node", fake], minNode = "0.0.0", cases = null } = {}) => {
+      const bait = (agentName, { promptfoo = ["node", fake], minNode = "0.0.0", cases = null, extra = [] } = {}) => {
         const file = path.join(tmp, `config-${agentName}.json`);
         fs.writeFileSync(
           file,
@@ -3906,7 +3909,7 @@ process.exit(results.length ? 100 : 0);
             },
           }),
         );
-        const r = spawnSync("node", [script, "--config", file], { cwd: REPO_ROOT, encoding: "utf8" });
+        const r = spawnSync("node", [script, "--config", file, ...extra], { cwd: REPO_ROOT, encoding: "utf8" });
         return { status: r.status, out: `${r.stdout ?? ""}${r.stderr ?? ""}` };
       };
 
@@ -3922,6 +3925,25 @@ process.exit(results.length ? 100 : 0);
       else bad("AI eval: the rubric score is reported", good.out.trim().slice(0, 240));
 
       const lenient = bait("lenient");
+
+      // `--report`: the page is written even when the suite is RED (that is when it is read), with
+      // every run inside it and its verdict, and the data cannot close its own <script> tag.
+      const reportFile = path.join(tmp, "out", "report.html");
+      const detFile = path.join(tmp, "det.json");
+      fs.writeFileSync(detFile, JSON.stringify({ green: true, groups: { guides: { passed: 1, total: 1 } } }));
+      const reported = bait("lenient", { extra: ["--report", reportFile, "--with-deterministic", detFile] });
+      const page = fs.existsSync(reportFile) ? fs.readFileSync(reportFile, "utf8") : "";
+      const data = (() => {
+        try {
+          return JSON.parse(page.match(/<script id="data" type="application\/json">([\s\S]*?)<\/script>/)[1].replace(/<\\\//g, "</"));
+        } catch {
+          return null;
+        }
+      })();
+      const casos = data?.ai?.suites?.[0]?.cases ?? [];
+      if (reported.status === 1 && !page.includes("__DATA__") && casos.length === 2 && casos.every((c) => c.runs.length === 2) && casos.some((c) => c.runs.some((x) => !x.pass && x.why)) && data.det?.green === true)
+        ok("AI eval: `--report` writes one page even on RED, with every run, its verdict and why, plus the deterministic report when given");
+      else bad("AI eval: --report", `exit ${reported.status} · page ${page.length} bytes · ${JSON.stringify(casos.map((c) => [c.name, c.runs.map((x) => x.pass)]))} · det ${JSON.stringify(data?.det)}`);
       if (lenient.status === 1 && /AI EVAL RED/.test(lenient.out) && /0\/2.*label/.test(lenient.out))
         ok("AI eval: an agent that says green to everything goes RED, and a 0/n case points at the label too");
       else bad("AI eval: a lenient agent goes red", `exit ${lenient.status}: ${lenient.out.trim().slice(0, 240)}`);
@@ -4267,6 +4289,27 @@ if (corre("fuera")) {
       else bad("mapa del arnés caza lo no clasificado", `exit ${r.status}: ${`${r.stdout}${r.stderr}`.trim().slice(0, 200)}`);
     } finally {
       fs.rmSync(tmp, { recursive: true, force: true });
+    }
+
+    // The map as a library graph (`taxonomy.graphFile`): generated, so it must match what the
+    // generator gives TODAY. A graph that kept an old signal would answer the librarian with a
+    // control that no longer exists — the worst kind of index, one that looks structured.
+    const destino = config.taxonomy.graphFile;
+    if (!destino) skip("mapa del arnés como grafo", "el config no declara `taxonomy.graphFile`");
+    else {
+      try {
+        const { construirMapa, mapaComoGrafo } = await import(pathToFileURL(script).href);
+        const esperado = `${JSON.stringify(mapaComoGrafo(construirMapa({ config, settings }), config.library?.kinds?.graph), null, 2)}\n`;
+        const enDisco = fs.existsSync(abs(destino)) ? fs.readFileSync(abs(destino), "utf8").replace(/\r\n/g, "\n") : null;
+        const k = config.library?.kinds?.graph ?? {};
+        const grafo = JSON.parse(esperado);
+        const ids = new Set(grafo[k.nodesKey ?? "nodes"].map((n) => n[k.idKey ?? "id"]));
+        const colgadas = grafo[k.edgesKey ?? "edges"].filter((e) => !ids.has(e[k.fromKey ?? "from"]) || !ids.has(e[k.toKey ?? "to"]));
+        if (enDisco === esperado && !colgadas.length) ok(`mapa del arnés como grafo: \`${destino}\` coincide con el mapa de hoy y ninguna arista cuelga`);
+        else bad("mapa del arnés como grafo", enDisco === null ? `\`${destino}\` no existe: \`node scripts/harness-map.mjs --graph\`` : colgadas.length ? `${colgadas.length} arista(s) a nodos inexistentes` : `\`${destino}\` quedó viejo: \`node scripts/harness-map.mjs --graph\` y re-indexá la biblioteca`);
+      } catch (e) {
+        bad("mapa del arnés como grafo", e.message);
+      }
     }
   }
 }
@@ -4723,6 +4766,166 @@ if (corre("fuera")) {
     if (citas.map((c) => c.id).join(",") === "#7,#12" && leido.ok && leido.items[0].cerrado && !caido.ok && /sin credenciales/.test(caido.error)) ok("panel: las citas salen del patrón del gestor y un gestor caído es «sin dato» con su error");
     else bad("panel: contrato con el gestor", `citas ${citas.map((c) => c.id).join(",")} · leído ${JSON.stringify(leido).slice(0, 120)} · caído ${JSON.stringify(caido).slice(0, 120)}`);
   }
+}
+
+// 12. The library. A new class of check (library.mjs) gets its proof of life by hand (P2): every
+//     red it promises is provoked once in a throwaway repo, and every green is earned once (P3).
+//     Never in this tree (P7): each case writes its own temp repo and passes it with `--root`.
+section("12. la biblioteca de docs (library)");
+if (corre("biblioteca")) {
+  const script = abs("scripts/library.mjs");
+  if (!fs.existsSync(script)) skip("library", "the repo has no scripts/library.mjs");
+  else {
+    const t = fs.mkdtempSync(path.join(os.tmpdir(), "harness-library-"));
+    const w = (rel, text) => {
+      fs.mkdirSync(path.dirname(path.join(t, rel)), { recursive: true });
+      fs.writeFileSync(path.join(t, rel), text);
+    };
+    const lib = (...args) => spawnSync("node", [script, "--root", t, ...args], { encoding: "utf8" });
+    const cfg = (library) => w(".claude/harness.config.json", JSON.stringify({ protectedPaths: [{ pattern: "^kb/sacred\\.md$", reason: "human only" }], library }));
+    const base = {
+      root: "kb",
+      appendix: "kb/INDEX.md",
+      catalog: ".claude/library/catalog.json",
+      bases: [
+        { id: "payments", concept: "Charges and refunds", dir: "payments", keywords: ["charge", "refund"], include: ["kb/flow.json", "kb/refunds.md", "kb/sacred.md"] },
+        { id: "team", concept: "Who is who", include: ["kb/team.md", "kb/notes.md"] },
+      ],
+    };
+    try {
+      cfg(base);
+      w("kb/team.md", "# Team\n\n## People\n\n| Name | Role |\n|---|---|\n| Ana | backend |\n| Luis | payments |\n");
+      w("kb/notes.md", "# Notes\n\n| Name | Role |\n|---|---|\n| Eva | qa |\n\nOne line of prose makes this a document.\n");
+      w("kb/flow.json", JSON.stringify({ title: "Payment flow", nodes: [{ id: "charge", label: "Charge", type: "step" }, { id: "invoice", label: "Invoice" }], edges: [{ from: "charge", to: "invoice" }] }));
+      w("kb/refunds.md", "# Refunds\n\nHow a charge is returned. See [team](team.md) and [flow](flow.json).\n\n```sh\n# not a heading\n```\n"); // linkcheck:ignore — fixture of a temp repo
+      w("kb/sacred.md", "# Sacred\n\nHands off.\n");
+      w("README.md", "See kb/refunds.md and [r](kb/refunds.md).\n"); // linkcheck:ignore — fixture of a temp repo
+
+      // Fail open: no `library` key → skipped, exit 0 (P5).
+      const sinClave = spawnSync("node", [script, "--root", t, "--config", path.join(t, "nope.json"), "check"], { encoding: "utf8" });
+      if (sinClave.status === 0 && /skipped/.test(sinClave.stdout)) ok("library: without the `library` key it says skipped and lets everything through");
+      else bad("library: fails open", `exit ${sinClave.status}: ${sinClave.stdout}${sinClave.stderr}`);
+
+      // Never indexed → stale index is red.
+      const virgen = lib("check");
+      if (virgen.status === 1 && /stale index/.test(virgen.stderr)) ok("library: no index yet → check is red (stale index)");
+      else bad("library: missing index bites", `exit ${virgen.status}: ${virgen.stderr}`);
+
+      // Index, then check green; each file in its kind.
+      const idx = lib("index");
+      const verde = lib("check");
+      const cat = fs.existsSync(path.join(t, ".claude/library/catalog.json")) ? JSON.parse(fs.readFileSync(path.join(t, ".claude/library/catalog.json"), "utf8")) : { entries: [] };
+      const kindOf = (p) => cat.entries.find((e) => e.path === p)?.kind;
+      if (idx.status === 0 && verde.status === 0 && kindOf("kb/flow.json") === "graph" && kindOf("kb/team.md") === "table" && kindOf("kb/notes.md") === "document" && kindOf("kb/refunds.md") === "document")
+        ok("library: graph, table-only and prose files get their kind; one prose line makes a table a document");
+      else bad("library: classification", `index ${idx.status} ${idx.stderr} · check ${verde.status} ${verde.stderr} · kinds ${JSON.stringify(cat.entries.map((e) => [e.path, e.kind]))}`);
+
+      // A retitled document leaves the index stale; a body edit does not (P3).
+      w("kb/refunds.md", fs.readFileSync(path.join(t, "kb/refunds.md"), "utf8").replace("```sh", "Extra body line.\n\n```sh"));
+      const cuerpo = lib("check");
+      w("kb/refunds.md", fs.readFileSync(path.join(t, "kb/refunds.md"), "utf8").replace("# Refunds", "# Refunds and chargebacks"));
+      const titulo = lib("check");
+      if (cuerpo.status === 0 && titulo.status === 1 && /stale index/.test(titulo.stderr)) ok("library: a body edit keeps the index in sync; a new title makes it stale");
+      else bad("library: what makes the index stale", `body ${cuerpo.status} ${cuerpo.stderr} · title ${titulo.status} ${titulo.stderr}`);
+      lib("index");
+
+      // Shelves: no base, two bases, empty base. Broken graph.
+      w("kb/loose.md", "# Loose\n\nNo shelf.\n");
+      const suelto = lib("check");
+      fs.rmSync(path.join(t, "kb/loose.md"));
+      cfg({ ...base, bases: [base.bases[0], { ...base.bases[1], include: [...base.bases[1].include, "kb/refunds.md"] }, { id: "ghost", concept: "Nothing" }] });
+      const dos = lib("check");
+      cfg(base);
+      w("kb/flow.json", JSON.stringify({ nodes: [{ id: "charge" }], edges: [{ from: "charge", to: "nowhere" }] }));
+      const grafo = lib("check");
+      w("kb/flow.json", JSON.stringify({ title: "Payment flow", nodes: [{ id: "charge", label: "Charge", type: "step" }, { id: "invoice", label: "Invoice" }], edges: [{ from: "charge", to: "invoice" }] }));
+      if (/on no shelf/.test(suelto.stderr) && /on two shelves/.test(dos.stderr) && /base `ghost`: empty/.test(dos.stderr) && /nowhere/.test(grafo.stderr) && [suelto, dos, grafo].every((r) => r.status === 1))
+        ok("library: red on a file in no base, a file in two bases, an empty base and an edge to a missing node");
+      else bad("library: shelves and graphs bite", `${suelto.status} ${suelto.stderr} · ${dos.status} ${dos.stderr} · ${grafo.status} ${grafo.stderr}`);
+      lib("index");
+
+      // Query: a fact lands on the table row; a relation on the graph node.
+      const q = JSON.parse(lib("query", "role of luis", "--json").stdout || "{}");
+      const g = JSON.parse(lib("query", "charge", "--kind", "graph", "--json").stdout || "{}");
+      const fila = lib("lookup", "kb/team.md", "--where", "role=payments").stdout;
+      const nodo = lib("lookup", "kb/flow.json", "--node", "charge").stdout;
+      const seccion = lib("lookup", "kb/refunds.md", "--section", "not a heading");
+      if (q.hits?.[0]?.path === "kb/team.md" && q.hits[0].where.some((x) => x.where === "kb/team.md:8") && g.hits?.[0]?.where?.[0]?.where === "kb/flow.json#charge" && /Luis \| payments/.test(fila) && !/Ana/.test(fila) && /edge charge → invoice/.test(nodo) && seccion.status === 2)
+        ok("library: query answers a fact with the table row and a relation with the graph node; lookup reads by row, node and section (a `#` in a code fence is not one)");
+      else bad("library: query and lookup", `${JSON.stringify(q.hits?.[0]?.where)} · ${JSON.stringify(g.hits?.[0]?.where)} · ${fila} · ${nodo} · section ${seccion.status}`);
+
+      // Synonyms and boosts: «cobro» finds the graph that says «charge»; a boost reorders what
+      // already matched and never brings in an entry with nothing on the topic.
+      cfg({ ...base, query: { synonyms: [["charge", "cobro"]], boosts: [{ when: "\\bhandles\\b", base: "team", score: 50 }] } });
+      const sinonimo = JSON.parse(lib("query", "cobro", "--kind", "graph", "--json").stdout || "{}");
+      const empuje = JSON.parse(lib("query", "handles payments", "--json").stdout || "{}");
+      cfg(base);
+      if (sinonimo.hits?.[0]?.path === "kb/flow.json" && empuje.hits?.[0]?.path === "kb/team.md" && !empuje.hits.some((h) => h.path === "kb/notes.md"))
+        ok("library: a synonym group finds «charge» when asked for «cobro»; a boost puts its base first without adding entries that did not match");
+      else bad("library: synonyms and boosts", `synonym ${JSON.stringify(sinonimo.hits?.map((h) => h.path))} · boost ${JSON.stringify(empuje.hits?.map((h) => [h.path, h.score]))}`);
+
+      // Migrate: dry-run touches nothing; --apply refuses a dirty tree; then moves, relinks, skips protected.
+      const seco = lib("migrate");
+      const intacto = fs.existsSync(path.join(t, "kb/refunds.md")) && !fs.existsSync(path.join(t, "kb/payments"));
+      const g0 = (args) => spawnSync("git", args, { cwd: t, encoding: "utf8" });
+      g0(["init", "-q"]);
+      g0(["config", "user.email", "selftest@example.invalid"]);
+      g0(["config", "user.name", "selftest"]);
+      const sucio = lib("migrate", "--apply");
+      g0(["add", "--", ".claude", "kb", "README.md"]);
+      g0(["commit", "-qm", "fixture", "--no-gpg-sign"]);
+      const aplicado = lib("migrate", "--apply");
+      const leer = (rel) => (fs.existsSync(path.join(t, rel)) ? fs.readFileSync(path.join(t, rel), "utf8") : "");
+      const movido = fs.existsSync(path.join(t, "kb/payments/refunds.md")) && fs.existsSync(path.join(t, "kb/payments/flow.json")) && !fs.existsSync(path.join(t, "kb/refunds.md"));
+      const enlaces = /\]\(\.\.\/team\.md\)/.test(leer("kb/payments/refunds.md")) && /\]\(flow\.json\)/.test(leer("kb/payments/refunds.md")) && /kb\/payments\/refunds\.md and \[r\]\(kb\/payments\/refunds\.md\)/.test(leer("README.md")); // linkcheck:ignore — fixture of a temp repo
+      const protegido = fs.existsSync(path.join(t, "kb/sacred.md")) && /skip\s+kb\/sacred\.md \(protected/.test(aplicado.stdout);
+      if (/dry-run/.test(seco.stdout) && intacto && sucio.status === 2 && aplicado.status === 0 && movido && enlaces && protegido && lib("check").status === 0)
+        ok("library: migrate is a dry-run by default, refuses a dirty tree, moves into the base, rewrites links and prose paths, never moves a protected path, and re-indexes");
+      else bad("library: migrate", `dry ${intacto} · dirty ${sucio.status} · apply ${aplicado.status} ${aplicado.stderr} · moved ${movido} · links ${enlaces} · protected ${protegido}`);
+    } catch (e) {
+      bad("library: cases", e.stack?.split("\n").slice(0, 3).join(" · ") ?? String(e));
+    } finally {
+      fs.rmSync(t, { recursive: true, force: true });
+    }
+  }
+
+  // 12b. The border with the `explorer` is the SOURCE. `graph-first` only speaks with a built
+  //      code index, which this machine may not have — so the hook runs from a temp copy with a
+  //      fake graph file, and its REPO_ROOT (the file's own location) is that temp repo.
+  if (fs.existsSync(abs(".claude/hooks/graph-first.mjs"))) {
+    const t = fs.mkdtempSync(path.join(os.tmpdir(), "harness-border-"));
+    try {
+      fs.mkdirSync(path.join(t, ".claude/hooks"), { recursive: true });
+      for (const f of ["graph-first.mjs", "harness.mjs"]) fs.copyFileSync(abs(`.claude/hooks/${f}`), path.join(t, ".claude/hooks", f));
+      fs.writeFileSync(path.join(t, "graph.db"), "");
+      const docsRoute = (config.sdd?.routes ?? []).find((r) => r.route === (config.library?.route ?? "library"));
+      const conf = (library) =>
+        fs.writeFileSync(path.join(t, ".claude/harness.config.json"), JSON.stringify({ graph: { graphFile: "graph.db", queryCommand: "idx q", questionPatterns: ["\\bd[oó]nde\\b"] }, sdd: { routes: docsRoute ? [docsRoute] : [] }, library }));
+      const hook = (prompt) => spawnSync("node", [path.join(t, ".claude/hooks/graph-first.mjs")], { input: JSON.stringify({ hook_event_name: "UserPromptSubmit", prompt }), encoding: "utf8" }).stdout;
+      conf({ agent: "librarian", route: config.library?.route ?? "library", root: "kb" });
+      const codigo = hook("dónde se parsea el config");
+      const mixta = hook("dónde se parsea el config y qué dice la documentación sobre eso");
+      conf(undefined);
+      const sinBiblioteca = hook("dónde se parsea el config y qué dice la documentación sobre eso");
+      if (!docsRoute) skip("graph-first: the border with the librarian", "the config has no `library` route in `sdd.routes`");
+      else if (/`kb\/`\) NO es de este índice: es del subagente `librarian`/.test(codigo) && !/PARALELO/.test(codigo) && /explorer` y `librarian` en PARALELO/.test(mixta) && !/librarian/.test(sinBiblioteca))
+        ok("graph-first: names the librarian for the docs, asks for both subagents in parallel on a mixed question, and says nothing of it without `library`");
+      else bad("graph-first: the border with the librarian", `code: ${codigo.slice(-200)} · mixed: ${mixta.slice(-200)} · without library: ${/librarian/.test(sinBiblioteca)}`);
+    } catch (e) {
+      bad("graph-first: border cases", e.stack?.split("\n").slice(0, 3).join(" · ") ?? String(e));
+    } finally {
+      fs.rmSync(t, { recursive: true, force: true });
+    }
+  }
+
+  // The agents' own prose carries the border: each one names the other for what is not its own.
+  const leerAgente = (n) => (fs.existsSync(abs(`.claude/agents/${n}.md`)) ? fs.readFileSync(abs(`.claude/agents/${n}.md`), "utf8") : "");
+  const [exp, libr] = [leerAgente("explorer"), leerAgente(config.library?.agent ?? "librarian")];
+  const descExp = exp.match(/^description:(.*)$/m)?.[1] ?? "";
+  if (!exp || !libr) skip("agents: the border by source", "explorer or librarian is missing");
+  else if (/No es tuyo → el otro agente/.test(exp) && /No es tuyo → el otro agente/.test(libr) && /librarian/.test(descExp) && /NO cubre la documentaci/.test(descExp) && /explorer/.test(libr.match(/^description:(.*)$/m)?.[1] ?? ""))
+    ok("agents: explorer and librarian each name the other for what is not theirs, and the explorer's description excludes the docs");
+  else bad("agents: the border by source", "a «No es tuyo → el otro agente» line or the description exclusion is missing");
 }
 
 // ── Veredicto ────────────────────────────────────────────────────────────────

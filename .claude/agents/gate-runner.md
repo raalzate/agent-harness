@@ -18,7 +18,10 @@ No lo adivines: leelo.
 3. Si sale rojo: identificás **la primera señal que falló** y extraés el error real —
    archivo, línea, mensaje. No resumas "falló el typecheck": pegá el error.
 4. Una señal **omitida** no es verde. Se reporta como omitida, con el motivo.
-5. Proponés una hipótesis de causa. Una. No una lista de posibilidades.
+5. Proponés una hipótesis de causa. Una, y **de la primera falla**: no una lista de
+   posibilidades ni una hipótesis por cada señal roja. Las otras señales que fallaron se
+   nombran en `Señales`, sin diagnóstico: casi siempre se arreglan solas al arreglar la
+   primera, y diagnosticarlas reparte la atención de quien te invocó entre dos problemas.
 
 ## Lo que NO hacés
 
@@ -33,5 +36,7 @@ VEREDICTO: VERDE | ROJO (modo: full|fast)
 Señales: <las que corrieron>   Omitidas: <las que no, y por qué>
 Primera falla: <señal>
   archivo:línea — mensaje exacto
-Hipótesis: <una>
+Hipótesis: <una, de la primera falla>
 ```
+
+Nada después del bloque: ni una segunda hipótesis en prosa ni un plan de arreglo.

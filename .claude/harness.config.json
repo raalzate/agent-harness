@@ -88,6 +88,11 @@
         "why": "the self-test checks every rule against a sample derived from the same rule: tautological. Only a separate labelled set sees the EVASION (`git -C . reset --hard`, `git commit -nm`, `wget | sh`) and the false positive (`.env.example`). On its first run, 14 attacks got through the template and one innocent action was blocked"
       },
       {
+        "name": "library index (docs)",
+        "command": ["node", "scripts/library.mjs", "check"],
+        "why": "el librarian contesta con lo que el índice dice, y un índice viejo miente sin que nadie lo vea: un documento retitulado o movido sigue apareciendo como era. Ninguna otra señal mira además que cada documento esté en UNA sola base (dos bases que lo reclaman son un concepto sin delimitar), que una tabla sea sólo tabla ni que un grafo no tenga aristas a nodos inexistentes"
+      },
+      {
         "name": "harness cost (hook latency)",
         "command": [
           "node",
@@ -623,6 +628,24 @@
         "message": "Cambio del arnés → la especificidad va en `.claude/harness.config.json`, NO en el código de los hooks ni de los scripts. Si hace falta código nuevo, agregá también su caso al self-test: un freno sin prueba de vida es decorativo."
       },
       {
+        "$comment": "La biblioteca: una pregunta sobre lo que DICE la documentación se delega al subagente `librarian`, que consulta el índice (grafos, tablas, documentos por base de conocimiento) y cita ruta:línea. Existe porque sin esta guía el agente abre docs a mano: diez archivos para una fila de tabla, y contesta de memoria lo que no encontró.",
+        "route": "library",
+        "patterns": [
+          "\\bqu[ée] dice (la |el )?(doc|documentaci[óo]n|adr|gu[íi]a)",
+          "\\b(en|seg[úu]n) (la )?(doc|documentaci[óo]n)\\b",
+          "\\bd[óo]nde (est[áa]|se|queda) document",
+          "\\bbiblioteca\\b",
+          "\\bbases? de conocimiento\\b",
+          "\\b(re-?)?index[a-záé]*\\s.*\\bdoc",
+          "\\bqu[ée] (se )?decidi[óo]\\b",
+          "\\bwhat do(es)? the docs?\\b",
+          "\\bin the docs?\\b",
+          "\\bknowledge base\\b",
+          "\\b(re-?)?index (the )?doc"
+        ],
+        "message": "Pregunta sobre la DOCUMENTACIÓN → delegala al subagente `librarian` (`docs/biblioteca.md`): consulta el índice de `library` por tipo (tabla para un dato, grafo para una relación, documento para un porqué), lee sólo lo señalado y contesta con ruta:línea y `COBERTURA:`. No abras los docs a mano ni contestes de memoria. Si la pregunta TAMBIÉN toca código, es mixta: lanzá `explorer` (código, codegraph) y `librarian` (docs) en PARALELO, en el mismo mensaje, y cruzá las dos respuestas — la frontera es la fuente, no la forma de la pregunta. Indexar o migrar: skills `library-index` y `library-migrate`."
+      },
+      {
         "route": "none",
         "patterns": [
           "\\btypo\\b",
@@ -761,9 +784,9 @@
   "xp": {
     "$comment": "Prácticas de XP que tienen mecanismo. Cada una se activa sola (`enabled`): una regla instalada sin cicatriz detrás se desactiva en una semana y se lleva puestas a las que servían (P14). Todas tienen fuga DECLARADA con motivo — la fuga es la diferencia entre un freno que se respeta y uno que se saltea con `--no-verify`. Mecanismo: `.githooks/commit-msg` → `node scripts/cycle-check.mjs --commit`. Ver docs/ciclo-desarrollo.md.",
     "testFirst": {
-      "$comment": "No prueba que la prueba se escribiera ANTES —nada lo prueba desde un hook—, sino que el cambio de comportamiento y su prueba entran juntos al historial. En ESTE repo la prueba de un freno es su caso del self-test (P2), así que `testPattern` nombra los scripts que la contienen.",
+      "$comment": "No prueba que la prueba se escribiera ANTES —nada lo prueba desde un hook—, sino que el cambio de comportamiento y su prueba entran juntos al historial. En ESTE repo la prueba de un freno es su caso del self-test (P2), así que `testPattern` nombra los scripts que la contienen. Y la prueba de un SUBAGENTE es su caso de evaluación: `.claude/evals/` también cuenta. Sin eso, cada commit que traía la evaluación de un agente tenía que declarar `no-test:` — la fuga firmada para lo que sí era la prueba.",
       "enabled": true,
-      "testPattern": "(^|/)(__tests__|tests?)/|\\.(test|spec)\\.[cm]?[jt]sx?$|^scripts/harness-(selftest|bench)\\.mjs$",
+      "testPattern": "(^|/)(__tests__|tests?)/|\\.(test|spec)\\.[cm]?[jt]sx?$|^scripts/harness-(selftest|bench)\\.mjs$|^\\.claude/evals/",
       "escapeLine": "no-test:",
       "reason": "un freno sin prueba de vida es decorativo (P2), y un arreglo sin prueba no puede demostrar que arregló algo.",
       "verifyRed": {
@@ -862,6 +885,10 @@
       "ci-investigator": {
         "mustMatch": "VEREDICTO:\\W*(ROJO|VERDE|OMITIDO|EN CURSO)",
         "reason": "el agente principal decide si CI bloquea el merge con esa línea; sin ella, «CI anda raro» es una opinión, y OMITIDO tiene que decirse: no es verde."
+      },
+      "librarian": {
+        "mustMatch": "COBERTURA:\\W*(COMPLETA|PARCIAL|SIN RESULTADOS)",
+        "reason": "el agente principal decide si puede apoyarse en la respuesta con esa línea: una respuesta de la biblioteca sin cobertura declarada no distingue lo citado de lo recordado."
       }
     }
   },
@@ -898,11 +925,14 @@
       "fin del turno",
       "integración"
     ],
+    "$graphFile": "The map as a library graph (nodes: stages and pieces; edges: where each piece acts). GENERATED by `node scripts/harness-map.mjs --graph`; the self-test (10c) is red when it no longer matches the map, so it cannot lie about what acts where.",
+    "graphFile": "docs/mapa-del-arnes.json",
     "agents": {
       "explorer": { "direction": "guía", "kind": "inferencial", "stage": "pedido" },
       "reviewer": { "direction": "sensor", "kind": "inferencial", "stage": "fin del turno" },
       "gate-runner": { "direction": "sensor", "kind": "computacional", "stage": "fin del turno" },
-      "ci-investigator": { "direction": "sensor", "kind": "inferencial", "stage": "integración" }
+      "ci-investigator": { "direction": "sensor", "kind": "inferencial", "stage": "integración" },
+      "librarian": { "direction": "guía", "kind": "inferencial", "stage": "pedido" }
     },
     "guides": {
       "CLAUDE.md": { "stage": "sesión" },
@@ -1095,6 +1125,60 @@
             "mustMatch": ["reviewer-eval\\.mjs", "harness-selftest\\.mjs", "leer-arnes\\.mjs"]
           }
         ]
+      },
+      {
+        "agent": "librarian",
+        "$command": "The only suite with Bash, and only for `node scripts/library.mjs`: querying the index IS the behaviour under test. A librarian that cannot run `query` would be evaluated on a fallback it is told to use last. Still no hooks and no writes.",
+        "command": ["claude", "-p", "--agent", "librarian", "--allowedTools", "Read,Grep,Glob,Bash(node scripts/library.mjs:*)", "--disallowedTools", "Edit,Write,NotebookEdit", "--settings", "{\"disableAllHooks\": true}"],
+        "context": [".claude/agents", ".claude/harness.config.json", ".claude/library", "scripts/library.mjs", "docs", "CLAUDE.md"],
+        "rubric": "The answer follows the librarian format: RESPUESTA, FUENTES with path:line (or path#node) and [kind · base], NO ENCONTRADO and COBERTURA. Every claim in RESPUESTA has a source in FUENTES; every cited path exists under docs/. It reads only what the index pointed to (no whole-document dumps) and does not answer from memory.",
+        "cases": [
+          {
+            "name": "a fact: the bounded loop budget",
+            "input": ".claude/evals/librarian/dato-ciclo-acotado.txt",
+            "expect": "COMPLETA",
+            "mustMatch": ["\\b(2|dos)\\b", "docs/[\\w./-]+\\.md:\\d+"]
+          },
+          {
+            "name": "a decision: why the self-test fans out",
+            "input": ".claude/evals/librarian/decision-selftest-paralelo.txt",
+            "expect": "COMPLETA",
+            "mustMatch": ["0014-selftest-en-abanico\\.md"]
+          },
+          {
+            "name": "an overview: installing on another stack",
+            "input": ".claude/evals/librarian/panorama-instalar.txt",
+            "mustMatch": ["instalacion", "perfiles\\.md|portar\\.md"],
+            "rubric": "An overview answer: it names the knowledge base that covers the topic (instalacion) and suggests where to start (2 or 3 entries, in order), citing each. It does not explain the whole topic."
+          },
+          {
+            "name": "not in the library: says so, does not invent",
+            "input": ".claude/evals/librarian/sin-resultados-sap.txt",
+            "expect": "SIN RESULTADOS",
+            "$mustNotMatch": "Dropped after the first run: the agent named the weak keyword hits it discarded (path:line) on the same line as the word SAP, and a line regex cannot tell a discarded hit from a cited one. The verdict plus the rubric judge that; the regex only pointed at the label.",
+            "rubric": "The answer says the library has nothing on the topic, lists the terms it searched, and does not invent a source or answer from general knowledge."
+          },
+          {
+            "name": "a table: who reads a config key, answered by row",
+            "input": ".claude/evals/librarian/tabla-quien-lee.txt",
+            "expect": "COMPLETA",
+            "mustMatch": ["quien-lee-cada-clave\\.md:\\d+", "ai-eval\\.mjs", "ai-provider\\.mjs"],
+            "rubric": "The answer comes from the TABLE row for `aiEval` in docs/quien-lee-cada-clave.md, cited as path:line and tagged as a table, and names its readers. It does not answer from code or by reading prose documents instead of the row."
+          },
+          {
+            "name": "a graph: what acts at the commit stage, answered by node",
+            "input": ".claude/evals/librarian/grafo-commit.txt",
+            "expect": "COMPLETA",
+            "mustMatch": ["mapa-del-arnes\\.json", "commit-msg", "pre-commit"],
+            "rubric": "The answer comes from the GRAPH docs/mapa-del-arnes.json (cited as path#node and tagged as a graph): the pieces connected to the commit stage, each with its direction (guía or sensor). It does not invent pieces that are not nodes of the graph."
+          },
+          {
+            "name": "the border: a code question goes to the explorer",
+            "input": ".claude/evals/librarian/frontera-codigo.txt",
+            "mustMatch": ["explorer"],
+            "rubric": "The answer recognises the question is about CODE, not documentation, and points to the explorer subagent instead of answering by reading source files. Explaining the function from the source is a failure."
+          }
+        ]
       }
     ]
   },
@@ -1255,6 +1339,87 @@
       ]
     }
   },
+  "library": {
+    "$comment": "THE LIBRARY: the docs indexed by kind and shelved by concept. Read by `scripts/library.mjs` (index · check · query · lookup · migrate), consulted through the `librarian` subagent. Three kinds, classified in this order: `graph` (a JSON file with a `nodesKey` array; edges must point to declared nodes), `table` (a markdown file with ONLY tables and headings: structured, read row by row) and `document` (any other markdown: unstructured, read by section). Every entry lives on exactly ONE base: two bases claiming one file is a concept nobody delimited. A base with `dir` is physical (`migrate --apply` moves its files under `<root>/<dir>/` and rewrites the links); without `dir` it is logical and `include` (globs: `*` one segment, `**` any) says what it holds. `catalog` and `appendix` are GENERATED: re-index, never edit. Guide: docs/biblioteca.md.",
+    "$agent": "THE BORDER IS THE SOURCE, not the shape of the question: `explorer` owns the code (codegraph), `agent` owns what lives under `root`. `route` names the `sdd.routes` entry whose patterns detect a docs question; `graph-first` reads it to name this agent and, when a code question ALSO matches it, to ask for both subagents in parallel.",
+    "agent": "librarian",
+    "route": "library",
+    "root": "docs",
+    "appendix": "docs/INDICE.md",
+    "catalog": ".claude/library/catalog.json",
+    "ignore": ["docs/evaluaciones-datos.json"],
+    "kinds": {
+      "graph": { "extensions": [".json"], "nodesKey": "nodes", "edgesKey": "edges", "idKey": "id", "labelKey": "label", "typeKey": "type", "fromKey": "from", "toKey": "to" },
+      "table": { "extensions": [".md"] },
+      "document": { "extensions": [".md"] }
+    },
+    "query": {
+      "limit": 8,
+      "$stopwords": "Words too common to rank by. Natural-language words, so they belong to the repo, not to the script.",
+      "stopwords": ["que", "como", "para", "por", "con", "los", "las", "del", "una", "uno", "the", "and", "for", "with", "what", "how", "dice", "sobre", "documentacion", "docs"],
+      "$synonyms": "Each group is ONE concept: a term of the group matches any word of it. The ranking is by words, not meaning, and these are the pairs it missed (Spanish prose, English identifiers). Grow it when a query misses; never with words of one language only.",
+      "synonyms": [
+        ["despliegue", "desplegar", "deploy"],
+        ["decision", "decidir", "decidio", "adr"],
+        ["prueba", "test", "selftest"],
+        ["rama", "branch"],
+        ["indice", "index", "catalogo"],
+        ["subagente", "agente", "agent"],
+        ["incidente", "gotcha"],
+        ["costo", "latencia", "timing"]
+      ],
+      "$boosts": "A kind of question that lives on one shelf: when the topic matches `when`, entries of `base` that ALREADY matched get `score` more. It reorders; it never adds an entry with nothing on the topic. Without it «qué se decidió sobre el panel» ranked docs/panel.md above its ADR.",
+      "boosts": [
+        { "when": "\\b(decidi|decisi[oó]n|por qu[eé] se|adr\\b)", "base": "diseno", "score": 12 },
+        { "when": "\\b(incidente|se rompi[oó]|gotcha|pas[oó] que)", "base": "incidentes", "score": 12 },
+        { "when": "\\b(instalar|portar|por d[oó]nde empiezo)", "base": "instalacion", "score": 8 }
+      ]
+    },
+    "bases": [
+      {
+        "id": "metodo",
+        "concept": "Por qué existe el arnés: la teoría, el método y la evidencia",
+        "scope": "cómo se instala, cómo se configura, decisiones puntuales",
+        "keywords": ["teoria", "metodo", "principio", "practica", "agil", "sensor", "guia", "evidencia"],
+        "include": ["docs/metodo.md", "docs/caso-de-estudio.md", "docs/buenas-practicas.md", "docs/guias-y-sensores.md", "docs/agilidad.md"]
+      },
+      {
+        "id": "diseno",
+        "concept": "Decisiones de diseño: arquitectura y ADR, con su porqué",
+        "scope": "la teoría general (metodo) y el uso diario (flujo)",
+        "keywords": ["decision", "adr", "arquitectura", "acoplamiento", "cohesion", "diseno"],
+        "include": ["docs/arquitectura.md", "docs/decisions/**"]
+      },
+      {
+        "id": "instalacion",
+        "concept": "Instalar y portar el arnés en otro repo, stack o plataforma",
+        "scope": "el trabajo diario una vez instalado (flujo)",
+        "keywords": ["instalar", "portar", "perfil", "stack", "windows", "monorepo", "quickstart"],
+        "include": ["docs/quickstart.md", "docs/portar.md", "docs/perfiles.md", "docs/multi-proyecto.md", "docs/multiplataforma.md"]
+      },
+      {
+        "id": "flujo",
+        "concept": "El ciclo de trabajo: ramas, registro, SDD, CI/CD, despliegue y worktrees",
+        "scope": "cómo funciona cada pieza del arnés por dentro (referencia)",
+        "keywords": ["rama", "commit", "issue", "spec", "pipeline", "despliegue", "worktree", "ciclo"],
+        "include": ["docs/ciclo-desarrollo.md", "docs/trazabilidad.md", "docs/sdd.md", "docs/cicd.md", "docs/despliegue.md", "docs/worktrees.md"]
+      },
+      {
+        "id": "referencia",
+        "concept": "El arnés por dentro: claves del config, señales, índices, panel, evaluaciones y recetas",
+        "scope": "el porqué de fondo (metodo) y los incidentes (incidentes)",
+        "keywords": ["clave", "config", "senal", "gate", "indice", "panel", "evaluacion", "receta", "biblioteca"],
+        "include": ["docs/README.md", "docs/config-reference.md", "docs/arnes.md", "docs/codegraph.md", "docs/panel.md", "docs/evaluaciones.md", "docs/recetas.md", "docs/biblioteca.md", "docs/quien-lee-cada-clave.md", "docs/mapa-del-arnes.json"]
+      },
+      {
+        "id": "incidentes",
+        "concept": "Incidentes reales del arnés en formato fijo: síntoma, causa, regla, mecanismo",
+        "scope": "decisiones de diseño tomadas sin incidente (diseno)",
+        "keywords": ["incidente", "gotcha", "sintoma", "causa"],
+        "include": ["docs/gotchas.md"]
+      }
+    ]
+  },
   "install": {
     "$comment": "Qué clave del config ACTIVA cada freno que el instalador copia. Un freno copiado sin su clave queda «instalado y muerto» en el repo destino — el anti-patrón que este arnés existe para evitar, cometido por el propio instalador: viajaron `ask-first`, `action-guard` y `pre-push` con la plantilla sin `askFirst` ni `branches`. El self-test verifica la plantilla contra esta tabla.",
     "activators": {
@@ -1275,7 +1440,8 @@
       "scripts/hooks-timing.mjs": "observability.budgetMs",
       ".claude/hooks/deploy-guard.mjs": "deploy.bash.ask",
       "scripts/deploy.mjs": "deploy.entry",
-      "scripts/ci-investigate.mjs": "ci.investigate.listCommand"
+      "scripts/ci-investigate.mjs": "ci.investigate.listCommand",
+      "scripts/library.mjs": "library.root"
     }
   }
 }

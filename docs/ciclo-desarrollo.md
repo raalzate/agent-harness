@@ -104,10 +104,11 @@ entera), ritmo sostenible, metáfora, y el estándar de código más allá de lo
 ### `testFirst` cuando el repo no tiene una carpeta `tests/`
 
 `testPattern` es un regex, no una carpeta. En **este** repo la prueba de un freno es su caso del
-self-test (P2), así que el patrón nombra ese archivo:
+self-test (P2), y la de un subagente es su caso de evaluación con IA (`aiEval`), así que el patrón
+nombra los dos:
 
 ```json
-"testPattern": "(^|/)(__tests__|tests?)/|\\.(test|spec)\\.[cm]?[jt]sx?$|^scripts/harness-(selftest|bench)\\.mjs$"
+"testPattern": "(^|/)(__tests__|tests?)/|\\.(test|spec)\\.[cm]?[jt]sx?$|^scripts/harness-(selftest|bench)\\.mjs$|^\\.claude/evals/"
 ```
 
 Ese es el punto de la clave: la práctica es «el cambio entra con su prueba», y qué cuenta como

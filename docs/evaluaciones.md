@@ -223,7 +223,7 @@ se evalúa, y el config de este repo se ajusta aparte donde la regla es la misma
 `npm run eval:reviewer` corre cada caso **una vez** y sólo lee el veredicto. `npm run eval:ai`
 ([`scripts/ai-eval.mjs`](../scripts/ai-eval.mjs)) los corre `aiEval.repeat` veces con
 [promptfoo](https://github.com/promptfoo/promptfoo), y además mide a los otros sensores
-inferenciales: `gate-runner`, `ci-investigator` y `explorer`.
+inferenciales: `gate-runner`, `ci-investigator`, `explorer` y `librarian`.
 
 promptfoo es un **corredor, no una dependencia** (ADR [0015](decisions/0015-promptfoo-como-corredor.md)):
 `npx -y promptfoo@<versión fija>`, nunca en `package.json`. Necesita node ≥ 22.22. Sin promptfoo,
@@ -235,7 +235,15 @@ node scripts/ai-eval.mjs --only=gate-runner       # una suite
 node scripts/ai-eval.mjs --case="<nombre>"        # un caso
 node scripts/ai-eval.mjs --repeat=5               # más repeticiones
 node scripts/ai-eval.mjs --keep                   # conserva la corrida para `promptfoo view`
+node scripts/harness-eval.mjs --json > det.json   # el informe determinista, para sumarlo al de abajo
+node scripts/ai-eval.mjs --report informe.html --with-deterministic det.json
 ```
+
+`--report` escribe **una página** con todo: por subagente y por caso, la entrada, cada respuesta,
+nuestro veredicto con su motivo y la razón del juez; arriba, lo que hay que mejorar, derivado de la
+corrida (0/n → revisá la etiqueta, k/n intermedio → el agente es inestable, calidad < 0,7 → el
+formato). Se escribe también cuando la suite sale roja, que es cuando más se lee. La plantilla es
+`scripts/eval/ai-report.html`; la ruta de salida la elige quien corre, nunca el árbol del repo.
 
 ### Qué mide
 
@@ -245,10 +253,11 @@ node scripts/ai-eval.mjs --keep                   # conserva la corrida para `pr
 | `gate-runner` | una salida del gate ya corrida | el veredicto, la **primera** señal que falló con su línea, las omitidas nombradas, y que el fast verde no es entregable |
 | `ci-investigator` | una salida de `ci-investigate` ya corrida | el veredicto, la línea real, y si la causa es el entorno (sólo en CI) o se reproduce local |
 | `explorer` | una pregunta sobre el repo copiado | un mapa con `archivo:línea`, sin volcar código, sin rutas inventadas |
+| `librarian` | una pregunta sobre la documentación, con la biblioteca indexada copiada | `COBERTURA` correcta, `FUENTES` con `ruta:línea` que existen, «sin resultados» sin inventar, y la frontera: una pregunta de código va al `explorer`. Es la única suite con Bash, y sólo para `node scripts/library.mjs`: consultar el índice **es** lo que se evalúa |
 
 El veredicto de cada agente es su patrón de `subagentOutput.contracts`, la misma definición que
 lee el hook `subagent-contract`. Los agentes corren aislados: cada uno en un temporal con copia
-sólo de su `context`, sin Bash y sin hooks. A los que en una sesión correrían algo (el gate, el CLI
+sólo de su `context`, sin Bash (salvo el `librarian`, acotado a `node scripts/library.mjs`) y sin hooks. A los que en una sesión correrían algo (el gate, el CLI
 de la forja) se les da la salida ya corrida.
 
 ### Cómo se lee el resultado
