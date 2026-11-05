@@ -1,0 +1,1 @@
+¿Quién lee la clave `aiEval` del config? Quiero saber qué se rompe si la renombro. Contestá desde la documentación.

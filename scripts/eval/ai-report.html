@@ -1,0 +1,190 @@
+<title>Evaluaciones del arnés</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Fraunces:opsz,wght@9..144,600&display=swap">
+<style>
+/* Layout: a lab notebook — verdict strip first, then the two families, each case expandable down to the raw answer. */
+:root{
+  --bg:#f6f7f5; --panel:#ffffff; --ink:#1d2421; --muted:#5d6a64; --rule:#d9dfdb;
+  --accent:#2f6f5e; --pass:#2e7d4f; --pass-bg:#e4f2e9; --warn:#9a6a00; --warn-bg:#fbf1d9; --fail:#b3362c; --fail-bg:#f9e3e0;
+  --code:#eef1ef;
+  --display:"Fraunces",Georgia,serif; --body:"IBM Plex Sans",system-ui,sans-serif; --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#141917; --panel:#1b2220; --ink:#e4ebe7; --muted:#97a69f; --rule:#2c3632;
+  --accent:#7cc4ad; --pass:#6fcf97; --pass-bg:#1d3327; --warn:#e8b94a; --warn-bg:#352c16; --fail:#f08a80; --fail-bg:#3a1f1c; --code:#222b28; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#141917; --panel:#1b2220; --ink:#e4ebe7; --muted:#97a69f; --rule:#2c3632;
+  --accent:#7cc4ad; --pass:#6fcf97; --pass-bg:#1d3327; --warn:#e8b94a; --warn-bg:#352c16; --fail:#f08a80; --fail-bg:#3a1f1c; --code:#222b28; color-scheme:dark}
+body{background:var(--bg);color:var(--ink);font:15px/1.55 var(--body)}
+.wrap{max-width:1040px;margin:0 auto;padding-block:32px 64px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:flex;flex-direction:column;gap:40px}
+h1,h2{font-family:var(--display);font-weight:600;text-wrap:balance;margin:0}
+h1{font-size:2.1rem;line-height:1.15}
+h2{font-size:1.45rem}
+h3{font-size:1.05rem;margin:0;font-weight:600}
+p{margin:0;max-width:68ch}
+.muted{color:var(--muted)}
+.eyebrow{font:500 .72rem/1 var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+header{display:flex;flex-direction:column;gap:12px}
+.strip{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
+.tile{background:var(--panel);border:1px solid var(--rule);border-radius:6px;padding:14px 16px;display:flex;flex-direction:column;gap:6px;min-width:0}
+.tile .big{font:600 1.6rem/1.1 var(--mono);font-variant-numeric:tabular-nums}
+.pill{display:inline-flex;align-items:center;gap:6px;font:500 .75rem/1 var(--mono);padding:4px 8px;border-radius:999px;white-space:nowrap}
+.pill.pass{background:var(--pass-bg);color:var(--pass)} .pill.warn{background:var(--warn-bg);color:var(--warn)} .pill.fail{background:var(--fail-bg);color:var(--fail)}
+section{display:flex;flex-direction:column;gap:16px}
+.tbl{overflow-x:auto;background:var(--panel);border:1px solid var(--rule);border-radius:6px}
+table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
+th,td{text-align:left;padding:8px 12px;border-bottom:1px solid var(--rule);vertical-align:top}
+th{font:500 .72rem/1.2 var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+tr:last-child td{border-bottom:0}
+td.num{font-family:var(--mono);white-space:nowrap}
+.suite{background:var(--panel);border:1px solid var(--rule);border-radius:6px;padding:16px;display:flex;flex-direction:column;gap:12px}
+.suite-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:8px 16px}
+.suite-head h3{font-family:var(--mono);font-size:1.05rem}
+details.case{border-top:1px solid var(--rule);padding-top:10px}
+details.case>summary{cursor:pointer;list-style:none;display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:center}
+details.case>summary::-webkit-details-marker{display:none}
+details.case>summary:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:4px}
+.kn{font:600 .85rem/1 var(--mono);min-width:3.2em}
+.qbar{display:flex;align-items:center;gap:8px;font:500 .78rem/1 var(--mono);color:var(--muted)}
+.qbar span.track{width:72px;height:6px;border-radius:3px;background:var(--rule);overflow:hidden;display:block}
+.qbar span.fill{display:block;height:100%;background:var(--accent)}
+.qbar.low span.fill{background:var(--warn)}
+.case-body{display:flex;flex-direction:column;gap:12px;padding:12px 0 4px}
+.meta{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:.85rem}
+.meta code{font-family:var(--mono);font-size:.8rem;background:var(--code);padding:1px 5px;border-radius:3px}
+.runs{display:grid;gap:10px}
+.run{border:1px solid var(--rule);border-radius:6px;padding:10px 12px;display:flex;flex-direction:column;gap:8px;min-width:0}
+.run-head{display:flex;flex-wrap:wrap;gap:8px;align-items:center;font:500 .8rem/1 var(--mono)}
+.judge{font-size:.88rem;color:var(--muted);border-left:3px solid var(--rule);padding-left:10px}
+pre{margin:0;background:var(--code);border-radius:4px;padding:10px 12px;font:12.5px/1.5 var(--mono);white-space:pre-wrap;word-break:break-word;max-height:360px;overflow:auto}
+details.raw>summary{cursor:pointer;font:500 .8rem/1 var(--mono);color:var(--accent)}
+.notes{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px}
+.note{background:var(--panel);border:1px solid var(--rule);border-left:4px solid var(--warn);border-radius:6px;padding:12px 14px;display:flex;flex-direction:column;gap:6px}
+.note.ok{border-left-color:var(--pass)}
+.filters{display:flex;flex-wrap:wrap;gap:8px}
+.filters button{font:500 .8rem/1 var(--mono);padding:7px 10px;border-radius:999px;border:1px solid var(--rule);background:var(--panel);color:var(--ink);cursor:pointer}
+.filters button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--bg)}
+.filters button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+@media (max-width:560px){details.case>summary{grid-template-columns:auto 1fr}.qbar{grid-column:2}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="wrap">
+  <header>
+    <span class="eyebrow" id="fecha"></span>
+    <h1>Evaluaciones del arnés</h1>
+    <p class="muted">Generado por <code>node scripts/ai-eval.mjs --report</code>. La <b>determinista</b> prueba los frenos contra un set etiquetado de ataques, rodeos e inocentes (va en el gate). La <b>evaluación con IA</b> corre cada subagente varias veces sobre casos fijos con promptfoo: el veredicto lo deciden las comprobaciones y la calidad la puntúa un modelo juez, que informa pero no decide.</p>
+    <div class="strip" id="strip"></div>
+  </header>
+
+  <section id="notas-sec">
+    <div><span class="eyebrow">Para mejorar</span><h2>Lo que mostró esta corrida</h2></div>
+    <div class="notes" id="notas"></div>
+  </section>
+
+  <section id="det-sec">
+    <div><span class="eyebrow">Familia 1 · en el gate</span><h2>Evaluación determinista</h2></div>
+    <p class="muted">El arnés instalado en un repo temporal (perfil <code>node</code>) contra <code>.claude/evals/deterministic/cases.json</code>. Umbrales: recall 100 %, falsos positivos 0 %.</p>
+    <div class="tbl"><table id="det-groups"></table></div>
+    <h3>Frenos por categoría</h3>
+    <div class="tbl"><table id="det-cats"></table></div>
+    <h3>Huecos conocidos</h3>
+    <p class="muted">Ataques que se sabe que pasan. No cuentan en contra, y si uno se cierra la evaluación sale roja para que se actualice la etiqueta.</p>
+    <div class="tbl"><table id="det-gaps"></table></div>
+  </section>
+
+  <section>
+    <div><span class="eyebrow">Familia 2 · a mano (npm run eval:ai)</span><h2>Evaluación con IA de los subagentes</h2></div>
+    <p class="muted" id="ai-intro"></p>
+    <div class="filters" role="group" aria-label="Filtrar subagentes" id="filtros"></div>
+    <div id="suites" style="display:flex;flex-direction:column;gap:16px"></div>
+  </section>
+</div>
+
+<script id="data" type="application/json">__DATA__</script>
+<script>
+const D = JSON.parse(document.getElementById("data").textContent);
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+const pct = (a, b) => (b ? Math.round((a / b) * 100) : 0) + " %";
+const avg = (xs) => { const v = xs.filter((x) => typeof x === "number"); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null; };
+const LOW = 0.7;
+
+$("#fecha").textContent = "Corrida del " + D.date;
+
+// Summary strip. The deterministic family is optional: it comes from `harness-eval --json`.
+const det = D.det, r = det?.rules;
+const allRuns = D.ai.suites.flatMap((s) => s.cases.flatMap((c) => c.runs));
+const aiPass = allRuns.filter((x) => x.pass).length;
+const tiles = (det ? [
+  ["Determinista", det.green === false ? "ROJA" : "VERDE", det.green === false ? "ver detalle" : "100 %", det.green === false ? "fail" : "pass", `guías ${det.guides.passed}/${det.guides.total} · frenos ${r.caught}/${r.attacks} · señales ${det.signals.passed}/${det.signals.total}`],
+  ["Falsos positivos", `${r.falsePositives}/${r.innocents}`, "0 %", "pass", "inocentes bloqueados o escalados"],
+] : []).concat([
+  ["Con IA", `${aiPass}/${allRuns.length}`, pct(aiPass, allRuns.length), aiPass === allRuns.length ? "pass" : "warn", `${D.ai.suites.length} subagentes · ${D.ai.suites.reduce((n, s) => n + s.cases.length, 0)} casos × ${D.ai.repeat}`],
+  ["Calidad media (juez)", (avg(allRuns.map((x) => x.quality)) ?? 0).toFixed(2), "informa", "warn", "de 0 a 1; no decide el veredicto"],
+]);
+$("#strip").innerHTML = tiles.map(([t, big, p, cls, sub]) => `<div class="tile"><span class="eyebrow">${esc(t)}</span><span class="big">${esc(big)}</span><span><span class="pill ${cls}">${esc(p)}</span></span><span class="muted" style="font-size:.85rem">${esc(sub)}</span></div>`).join("");
+
+// Deterministic.
+if (!det) $("#det-sec").hidden = true;
+else {
+$("#det-groups").innerHTML = `<thead><tr><th>Grupo</th><th>Qué prueba</th><th>Resultado</th><th>Detalle</th></tr></thead><tbody>
+<tr><td>Guías</td><td>¿el pedido se rutea, se distingue pregunta de acción, y cada motivo de bloqueo dice qué hacer?</td><td class="num">${det.guides.passed}/${det.guides.total}</td><td class="num">intención ${det.guides.byKind.intent.passed}/${det.guides.byKind.intent.total} · pedido ${det.guides.byKind.prompt.passed}/${det.guides.byKind.prompt.total} · motivo ${det.guides.byKind.reason.passed}/${det.guides.byKind.reason.total}</td></tr>
+<tr><td>Frenos</td><td>ataques directos, rodeos e inocentes por los hooks de PreToolUse</td><td class="num">${r.caught}/${r.attacks}</td><td class="num">recall ${pct(r.caught, r.attacks)} · rodeos ${r.evasionsCaught}/${r.evasions} · exactitud ${pct(r.exact, r.attacks)} · FP ${r.falsePositives}/${r.innocents}</td></tr>
+<tr><td>Señales</td><td>Stop, PostToolUse, SubagentStop y un git commit real</td><td class="num">${det.signals.passed}/${det.signals.total}</td><td class="num">${Object.entries(det.signals.byKind).map(([k, v]) => `${k} ${v.passed}/${v.total}`).join(" · ")}</td></tr>
+<tr><td>Por idioma</td><td>los mismos pedidos en español y en inglés</td><td class="num">${det.byLanguage.es.passed + det.byLanguage.en.passed}/${det.byLanguage.es.total + det.byLanguage.en.total}</td><td class="num">es ${det.byLanguage.es.passed}/${det.byLanguage.es.total} · en ${det.byLanguage.en.passed}/${det.byLanguage.en.total} · neutro ${det.byLanguage.neutral.passed}/${det.byLanguage.neutral.total}</td></tr>
+<tr><td>Latencia</td><td>por corrida de hook, con el arranque de node</td><td class="num">p50 ${det.latency.p50Ms} ms</td><td class="num">p95 ${det.latency.p95Ms} ms · ${det.latency.runs} corridas</td></tr></tbody>`;
+$("#det-cats").innerHTML = `<thead><tr><th>Categoría</th><th>Ataques</th><th>Rodeos</th><th>Inocentes bloqueados</th><th>Huecos</th></tr></thead><tbody>` +
+  Object.entries(r.byCategory).map(([k, v]) => `<tr><td>${esc(k)}</td><td class="num">${v.caught}/${v.attacks}</td><td class="num">${v.evasionsCaught}/${v.evasions}</td><td class="num">${v.falsePositives}/${v.innocents}</td><td class="num">${v.gaps}</td></tr>`).join("") + "</tbody>";
+$("#det-gaps").innerHTML = `<thead><tr><th>Caso</th><th>Por qué pasa</th></tr></thead><tbody>` + (r.knownGaps ?? []).map((g) => `<tr><td class="num">${esc(g.id)}</td><td>${esc(String(g.gap ?? "").replace(/\s*\(.*\)$/, ""))}</td></tr>`).join("") + "</tbody>";
+}
+
+// AI.
+$("#ai-intro").textContent = `Cada caso corre ${D.ai.repeat} veces en un directorio temporal, con sólo su contexto copiado y sin hooks. Umbral por subagente: ${Math.round(D.ai.minScore * 100)} %. k/n es cuántas de las ${D.ai.repeat} corridas pasaron: 0/n apunta a la etiqueta, un valor intermedio apunta al agente. Abrí un caso para ver la pregunta, cada respuesta y lo que dijo el juez.`;
+
+// What to improve, derived from the run itself: a case wrong every time points at the label, one
+// that flipped between runs at the agent, and a low judge score at the answer's format.
+const notes = [];
+for (const s of D.ai.suites) for (const c of s.cases) {
+  const k = c.runs.filter((x) => x.pass).length, n = c.runs.length, q = avg(c.runs.map((x) => x.quality));
+  const lowest = c.runs.filter((x) => typeof x.quality === "number").sort((a, b) => a.quality - b.quality)[0];
+  if (n && k === 0) notes.push({ s: s.agent, c, head: `0/${n} · revisá la etiqueta`, text: c.runs[0].why || "falla en todas las corridas" });
+  else if (k < n) notes.push({ s: s.agent, c, head: `${k}/${n} · inestable`, text: (c.runs.find((x) => !x.pass) || {}).why || "" });
+  else if (q !== null && q < LOW) notes.push({ s: s.agent, c, head: `calidad ${q.toFixed(2)}`, text: lowest ? lowest.judge : "" });
+}
+$("#notas").innerHTML = notes.length
+  ? notes.map((n) => `<div class="note"><span class="eyebrow">${esc(n.s)} · ${esc(n.head)}</span><h3>${esc(n.c.name)}</h3><p>${esc(n.text)}</p></div>`).join("")
+  : `<div class="note ok"><span class="eyebrow">nada que mejorar</span><h3>Todos los casos estables y con calidad ≥ ${LOW}</h3><p>Ningún caso falló, ninguno cambió entre corridas y el juez no marcó ningún formato.</p></div>`;
+
+const filtros = ["todos", ...D.ai.suites.map((s) => s.agent)];
+let activo = "todos";
+function pintarFiltros() {
+  $("#filtros").innerHTML = filtros.map((f) => `<button type="button" aria-pressed="${f === activo}" data-f="${esc(f)}">${esc(f)}</button>`).join("");
+}
+$("#filtros").addEventListener("click", (e) => {
+  const b = e.target.closest("button"); if (!b) return;
+  activo = b.dataset.f; pintarFiltros();
+  document.querySelectorAll(".suite").forEach((el) => { el.hidden = activo !== "todos" && el.dataset.agent !== activo; });
+});
+pintarFiltros();
+
+const qbar = (q) => q === null ? `<span class="qbar">sin rúbrica</span>` : `<span class="qbar ${q < LOW ? "low" : ""}"><span class="track"><span class="fill" style="width:${Math.round(q * 100)}%"></span></span>${q.toFixed(2)}</span>`;
+$("#suites").innerHTML = D.ai.suites.map((s) => {
+  const runs = s.cases.flatMap((c) => c.runs), k = runs.filter((x) => x.pass).length;
+  return `<div class="suite" data-agent="${esc(s.agent)}">
+    <div class="suite-head"><h3>${esc(s.agent)}</h3><span class="pill ${k === runs.length ? "pass" : k / runs.length >= D.ai.minScore ? "warn" : "fail"}">${k}/${runs.length} · ${pct(k, runs.length)}</span><span class="muted" style="font-size:.85rem">calidad media ${(avg(runs.map((x) => x.quality)) ?? 0).toFixed(2)} · ${s.cases.length} casos</span></div>
+    ${s.cases.map((c) => {
+      const kk = c.runs.filter((x) => x.pass).length, q = avg(c.runs.map((x) => x.quality));
+      return `<details class="case"><summary><span class="kn" style="color:var(${kk === c.runs.length ? "--pass" : "--fail"})">${kk}/${c.runs.length}</span><span>${esc(c.name)}</span>${qbar(q)}</summary>
+        <div class="case-body">
+          <div class="meta">${c.expect ? `<span>espera <code>${esc(c.expect)}</code></span>` : ""}${c.mustMatch.length ? `<span>debe contener ${c.mustMatch.map((m) => `<code>${esc(m)}</code>`).join(" ")}</span>` : ""}</div>
+          <details class="raw"><summary>La entrada del caso</summary><pre>${esc(c.input)}</pre></details>
+          <div class="runs">${c.runs.map((x, i) => `<div class="run"><div class="run-head"><span class="pill ${x.pass ? "pass" : "fail"}">corrida ${i + 1} · ${x.pass ? "pasa" : "falla: " + esc(x.why)}</span>${x.quality !== null ? `<span class="muted">calidad ${x.quality.toFixed(2)}</span>` : ""}<span class="muted">${(x.latencyMs / 1000).toFixed(0)} s</span></div>
+            ${x.judge ? `<p class="judge">${esc(x.judge)}</p>` : ""}
+            <details class="raw"><summary>Respuesta del agente</summary><pre>${esc(x.output)}</pre></details></div>`).join("")}</div>
+        </div></details>`;
+    }).join("")}
+  </div>`;
+}).join("");
+</script>

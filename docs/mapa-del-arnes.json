@@ -1,0 +1,550 @@
+{
+  "title": "Mapa del arnés",
+  "description": "GENERADO por `node scripts/harness-map.mjs --graph`: cada etapa del ciclo y las guías, frenos y sensores que actúan en ella, desde `taxonomy`. No se edita a mano.",
+  "nodes": [
+    {
+      "id": "etapa-sesion",
+      "label": "sesión",
+      "type": "etapa"
+    },
+    {
+      "id": "etapa-pedido",
+      "label": "pedido",
+      "type": "etapa"
+    },
+    {
+      "id": "etapa-accion-decidida",
+      "label": "acción decidida",
+      "type": "etapa"
+    },
+    {
+      "id": "etapa-edicion-hecha",
+      "label": "edición hecha",
+      "type": "etapa"
+    },
+    {
+      "id": "etapa-fin-del-turno",
+      "label": "fin del turno",
+      "type": "etapa"
+    },
+    {
+      "id": "etapa-commit",
+      "label": "commit",
+      "type": "etapa"
+    },
+    {
+      "id": "etapa-push",
+      "label": "push",
+      "type": "etapa"
+    },
+    {
+      "id": "etapa-integracion",
+      "label": "integración",
+      "type": "etapa"
+    },
+    {
+      "id": "etapa-continuo",
+      "label": "continuo",
+      "type": "etapa"
+    },
+    {
+      "id": "claude-hooks-session-start-mjs",
+      "label": ".claude/hooks/session-start.mjs",
+      "type": "guía",
+      "kind": "computacional"
+    },
+    {
+      "id": "claude-hooks-ask-first-mjs",
+      "label": ".claude/hooks/ask-first.mjs",
+      "type": "guía",
+      "kind": "computacional"
+    },
+    {
+      "id": "claude-hooks-sdd-router-mjs",
+      "label": ".claude/hooks/sdd-router.mjs",
+      "type": "guía",
+      "kind": "computacional"
+    },
+    {
+      "id": "claude-hooks-graph-first-mjs",
+      "label": ".claude/hooks/graph-first.mjs",
+      "type": "guía",
+      "kind": "computacional"
+    },
+    {
+      "id": "claude-hooks-action-guard-mjs",
+      "label": ".claude/hooks/action-guard.mjs",
+      "type": "freno",
+      "kind": "computacional"
+    },
+    {
+      "id": "claude-hooks-protected-paths-mjs",
+      "label": ".claude/hooks/protected-paths.mjs",
+      "type": "freno",
+      "kind": "computacional"
+    },
+    {
+      "id": "claude-hooks-reuse-guard-mjs",
+      "label": ".claude/hooks/reuse-guard.mjs",
+      "type": "freno",
+      "kind": "computacional"
+    },
+    {
+      "id": "claude-hooks-bash-guard-mjs",
+      "label": ".claude/hooks/bash-guard.mjs",
+      "type": "freno",
+      "kind": "computacional"
+    },
+    {
+      "id": "claude-hooks-deploy-guard-mjs",
+      "label": ".claude/hooks/deploy-guard.mjs",
+      "type": "freno",
+      "kind": "computacional"
+    },
+    {
+      "id": "claude-hooks-post-edit-check-mjs",
+      "label": ".claude/hooks/post-edit-check.mjs",
+      "type": "sensor",
+      "kind": "computacional"
+    },
+    {
+      "id": "claude-hooks-gate-stop-mjs",
+      "label": ".claude/hooks/gate-stop.mjs",
+      "type": "sensor",
+      "kind": "computacional"
+    },
+    {
+      "id": "claude-hooks-subagent-contract-mjs",
+      "label": ".claude/hooks/subagent-contract.mjs",
+      "type": "sensor",
+      "kind": "computacional"
+    },
+    {
+      "id": "githooks-commit-msg",
+      "label": ".githooks/commit-msg",
+      "type": "sensor",
+      "kind": "computacional"
+    },
+    {
+      "id": "githooks-post-commit",
+      "label": ".githooks/post-commit",
+      "type": "guía",
+      "kind": "computacional"
+    },
+    {
+      "id": "githooks-pre-commit",
+      "label": ".githooks/pre-commit",
+      "type": "sensor",
+      "kind": "computacional"
+    },
+    {
+      "id": "githooks-pre-push",
+      "label": ".githooks/pre-push",
+      "type": "sensor",
+      "kind": "computacional"
+    },
+    {
+      "id": "gate-harness-self-test",
+      "label": "gate · harness self-test",
+      "type": "sensor",
+      "kind": "computacional"
+    },
+    {
+      "id": "gate-docs-link-check",
+      "label": "gate · docs link-check",
+      "type": "sensor",
+      "kind": "computacional"
+    },
+    {
+      "id": "gate-convention-lint",
+      "label": "gate · convention lint",
+      "type": "sensor",
+      "kind": "computacional"
+    },
+    {
+      "id": "gate-artifacts-in-place",
+      "label": "gate · artifacts in place",
+      "type": "sensor",
+      "kind": "computacional"
+    },
+    {
+      "id": "gate-code-index-codegraph",
+      "label": "gate · code index (codegraph)",
+      "type": "sensor",
+      "kind": "computacional"
+    },
+    {
+      "id": "gate-task-criteria-and-scope",
+      "label": "gate · task: criteria and scope",
+      "type": "sensor",
+      "kind": "computacional"
+    },
+    {
+      "id": "gate-profile-bench-real-stacks",
+      "label": "gate · profile bench (real stacks)",
+      "type": "sensor",
+      "kind": "computacional"
+    },
+    {
+      "id": "gate-harness-eval-deterministic",
+      "label": "gate · harness eval (deterministic)",
+      "type": "sensor",
+      "kind": "computacional"
+    },
+    {
+      "id": "gate-library-index-docs",
+      "label": "gate · library index (docs)",
+      "type": "sensor",
+      "kind": "computacional"
+    },
+    {
+      "id": "gate-harness-cost-hook-latency",
+      "label": "gate · harness cost (hook latency)",
+      "type": "sensor",
+      "kind": "computacional"
+    },
+    {
+      "id": "agente-ci-investigator",
+      "label": "agente · ci-investigator",
+      "type": "sensor",
+      "kind": "inferencial"
+    },
+    {
+      "id": "agente-explorer",
+      "label": "agente · explorer",
+      "type": "guía",
+      "kind": "inferencial"
+    },
+    {
+      "id": "agente-gate-runner",
+      "label": "agente · gate-runner",
+      "type": "sensor",
+      "kind": "computacional"
+    },
+    {
+      "id": "agente-librarian",
+      "label": "agente · librarian",
+      "type": "guía",
+      "kind": "inferencial"
+    },
+    {
+      "id": "agente-reviewer",
+      "label": "agente · reviewer",
+      "type": "sensor",
+      "kind": "inferencial"
+    },
+    {
+      "id": "claude-md",
+      "label": "CLAUDE.md",
+      "type": "guía",
+      "kind": "inferencial"
+    },
+    {
+      "id": "constitution-md",
+      "label": "CONSTITUTION.md",
+      "type": "guía",
+      "kind": "inferencial"
+    },
+    {
+      "id": "claude-commands",
+      "label": ".claude/commands",
+      "type": "guía",
+      "kind": "inferencial"
+    },
+    {
+      "id": "claude-skills",
+      "label": ".claude/skills",
+      "type": "guía",
+      "kind": "inferencial"
+    },
+    {
+      "id": "github-workflows-ci-yml",
+      "label": ".github/workflows/ci.yml",
+      "type": "sensor",
+      "kind": "computacional"
+    },
+    {
+      "id": "github-workflows-drift-yml",
+      "label": ".github/workflows/drift.yml",
+      "type": "sensor",
+      "kind": "computacional"
+    }
+  ],
+  "edges": [
+    {
+      "from": "etapa-sesion",
+      "to": "etapa-pedido",
+      "label": "sigue"
+    },
+    {
+      "from": "etapa-pedido",
+      "to": "etapa-accion-decidida",
+      "label": "sigue"
+    },
+    {
+      "from": "etapa-accion-decidida",
+      "to": "etapa-edicion-hecha",
+      "label": "sigue"
+    },
+    {
+      "from": "etapa-edicion-hecha",
+      "to": "etapa-fin-del-turno",
+      "label": "sigue"
+    },
+    {
+      "from": "etapa-fin-del-turno",
+      "to": "etapa-commit",
+      "label": "sigue"
+    },
+    {
+      "from": "etapa-commit",
+      "to": "etapa-push",
+      "label": "sigue"
+    },
+    {
+      "from": "etapa-push",
+      "to": "etapa-integracion",
+      "label": "sigue"
+    },
+    {
+      "from": "etapa-integracion",
+      "to": "etapa-continuo",
+      "label": "sigue"
+    },
+    {
+      "from": "claude-hooks-session-start-mjs",
+      "to": "etapa-sesion",
+      "label": "actúa en"
+    },
+    {
+      "from": "claude-hooks-ask-first-mjs",
+      "to": "etapa-pedido",
+      "label": "actúa en"
+    },
+    {
+      "from": "claude-hooks-sdd-router-mjs",
+      "to": "etapa-pedido",
+      "label": "actúa en"
+    },
+    {
+      "from": "claude-hooks-graph-first-mjs",
+      "to": "etapa-pedido",
+      "label": "actúa en"
+    },
+    {
+      "from": "claude-hooks-action-guard-mjs",
+      "to": "etapa-accion-decidida",
+      "label": "actúa en"
+    },
+    {
+      "from": "claude-hooks-protected-paths-mjs",
+      "to": "etapa-accion-decidida",
+      "label": "actúa en"
+    },
+    {
+      "from": "claude-hooks-reuse-guard-mjs",
+      "to": "etapa-accion-decidida",
+      "label": "actúa en"
+    },
+    {
+      "from": "claude-hooks-bash-guard-mjs",
+      "to": "etapa-accion-decidida",
+      "label": "actúa en"
+    },
+    {
+      "from": "claude-hooks-deploy-guard-mjs",
+      "to": "etapa-accion-decidida",
+      "label": "actúa en"
+    },
+    {
+      "from": "claude-hooks-post-edit-check-mjs",
+      "to": "etapa-edicion-hecha",
+      "label": "actúa en"
+    },
+    {
+      "from": "claude-hooks-gate-stop-mjs",
+      "to": "etapa-fin-del-turno",
+      "label": "actúa en"
+    },
+    {
+      "from": "claude-hooks-subagent-contract-mjs",
+      "to": "etapa-fin-del-turno",
+      "label": "actúa en"
+    },
+    {
+      "from": "githooks-commit-msg",
+      "to": "etapa-commit",
+      "label": "actúa en"
+    },
+    {
+      "from": "githooks-post-commit",
+      "to": "etapa-commit",
+      "label": "actúa en"
+    },
+    {
+      "from": "githooks-pre-commit",
+      "to": "etapa-commit",
+      "label": "actúa en"
+    },
+    {
+      "from": "githooks-pre-push",
+      "to": "etapa-push",
+      "label": "actúa en"
+    },
+    {
+      "from": "gate-harness-self-test",
+      "to": "etapa-fin-del-turno",
+      "label": "actúa en"
+    },
+    {
+      "from": "gate-harness-self-test",
+      "to": "etapa-integracion",
+      "label": "actúa en"
+    },
+    {
+      "from": "gate-docs-link-check",
+      "to": "etapa-fin-del-turno",
+      "label": "actúa en"
+    },
+    {
+      "from": "gate-docs-link-check",
+      "to": "etapa-integracion",
+      "label": "actúa en"
+    },
+    {
+      "from": "gate-convention-lint",
+      "to": "etapa-fin-del-turno",
+      "label": "actúa en"
+    },
+    {
+      "from": "gate-convention-lint",
+      "to": "etapa-integracion",
+      "label": "actúa en"
+    },
+    {
+      "from": "gate-artifacts-in-place",
+      "to": "etapa-fin-del-turno",
+      "label": "actúa en"
+    },
+    {
+      "from": "gate-artifacts-in-place",
+      "to": "etapa-integracion",
+      "label": "actúa en"
+    },
+    {
+      "from": "gate-code-index-codegraph",
+      "to": "etapa-fin-del-turno",
+      "label": "actúa en"
+    },
+    {
+      "from": "gate-code-index-codegraph",
+      "to": "etapa-integracion",
+      "label": "actúa en"
+    },
+    {
+      "from": "gate-task-criteria-and-scope",
+      "to": "etapa-fin-del-turno",
+      "label": "actúa en"
+    },
+    {
+      "from": "gate-task-criteria-and-scope",
+      "to": "etapa-integracion",
+      "label": "actúa en"
+    },
+    {
+      "from": "gate-profile-bench-real-stacks",
+      "to": "etapa-fin-del-turno",
+      "label": "actúa en"
+    },
+    {
+      "from": "gate-profile-bench-real-stacks",
+      "to": "etapa-integracion",
+      "label": "actúa en"
+    },
+    {
+      "from": "gate-harness-eval-deterministic",
+      "to": "etapa-fin-del-turno",
+      "label": "actúa en"
+    },
+    {
+      "from": "gate-harness-eval-deterministic",
+      "to": "etapa-integracion",
+      "label": "actúa en"
+    },
+    {
+      "from": "gate-library-index-docs",
+      "to": "etapa-fin-del-turno",
+      "label": "actúa en"
+    },
+    {
+      "from": "gate-library-index-docs",
+      "to": "etapa-integracion",
+      "label": "actúa en"
+    },
+    {
+      "from": "gate-harness-cost-hook-latency",
+      "to": "etapa-fin-del-turno",
+      "label": "actúa en"
+    },
+    {
+      "from": "gate-harness-cost-hook-latency",
+      "to": "etapa-integracion",
+      "label": "actúa en"
+    },
+    {
+      "from": "agente-ci-investigator",
+      "to": "etapa-integracion",
+      "label": "actúa en"
+    },
+    {
+      "from": "agente-explorer",
+      "to": "etapa-pedido",
+      "label": "actúa en"
+    },
+    {
+      "from": "agente-gate-runner",
+      "to": "etapa-fin-del-turno",
+      "label": "actúa en"
+    },
+    {
+      "from": "agente-librarian",
+      "to": "etapa-pedido",
+      "label": "actúa en"
+    },
+    {
+      "from": "agente-reviewer",
+      "to": "etapa-fin-del-turno",
+      "label": "actúa en"
+    },
+    {
+      "from": "claude-md",
+      "to": "etapa-sesion",
+      "label": "actúa en"
+    },
+    {
+      "from": "constitution-md",
+      "to": "etapa-sesion",
+      "label": "actúa en"
+    },
+    {
+      "from": "claude-commands",
+      "to": "etapa-pedido",
+      "label": "actúa en"
+    },
+    {
+      "from": "claude-skills",
+      "to": "etapa-pedido",
+      "label": "actúa en"
+    },
+    {
+      "from": "github-workflows-ci-yml",
+      "to": "etapa-integracion",
+      "label": "actúa en"
+    },
+    {
+      "from": "github-workflows-drift-yml",
+      "to": "etapa-continuo",
+      "label": "actúa en"
+    }
+  ]
+}
