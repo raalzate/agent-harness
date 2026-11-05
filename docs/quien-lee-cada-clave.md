@@ -23,7 +23,9 @@
 | `commitMsg` | `.githooks/commit-msg`, self-test |
 | `sdd` | `sdd-router.mjs`, self-test |
 | `askFirst` | `ask-first.mjs`, `action-guard.mjs`, self-test |
-| `task` | `scripts/task.mjs` (la escribe, la verifica: la señal «task» del gate), `protected-paths.mjs` (frena fuera del alcance, vía `tareaActiva`/`dentroDelAlcance` de `harness.mjs`), `bash.deny` (no se reescribe a mano), self-test (3e-tarea) |
+| `task` | `scripts/task.mjs` (la escribe, la verifica: la señal «task» del gate), `protected-paths.mjs` (frena fuera del alcance, vía `tareaActiva`/`dentroDelAlcance` de `harness.mjs`; frena editar una prueba congelada, vía `pruebasBloqueadas`; deja escribir la lista de tareas, vía `rutaDeTodo`), `bash.deny` (no se reescribe a mano), self-test (3e-tarea). `todoFile`/`todoOpenPattern` y `lockTests` los leen `task.mjs` (`verify`, `lock`, `unlock`) y `protected-paths.mjs`; `lockTests.pattern` vacío cae en `xp.testFirst.testPattern`; `todoFile` también lo lee `scripts/artifacts-check.mjs` (la lista no es un artefacto suelto, self-test 3g) |
+| `coder` | `scripts/coder-spawn.mjs` (con `workflow.branchPattern`/`baseBranch` y `subagentOutput.contracts.coder`), `/code` (la vía «como sesión propia»), self-test (3g-coder) |
+| `worktrees` | `scripts/worktree-check.mjs` (la señal «worktrees out of sight»; usa `workflow.baseBranch` para los huérfanos), self-test (3g-wt) |
 | `loop` | `scripts/gate.mjs` (cuenta y deja el marcador), `action-guard.mjs` (frena editar), `gate-stop.mjs` (deja cerrar), `ask-first.mjs` (repone), `scripts/hooks-timing.mjs` (estado a restaurar), self-test (3e-loop) |
 | `branches` | `.githooks/pre-push`, self-test |
 | `branches.serverProtection` | `scripts/drift-check.mjs` (sección 3, lo corre `drift.yml`), self-test (10a) |

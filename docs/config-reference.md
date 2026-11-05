@@ -499,7 +499,10 @@ Escribir **fuera** del repo nunca se bloquea: un borrador en el scratchpad es pa
   "criteriaCommand": ["gh", "issue", "view", "{issue}", "--json", "body", "-q", ".body"],
   "criterionPattern": "^\\s*[-*]\\s+\\[[ xX]\\]\\s+(.+)$",
   "trivialEvidence": ["^(true|:|exit 0|exit)$", "^(echo|printf)\\b"],
-  "timeoutMs": 600000 }
+  "timeoutMs": 600000,
+  "todoFile": "specs/{item}/tasks.md",
+  "todoOpenPattern": "^\\s*[-*]\\s+\\[ \\]\\s+(.+)$",
+  "lockTests": { "pattern": "" } }
 ```
 
 Planificar antes de escribir, no salirse de lo planificado, y que «terminado» lo demuestre el
@@ -512,6 +515,67 @@ arnés (#52, #53). `scripts/task.mjs` escribe la tarea en `file`:
 | `criterion "<texto>"` | agrega un criterio |
 | `evidence <n> -- <argv…>` | el comando que FALLA si el criterio n no se cumple. Se rechaza si casa `trivialEvidence` o está en `bash.deny`/`bash.ask`: la verificación la corre el gate, y sin ese chequeo la evidencia era la forma de que el arnés ejecutara lo que `bash-guard` le frena al agente |
 | `status` · `verify` · `done` · `abandon --why "…"` | qué falta · la señal del gate · cerrar (sólo en verde) · descartar con motivo |
+| `lock` | congela (sha256) todos los archivos de prueba que hay en ese momento: los rojos nuevos y los viejos. Se corre **después** del commit rojo |
+| `unlock <ruta>… --why "…"` | libera una prueba congelada; sin motivo se rechaza, y el motivo queda en `log` (`unlocks`) para el `reviewer` |
+
+**La lista de tareas** (`todoFile`, opcional). La lista que el agente escribe **antes** de codificar
+—el `tasks.md` del [agente `coder`](../.claude/agents/coder.md)—, con `{item}` sustituido por el ítem
+en minúsculas y sin caracteres raros (`#12` → `12`). Va **versionada** en la rama: el plan viaja con el
+PR y otro agente lo retoma. Siempre está dentro del alcance (se puede escribir antes de declararlo:
+planificar es parte de la tarea), y `verify` es rojo si no existe o si alguna línea casa
+`todoOpenPattern` (default: una casilla `- [ ]` sin marcar). Sin la clave, la lista no se exige.
+
+**Pruebas inmutables** (`lockTests`, opcional). `pattern` dice qué es un archivo de prueba; vacío
+usa `xp.testFirst.testPattern`, para que «este commit trae su prueba» y «esta prueba está congelada»
+nunca discrepen. Con `lock` hecho, `protected-paths.mjs` deniega editar una prueba congelada y
+`verify` las vuelve a hashear, así que una edición por Bash también es roja. Una prueba **nueva**
+sigue libre: más pruebas nunca aflojan la definición de terminado. Un `lock` con forma rota se ignora
+(P5). Con `lockTests` declarado, una tarea cuyo diff toca archivos de prueba y **nunca** hizo `lock` es
+roja: una prueba aflojada antes de congelarla es invisible para el hash. Y `artifacts-check` acepta
+la lista de tareas bajo `tracker.specsDir`: es el plan de trabajo del agente, no la spec del equipo.
+
+---
+
+## `worktrees` — worktrees fuera de la vista (opcional)
+
+```json
+{ "enabled": true }
+```
+
+Activa la señal «worktrees out of sight» (`scripts/worktree-check.mjs`): recorre `git worktree list`
+y es **roja** por cada worktree bajo la raíz del repo que `.gitignore` no esconde —cada escaneo lo
+leería como archivos propios ([gotcha](gotchas.md))—. Un worktree cuya rama ya está integrada en
+`workflow.baseBranch` es un **aviso**, nunca rojo: se borra a mano y sin `--force`. Si usás `/code`
+(subagentes con `isolation: worktree`, que Claude Code crea dentro de `.claude/`), esa carpeta va en
+`.gitignore`. Ver [worktrees.md](worktrees.md).
+
+---
+
+## `coder` — un coder como sesión propia (opcional)
+
+```json
+{ "command": ["claude", "-p", "--agent", "coder", "--permission-mode", "acceptEdits",
+              "--allowedTools", "Bash,Read,Edit,Write,Grep,Glob,Agent"],
+  "worktreeDir": "..",
+  "setupCommand": [],
+  "timeoutMs": 3600000 }
+```
+
+Lo lee `scripts/coder-spawn.mjs` (`--unit <slug> --branch <rama> --brief <archivo> [--apply]`), la vía
+de `/code` para que el [`coder`](../.claude/agents/coder.md) corra como **sesión principal** —puede
+delegar en `librarian` y `explorer`, cosa que un subagente no puede— dentro de su propio worktree:
+
+| Clave | Qué hace |
+|---|---|
+| `command` | argv del agente; el brief entra por **stdin**, nunca interpolado. Corre con `cwd` en el worktree, así que los hooks se anclan a él |
+| `worktreeDir` | dónde se crea `wt-<unit>`, relativo al repo. Una ruta que cae **dentro** de la raíz se rechaza |
+| `setupCommand` | argv que prepara el worktree antes de que el agente mida nada (git no trae dependencias). Si falla, la corrida falla |
+| `timeoutMs` | tope de la corrida |
+
+Sin `--apply` es dry-run (P9). La rama tiene que casar `workflow.branchPattern`, sale de
+`origin/<workflow.baseBranch>` si existe, y no puede existir de antes. El veredicto es la línea de
+`subagentOutput.contracts.coder.mustMatch`: sin ella la corrida falló, sea cual sea el exit code. La
+transcripción queda en `.git/coder-runs/<unit>.log` (P7).
 
 Con una tarea activa, `protected-paths.mjs` deniega editar un archivo del repo fuera del alcance
 —y cualquiera mientras el alcance no esté declarado—. La señal «task» del gate (`verify`) re-ejecuta

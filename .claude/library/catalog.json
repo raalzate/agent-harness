@@ -259,6 +259,8 @@
         "`xp.testFirst.verifyRed` — la prueba falla sin el cambio",
         "`askFirst` — no actuar sobre una pregunta",
         "`task` — la tarea declarada (opcional)",
+        "`worktrees` — worktrees fuera de la vista (opcional)",
+        "`coder` — un coder como sesión propia (opcional)",
         "`loop` — el ciclo acotado (opcional)",
         "`tracker` — el gestor de trabajo, sea cual sea",
         "`commitMsg` — qué commits piden registro",
@@ -614,8 +616,8 @@
       "base": "referencia",
       "title": "Mapa del arnés",
       "summary": "GENERADO por `node scripts/harness-map.mjs --graph`: cada etapa del ciclo y las guías, frenos y sensores que actúan en ella, desde `taxonomy`. No se edita a mano.",
-      "nodes": 46,
-      "edges": 55,
+      "nodes": 48,
+      "edges": 58,
       "nodeTypes": [
         "etapa",
         "freno",
@@ -755,7 +757,7 @@
       "kind": "table",
       "base": "referencia",
       "title": "Quién lee cada clave",
-      "summary": "Claves del config y los scripts que las leen (42)",
+      "summary": "Claves del config y los scripts que las leen (44)",
       "tables": [
         {
           "heading": "Claves del config y los scripts que las leen",
@@ -763,7 +765,7 @@
             "Clave",
             "Lo leen"
           ],
-          "rows": 42
+          "rows": 44
         }
       ]
     },
@@ -830,6 +832,7 @@
         "El ciclo",
         "Qué ya garantiza el arnés",
         "Reglas",
+        "Varios coders a la vez: `/code`",
         "Lo que no verifica ninguna máquina (todavía)",
         "Prueba de vida"
       ]

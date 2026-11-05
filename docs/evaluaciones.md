@@ -223,7 +223,8 @@ se evalúa, y el config de este repo se ajusta aparte donde la regla es la misma
 `npm run eval:reviewer` corre cada caso **una vez** y sólo lee el veredicto. `npm run eval:ai`
 ([`scripts/ai-eval.mjs`](../scripts/ai-eval.mjs)) los corre `aiEval.repeat` veces con
 [promptfoo](https://github.com/promptfoo/promptfoo), y además mide a los otros sensores
-inferenciales: `gate-runner`, `ci-investigator`, `explorer` y `librarian`.
+inferenciales: `gate-runner`, `ci-investigator`, `explorer` y `librarian`, más el agente que
+produce, `coder`.
 
 promptfoo es un **corredor, no una dependencia** (ADR [0015](decisions/0015-promptfoo-como-corredor.md)):
 `npx -y promptfoo@<versión fija>`, nunca en `package.json`. Necesita node ≥ 22.22. Sin promptfoo,
@@ -254,6 +255,7 @@ formato). Se escribe también cuando la suite sale roja, que es cuando más se l
 | `ci-investigator` | una salida de `ci-investigate` ya corrida | el veredicto, la línea real, y si la causa es el entorno (sólo en CI) o se reproduce local |
 | `explorer` | una pregunta sobre el repo copiado | un mapa con `archivo:línea`, sin volcar código, sin rutas inventadas |
 | `librarian` | una pregunta sobre la documentación, con la biblioteca indexada copiada | `COBERTURA` correcta, `FUENTES` con `ruta:línea` que existen, «sin resultados» sin inventar, y la frontera: una pregunta de código va al `explorer`. Es la única suite con Bash, y sólo para `node scripts/library.mjs`: consultar el índice **es** lo que se evalúa |
+| `coder` | un brief: una spec ambigua, un pedido de aflojar una prueba congelada, una spec clara | lo que hace **antes** de escribir: pregunta en vez de adivinar (`CON PREGUNTAS`), no afloja una prueba congelada (el único camino es `unlock --why` con acuerdo del humano), y su `tasks.md` sigue el ciclo XP (prueba roja → `lock` → código mínimo → refactor aparte → gate). Sólo lectura: que después codifique bien lo miden el gate y el `reviewer` sobre su rama |
 
 El veredicto de cada agente es su patrón de `subagentOutput.contracts`, la misma definición que
 lee el hook `subagent-contract`. Los agentes corren aislados: cada uno en un temporal con copia

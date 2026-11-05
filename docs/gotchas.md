@@ -32,10 +32,11 @@ Síntoma: el gate rojo con un `docs-linkcheck` de más de mil problemas, todos b
 Causa:   se crearon worktrees **dentro** de la carpeta del repo. Los `.gitignore` y la lista de
          ignorados de los docs no los nombraban, así que cada escaneo del repo leyó las copias como
          documentos propios. El gate mostró el síntoma (enlaces rotos), nunca la causa.
-Regla:   el worktree vive **fuera** de la raíz del repo ([worktrees.md](worktrees.md)).
-Mecanismo: ninguno en el arnés genérico todavía — hueco declarado en `docs/worktrees.md`. Un repo
-         que declara sus checkouts puede fallar por todo directorio de primer nivel con `.git` que
-         no declare; el cierre genérico sería una señal del gate sobre `git worktree list`.
+Regla:   el worktree vive **fuera** de la raíz del repo, o dentro de una carpeta que `.gitignore`
+         esconde ([worktrees.md](worktrees.md)).
+Mecanismo: la señal «worktrees out of sight» del gate (`scripts/worktree-check.mjs`) recorre
+         `git worktree list` y es roja por cada worktree bajo la raíz que git no ignora, con el
+         caso 3g-wt del self-test. Cerró el hueco cuando `/code` empezó a crear worktrees por diseño.
 
 ### GOTCHA: un `cd` del agente apagó todos los hooks sin bloquear nada
 

@@ -56,6 +56,7 @@ git worktree prune
 | El gate (su registro de la corrida y `skipIfMissing`), el deploy, el panel y `hooks-timing` resuelven sus rutas `.git/…` al gitdir real, no al árbol | `gate.mjs`, `deploy.mjs`, `panel/generar.mjs`, `hooks-timing.mjs`; self-test 11g-bis |
 | La misma rama no se abre dos veces | lo impone git |
 | La medición `--verify-red` usa su propio worktree temporal, fuera del repo, y no deja ninguno registrado | `cycle-check.mjs`, self-test «ciclo (rojo sin el cambio)» |
+| Ningún worktree vive dentro de la raíz sin que `.gitignore` lo esconda; los huérfanos (rama ya integrada) se avisan | señal «worktrees out of sight» (`scripts/worktree-check.mjs`, clave `worktrees`); self-test 3g-wt |
 
 ## Reglas
 
@@ -76,6 +77,24 @@ git worktree prune
 7. **Nombres.** La rama sigue `workflow.branchPattern`; la carpeta, un prefijo que se reconozca
    (`wt-<tarea>`). La carpeta no está validada: es convención.
 
+## Varios coders a la vez: `/code`
+
+El agente [`coder`](../.claude/agents/coder.md) es la forma de este ciclo con un agente: recibe una
+spec, trabaja en su worktree y su rama, escribe su lista de tareas (`task.todoFile`, versionada) antes
+de codificar, congela las pruebas rojas (`task.mjs lock`) y entrega con gate verde. El comando
+[`/code`](../.claude/commands/code.md) es el orquestador: parte la spec en unidades que no comparten
+archivos (regla 3), muestra el plan, y lanza un `coder` por unidad en el mismo mensaje.
+
+El worktree de un subagente con `isolation: worktree` lo crea Claude Code **dentro** de la raíz
+(la carpeta `worktrees` bajo `.claude/`): es la excepción a la regla 1, y es segura sólo porque `.gitignore` la nombra
+—así ningún escaneo del repo lee la copia—. Un repo portado que use `/code` necesita esa misma línea.
+
+| Garantía del coder | Cómo |
+|---|---|
+| No arranca a codificar sin plan | `verify` es rojo sin `tasks.md` o con casillas abiertas; self-test 3e-tarea |
+| No afloja una prueba para ponerse verde | `lock` + `protected-paths` + re-hash en `verify`; `unlock --why` queda en el registro; self-test 3e-tarea |
+| Cierra con su veredicto | contrato `ENTREGA:` en `subagentOutput.contracts`; self-test 3e-sub |
+
 ## Lo que no verifica ninguna máquina (todavía)
 
 Declarado, no escondido. Cada fila es un hueco que se puede cerrar con un freno y su caso de
@@ -84,8 +103,6 @@ self-test:
 | Hueco | Qué haría falta |
 |---|---|
 | Un `git worktree remove --force` pasa `bash-guard` | una regla en `bash.rules`, con su caso inocente (sin `--force`) |
-| Un worktree dentro de la raíz no lo detecta el genérico | una señal del gate que liste `git worktree list` y falle por los que estén bajo el repo |
-| Worktrees huérfanos (rama ya integrada, carpeta viva) | la misma señal, en modo aviso |
 | El nombre de la carpeta | nada: convención |
 | El panel lee el registro del gate con `path.join(raiz, …)` (`panel/leer-en-vivo.mjs`, `panel/sincronizar.mjs`): desde un worktree no lo encuentra y muestra la corrida como si no existiera | resolver esa ruta con el mismo criterio que `resolverSalida`, con su caso de self-test |
 
