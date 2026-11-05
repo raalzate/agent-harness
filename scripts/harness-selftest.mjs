@@ -4790,6 +4790,20 @@ if (corre("fuera")) {
       const r = spawnSync(process.execPath, ["--input-type=module", "-e", probe], { encoding: "utf8" });
       if (r.status === 0 && /resolved 0/.test(r.stdout)) ok("deterministic eval: a hook that exits without reading stdin does not crash the runner (EPIPE)");
       else bad("deterministic eval: a hook that closes stdin early", `exit ${r.status}: ${`${r.stderr}`.trim().split("\n").find((l) => /Error/.test(l)) ?? r.stdout.trim()}`);
+
+      // The report names the hook by the FILE it runs. Taking the last word of the command named
+      // `node …/tools/ado.mjs hook edit` as `edit` (found porting to a real repo); the hooks
+      // without arguments must keep the name they always had.
+      const nombres = `import { hookName } from ${JSON.stringify(pathToFileURL(runner).href)};\n` +
+        `console.log(JSON.stringify([` +
+        `'node "$CLAUDE_PROJECT_DIR"/tools/ado.mjs hook edit',` +
+        `'node "$CLAUDE_PROJECT_DIR"/.claude/hooks/bash-guard.mjs',` +
+        `'node .claude/hooks/gate-stop.mjs'` +
+        `].map((command) => hookName({ command }))));\n`;
+      const n = spawnSync(process.execPath, ["--input-type=module", "-e", nombres], { encoding: "utf8" });
+      const esperado = JSON.stringify(["ado.mjs", "bash-guard.mjs", "gate-stop.mjs"]);
+      if (n.status === 0 && n.stdout.trim() === esperado) ok("deterministic eval: a hook with arguments is named by its file (`ado.mjs`, not `edit`), and one without keeps its name");
+      else bad("deterministic eval: hookName names the file the hook runs", `expected ${esperado}, got ${n.stdout.trim() || n.stderr.trim().split("\n").pop()}`);
     }
   }
 }
