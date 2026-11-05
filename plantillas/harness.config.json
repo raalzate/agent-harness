@@ -429,7 +429,7 @@
         "route": "clarify",
         "patterns": [
           "\\bno s[ée] si\\b",
-          "\\balgo as[íi]\\b",
+          "\\balgo as[íi](?![\\wáéíóúüñ])",
           "\\bcomo veas\\b",
           "\\bmejorar (todo|esto)\\b",
           "\\bnot sure (if|whether)\\b",
@@ -479,7 +479,7 @@
           "\\bbiblioteca\\b",
           "\\bbases? de conocimiento\\b",
           "\\b(re-?)?index[a-záé]*\\s.*\\bdoc",
-          "\\bqu[ée] (se )?decidi[óo]\\b",
+          "\\bqu[ée] (se )?decidi[óo](?![\\wáéíóúüñ])",
           "\\bwhat do(es)? the docs?\\b",
           "\\bin the docs?\\b",
           "\\bknowledge base\\b",

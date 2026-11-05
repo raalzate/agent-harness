@@ -592,7 +592,25 @@ if (corre("base")) {
     malos += 1;
     bad(`analizarComando(${comando})`, `esperaba {${tipo}, ${file}} y dio {${r?.tipo}, ${r?.file}}`);
   }
-  if (!malos) ok(`${casos.length} formas de declarar un hook se analizan bien (binario externo, \`$CLAUDE_PROJECT_DIR\`, flags de node)`);
+  // Los argumentos viajan como los vería el proceso: medir `ado.mjs` sin `hook edit` es medir otro
+  // programa; partir `"hook edit"` en dos, perder el valor de `--root "$CLAUDE_PROJECT_DIR"` o pasarle
+  // `2>/dev/null || true` como argv lo hace medir ROTO en falso si valida sus argumentos.
+  // `etiqueta` queda en el archivo: es la clave con la que el mapa ubica el hook.
+  const raiz = REPO_ROOT.split(path.sep).join("/");
+  const conArgs = [
+    ['node "$CLAUDE_PROJECT_DIR/scripts/ado.mjs" hook edit', "scripts/ado.mjs", ["hook", "edit"]], // linkcheck:ignore
+    ['node x.mjs "hook edit"', "x.mjs", ["hook edit"]],
+    ['node "$CLAUDE_PROJECT_DIR"/x.mjs --root "$CLAUDE_PROJECT_DIR"', "x.mjs", ["--root", raiz]],
+    ["node x.mjs edit 2>/dev/null || true", "x.mjs", ["edit"]],
+    ["graphify hook-guard search", "graphify", ["hook-guard", "search"]],
+  ];
+  for (const [comando, file, args] of conArgs) {
+    const r = analizarComando(comando);
+    if (r?.file === file && r?.etiqueta === file && JSON.stringify(r?.args) === JSON.stringify(args)) continue;
+    malos += 1;
+    bad(`analizarComando(${comando}) y sus argumentos`, `esperaba ${file} ${JSON.stringify(args)} y dio ${r?.file} ${JSON.stringify(r?.args)} (etiqueta ${r?.etiqueta})`);
+  }
+  if (!malos) ok(`${casos.length} formas de declarar un hook se analizan bien (binario externo, \`$CLAUDE_PROJECT_DIR\`, flags de node, argumentos)`);
 }
 
 // 1d. Si un binario existe se pregunta antes de lanzarlo. En Windows los comandos del config van
@@ -660,6 +678,47 @@ for (const [donde, pattern] of patronesDelConfig) {
   }
 }
 if (!regexMalos) ok(`${patronesDelConfig.filter(([, p]) => p).length} regex del config compilan`);
+
+// `\b` de JS es ASCII: una letra acentuada NO es «de palabra». `\balgo as[íi]\b` casa «algo asi»
+// y nunca «algo así» (después de la í no hay borde), así que el freno compila, el sin-tilde lo
+// prueba en verde, y con la ortografía real calla siempre. Pasó en la plantilla (`así`,
+// `decidió`) y en un repo portado dejó muerto a graph-first («dónde está…»). Un `\b` pegado
+// DESPUÉS de una letra acentuada (o de una clase que la contiene) se escribe `(?![\wáéíóúüñ])`.
+{
+  const ACENTO = "áéíóúüñÁÉÍÓÚÜÑ";
+  const trampa = new RegExp(`(?:[${ACENTO}]|\\[[^\\]]*[${ACENTO}][^\\]]*\\])\\)*\\\\b`);
+  const conTrampa = (p) => typeof p === "string" && trampa.test(p);
+  // Prueba de vida del detector: muerde la forma del incidente, deja pasar la arreglada y el
+  // acento en medio de la palabra (`regresi[óo]n\b` termina en `n`: ahí el borde sí existe).
+  const muerde = conTrampa("\\balgo as[íi]\\b") && conTrampa("decidió\\b");
+  const noDeMas = !conTrampa("\\balgo as[íi](?![\\wáéíóúüñ])") && !conTrampa("\\bregresi[óo]n\\b"); // linkcheck:ignore (regex, no un enlace)
+  if (!muerde || !noDeMas) bad("detector de `\\b` tras acento", `muerde=${muerde} · deja pasar lo correcto=${noDeMas}`);
+  // El config de este repo, y lo que se COPIA a otros (plantilla y ejemplos), si este repo los trae.
+  const cazados = patronesDelConfig.filter(([, p]) => conTrampa(p)).map(([donde, p]) => `${donde}: \`${p}\``);
+  const instalables = [
+    "plantillas/harness.config.json",
+    ...(fs.existsSync(abs("examples")) ? fs.readdirSync(abs("examples")).filter((f) => f.endsWith(".json")).map((f) => `examples/${f}`) : []),
+  ].filter((f) => fs.existsSync(abs(f)));
+  for (const f of instalables) {
+    let cfg;
+    try {
+      cfg = JSON.parse(fs.readFileSync(abs(f), "utf8"));
+    } catch {
+      continue; // un JSON roto lo reporta su propio caso
+    }
+    (function recorrer(v, ruta) {
+      if (typeof v === "string") {
+        if (conTrampa(v)) cazados.push(`${f} ${ruta}: \`${v}\``);
+      } else if (v && typeof v === "object") {
+        for (const [k, x] of Object.entries(v)) if (!k.startsWith("$")) recorrer(x, `${ruta}.${k}`);
+      }
+    })(cfg, "");
+  }
+  if (muerde && noDeMas) {
+    if (cazados.length) bad("ningún regex con `\\b` pegado a una letra acentuada", `nunca casa la ortografía real; usá \`(?![\\wáéíóúüñ])\`: ${cazados.join(" · ")}`);
+    else ok(`ningún regex con \`\\b\` tras letra acentuada (config${instalables.length ? ` + ${instalables.length} instalable(s)` : ""}): el detector muerde la forma del incidente`);
+  }
+}
 
 // Invariante del generador: la muestra que fabrica DEBE casar el patrón del que salió, o ser
 // null. Sin él, una reducción imperfecta produce un falso rojo sobre un freno que funciona —
@@ -3397,6 +3456,39 @@ if (hookFiles.has("graph-first.mjs") && config.graph) {
   else bad("graph-first se calla en lo trivial", `habló: ${trivialGrafo.stdout.trim().slice(0, 120)}`);
 }
 
+/**
+ * Si el primer argumento con forma de ruta de una señal es del repo, tiene que existir — salvo que
+ * viva DENTRO de lo que la propia señal declara opcional (`skipIfMissing`) y eso falte en esta
+ * máquina: ahí el gate la reporta OMITIDA, y exigir la ruta era un rojo falso en toda máquina sin
+ * ese árbol (un clon que no se bajó, un SDK). Una ruta FUERA de `skipIfMissing` se sigue
+ * exigiendo: un typo no se excusa por tener la señal un opcional en otro lado.
+ * `existe` se inyecta para poder probarla con rutas ficticias.
+ */
+function rutaDeSenal(s, existe = (r) => fs.existsSync(abs(r))) {
+  const posibleRuta = (s.command ?? []).slice(1).find((a) => /[/\\]/.test(a) && !a.startsWith("-"));
+  if (!posibleRuta || existe(posibleRuta)) return { estado: "ok" };
+  const opcional = s.skipIfMissing && !existe(s.skipIfMissing) ? path.normalize(s.skipIfMissing) : null;
+  const r = path.normalize(posibleRuta);
+  if (opcional && (r === opcional || r.startsWith(opcional + path.sep)))
+    return { estado: "omitida", detalle: `\`${s.skipIfMissing}\` no existe en esta máquina: el gate la reporta OMITIDA y su ruta no se puede verificar acá` };
+  return { estado: "falta", detalle: `\`${posibleRuta}\` no existe` };
+}
+
+{
+  // Prueba de vida de la excusa: muerde fuera del opcional, perdona dentro, y no perdona si el opcional existe.
+  const existe = (r) => r === "sdk";
+  const casos = [
+    [{ command: ["dotnet", "build", "clon/app.csproj"], skipIfMissing: "clon" }, "omitida"],
+    [{ command: ["dotnet", "build", "clon/app.csproj"], skipIfMissing: "clon/app.csproj" }, "omitida"],
+    [{ command: ["node", "scripts/tipeo.mjs"], skipIfMissing: "clon" }, "falta"], // linkcheck:ignore (ficticio)
+    [{ command: ["dotnet", "build", "sdk/app.csproj"], skipIfMissing: "sdk" }, "falta"],
+    [{ command: ["node", "scripts/x.mjs"] }, "falta"], // linkcheck:ignore (ficticio)
+  ];
+  const malos = casos.filter(([s, esperado]) => rutaDeSenal(s, existe).estado !== esperado);
+  if (!malos.length) ok("señal con `skipIfMissing` ausente: su ruta se excusa sólo DENTRO del opcional (fuera, o con el opcional presente, sigue siendo rojo)");
+  else bad("la ruta de una señal y su `skipIfMissing`", malos.map(([s, e]) => `${s.command.join(" ")} [skip ${s.skipIfMissing ?? "—"}] esperaba ${e}`).join(" · "));
+}
+
 // ── 6. Señales del gate, subagentes y comandos ──────────────────────────────
 section("6. gate, subagentes y comandos");
 const senales = config.gate?.signals ?? [];
@@ -3407,9 +3499,9 @@ for (const s of senales) {
     bad(`señal «${s.name}»`, "no declara command");
     continue;
   }
-  // Si el segundo argumento es una ruta del repo, tiene que existir.
-  const posibleRuta = argv.slice(1).find((a) => /[/\\]/.test(a) && !a.startsWith("-"));
-  if (posibleRuta && !fs.existsSync(abs(posibleRuta))) bad(`señal «${s.name}»`, `\`${posibleRuta}\` no existe`);
+  const ruta = rutaDeSenal(s);
+  if (ruta.estado === "omitida") skip(`señal «${s.name}»`, ruta.detalle);
+  else if (ruta.estado === "falta") bad(`señal «${s.name}»`, ruta.detalle);
   else if (!s.why) bad(`señal «${s.name}»`, "no declara `why`: una señal sin motivo es una señal que nadie defiende");
   else ok(`señal «${s.name}» → ${argv.join(" ")}`);
 }
@@ -4124,6 +4216,25 @@ if (enParte("costo")) {
       const r = spawnSync("node", [script, "--config", cfg, "--settings", settingsCebo], { cwd: REPO_ROOT, encoding: "utf8" });
       if (r.status === 1 && /MEDICIÓN EN ROJO/.test(r.stderr ?? "")) ok("un hook que no respeta el contrato de exit codes pone la medición en ROJO (barato ≠ roto)");
       else bad("un hook roto no puede medir verde", `esperaba exit 1 y «MEDICIÓN EN ROJO», dio exit ${r.status}`);
+    }
+
+    // Un hook con ARGUMENTOS se mide con sus argumentos. Sin ellos es otro programa: el cebo,
+    // como `ado.mjs hook edit` corrido como `ado.mjs`, sale 1 sin su argumento — y la medición lo
+    // reportaba ROTO mientras el hook real andaba. Y el presupuesto se puede declarar por comando.
+    {
+      const hookConArgs = path.join(tmp, "hook-con-args.mjs");
+      fs.writeFileSync(hookConArgs, 'process.exit(process.argv[2] === "edit" ? 0 : 1);\n');
+      const settingsCebo = path.join(tmp, "settings-args.json");
+      fs.writeFileSync(
+        settingsCebo,
+        JSON.stringify({ hooks: { PreToolUse: [{ matcher: "Write", hooks: [{ type: "command", command: `node "${hookConArgs}" edit` }] }] } }),
+      );
+      const cfg = escribirCebo("hook-con-args.json", { runs: 1, budgets: { [`${hookConArgs} edit`]: 60000 }, probe });
+      const r = spawnSync("node", [script, "--config", cfg, "--settings", settingsCebo], { cwd: REPO_ROOT, encoding: "utf8" });
+      // Con el presupuesto por comando ignorado la fila sale OMITIDA (el cebo no declara `budgetMs`).
+      if (r.status === 0 && /LATENCIA VERDE/.test(r.stdout ?? "") && /✓.*hook-con-args\.mjs edit/.test(r.stdout ?? "") && !/hook-con-args\.mjs edit — OMITIDO/.test(r.stdout ?? ""))
+        ok("un hook con argumentos se mide con ellos y toma el presupuesto declarado para ese comando");
+      else bad("un hook con argumentos se mide con sus argumentos", `esperaba exit 0, «LATENCIA VERDE» y el comando con su argumento; dio exit ${r.status}: ${(r.stderr || r.stdout || "").trim().split("\n").slice(-2).join(" · ")}`);
     }
 
     // Una alternativa del matcher que es un regex (`mcp__.*`) es otro camino por el mismo hook.
@@ -5345,9 +5456,13 @@ if (corre("fuera")) {
       }
     }
 
-    // 11h. El contrato con el gestor, sin ninguna forja: las citas salen de `tracker.issuePattern`
+    // 11h. El contrato con el gestor, sin ninguna forja: las citas salen del patrón del gestor
     //      y un comando que falla es «sin dato» con su error, nunca una lista vacía.
-    const patron = config.tracker?.issuePattern ?? "(^|[^A-Za-z0-9_])#[0-9]+";
+    //      El patrón del CEBO es fijo: lo que se prueba es la máquina (citar, leer, caer), y las
+    //      citas del cebo tienen forma `#N`. Con el `tracker.issuePattern` del repo, un repo de
+    //      Azure Boards (`AB#N`) o de Jira (`PROJ-N`) salía rojo sin defecto — y portar EXIGE poner
+    //      el patrón propio (docs/trazabilidad.md). Que ese patrón case lo prueban los casos de commit-msg.
+    const patron = "(^|[^A-Za-z0-9_])#[0-9]+";
     const citas = leerCitas({ "STATUS.md": "bloqueado por #12 y por #7\n```\n#99 en código no cuenta\n```\n" }, [patron]);
     const spec = { command: ["gestor"], timeoutMs: 1000, closedStates: ["closed"] };
     const leido = leerGestor(REPO_ROOT, spec, ["#7"], () => ({ status: 0, stdout: JSON.stringify({ items: [{ id: "#7", title: "x", state: "closed" }] }), stderr: "" }));
