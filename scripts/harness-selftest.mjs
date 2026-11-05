@@ -679,6 +679,47 @@ for (const [donde, pattern] of patronesDelConfig) {
 }
 if (!regexMalos) ok(`${patronesDelConfig.filter(([, p]) => p).length} regex del config compilan`);
 
+// `\b` de JS es ASCII: una letra acentuada NO es «de palabra». `\balgo as[íi]\b` casa «algo asi»
+// y nunca «algo así» (después de la í no hay borde), así que el freno compila, el sin-tilde lo
+// prueba en verde, y con la ortografía real calla siempre. Pasó en la plantilla (`así`,
+// `decidió`) y en un repo portado dejó muerto a graph-first («dónde está…»). Un `\b` pegado
+// DESPUÉS de una letra acentuada (o de una clase que la contiene) se escribe `(?![\wáéíóúüñ])`.
+{
+  const ACENTO = "áéíóúüñÁÉÍÓÚÜÑ";
+  const trampa = new RegExp(`(?:[${ACENTO}]|\\[[^\\]]*[${ACENTO}][^\\]]*\\])\\)*\\\\b`);
+  const conTrampa = (p) => typeof p === "string" && trampa.test(p);
+  // Prueba de vida del detector: muerde la forma del incidente, deja pasar la arreglada y el
+  // acento en medio de la palabra (`regresi[óo]n\b` termina en `n`: ahí el borde sí existe).
+  const muerde = conTrampa("\\balgo as[íi]\\b") && conTrampa("decidió\\b");
+  const noDeMas = !conTrampa("\\balgo as[íi](?![\\wáéíóúüñ])") && !conTrampa("\\bregresi[óo]n\\b"); // linkcheck:ignore (regex, no un enlace)
+  if (!muerde || !noDeMas) bad("detector de `\\b` tras acento", `muerde=${muerde} · deja pasar lo correcto=${noDeMas}`);
+  // El config de este repo, y lo que se COPIA a otros (plantilla y ejemplos), si este repo los trae.
+  const cazados = patronesDelConfig.filter(([, p]) => conTrampa(p)).map(([donde, p]) => `${donde}: \`${p}\``);
+  const instalables = [
+    "plantillas/harness.config.json",
+    ...(fs.existsSync(abs("examples")) ? fs.readdirSync(abs("examples")).filter((f) => f.endsWith(".json")).map((f) => `examples/${f}`) : []),
+  ].filter((f) => fs.existsSync(abs(f)));
+  for (const f of instalables) {
+    let cfg;
+    try {
+      cfg = JSON.parse(fs.readFileSync(abs(f), "utf8"));
+    } catch {
+      continue; // un JSON roto lo reporta su propio caso
+    }
+    (function recorrer(v, ruta) {
+      if (typeof v === "string") {
+        if (conTrampa(v)) cazados.push(`${f} ${ruta}: \`${v}\``);
+      } else if (v && typeof v === "object") {
+        for (const [k, x] of Object.entries(v)) if (!k.startsWith("$")) recorrer(x, `${ruta}.${k}`);
+      }
+    })(cfg, "");
+  }
+  if (muerde && noDeMas) {
+    if (cazados.length) bad("ningún regex con `\\b` pegado a una letra acentuada", `nunca casa la ortografía real; usá \`(?![\\wáéíóúüñ])\`: ${cazados.join(" · ")}`);
+    else ok(`ningún regex con \`\\b\` tras letra acentuada (config${instalables.length ? ` + ${instalables.length} instalable(s)` : ""}): el detector muerde la forma del incidente`);
+  }
+}
+
 // Invariante del generador: la muestra que fabrica DEBE casar el patrón del que salió, o ser
 // null. Sin él, una reducción imperfecta produce un falso rojo sobre un freno que funciona —
 // pasó con `\brm\b[^|;&]*tareas\.json`, que se reducía a «rmtareas.json».
