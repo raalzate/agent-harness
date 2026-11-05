@@ -447,16 +447,42 @@ export function parseHookCommand(comando) {
     .trim();
   if (!limpio) return null;
 
-  const conNode = /(?:^|\s)node\s+(?:--\S+\s+)*(\S+)(.*)$/.exec(limpio);
+  const conNode = /(?:^|\s)node\s+(?:--\S+\s+)*(\S+)/.exec(limpio);
   // Los ARGUMENTOS viajan: `node ado.mjs hook edit` corrido como `node ado.mjs` es otro programa
   // (imprime su ayuda y sale 1), y la medición de latencia lo reportaba ROTO mientras el hook real
-  // andaba. `etiqueta` sigue siendo el archivo: es la clave con la que el mapa y el panel lo ubican.
+  // andaba. Salen del comando ORIGINAL (`argumentosDeHook`), no de `limpio`: ahí ya no hay comillas.
+  // `etiqueta` sigue siendo el archivo: es la clave con la que el mapa y el panel lo ubican.
   // Con `node` el archivo es del repo y se le puede exigir que parsee.
-  if (conNode) return { file: conNode[1], args: conNode[2].trim().split(/\s+/).filter(Boolean), tipo: "script", etiqueta: conNode[1] };
+  if (conNode) return { file: conNode[1], args: argumentosDeHook(comando, 1), tipo: "script", etiqueta: conNode[1] };
 
   // Sin `node`: un ejecutable. De un binario externo sólo se puede afirmar que EXISTE.
-  const [binario, ...resto] = limpio.split(/\s+/);
-  return { file: binario, args: resto, tipo: "ejecutable", etiqueta: binario };
+  const binario = limpio.split(/\s+/)[0];
+  return { file: binario, args: argumentosDeHook(comando, 0), tipo: "ejecutable", etiqueta: binario };
+}
+
+/**
+ * Los argumentos de un hook como los vería el proceso: respetando comillas, con
+ * `$CLAUDE_PROJECT_DIR` resuelto a la raíz (borrarlo dejaba `--root` sin valor) y cortando en el
+ * primer operador de shell (`|`, `||`, `&&`, `;`, `>`, `2>`…): una redirección no es argv, y
+ * pasársela al script lo hacía medir ROTO en falso si valida sus argumentos.
+ * `saltar` = cuántos tokens después de `node [--flags]` (o del binario) son el programa.
+ */
+function argumentosDeHook(comando, saltar) {
+  const texto = String(comando ?? "").replace(/\$\{?CLAUDE_PROJECT_DIR\}?/g, REPO_ROOT.split(path.sep).join("/"));
+  const tokens = [];
+  for (const m of texto.matchAll(/"([^"]*)"|'([^']*)'|(\d?>{1,2}|\|\|?|&&|;)|(\S+)/g)) {
+    if (m[3]) break; // operador de shell: lo que sigue no es del hook
+    // Un token puede mezclar comillas y texto (`"$CLAUDE_PROJECT_DIR"/x.mjs`): se juntan.
+    const pegado = m.index > 0 && !/\s/.test(texto[m.index - 1]) && tokens.length;
+    const valor = m[1] ?? m[2] ?? m[4];
+    if (pegado) tokens[tokens.length - 1] += valor;
+    else tokens.push(valor);
+  }
+  let i = tokens.findIndex((t) => t === "node");
+  if (i === -1) return tokens.slice(1);
+  i += 1;
+  while (tokens[i]?.startsWith("--")) i += 1;
+  return tokens.slice(i + saltar);
 }
 
 /**

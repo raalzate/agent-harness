@@ -592,11 +592,23 @@ if (corre("base")) {
     malos += 1;
     bad(`analizarComando(${comando})`, `esperaba {${tipo}, ${file}} y dio {${r?.tipo}, ${r?.file}}`);
   }
-  // Los argumentos viajan: medir `ado.mjs` sin `hook edit` es medir otro programa.
-  const conArgs = analizarComando('node "$CLAUDE_PROJECT_DIR/scripts/ado.mjs" hook edit'); // linkcheck:ignore
-  if (JSON.stringify(conArgs?.args) !== JSON.stringify(["hook", "edit"])) {
+  // Los argumentos viajan como los vería el proceso: medir `ado.mjs` sin `hook edit` es medir otro
+  // programa; partir `"hook edit"` en dos, perder el valor de `--root "$CLAUDE_PROJECT_DIR"` o pasarle
+  // `2>/dev/null || true` como argv lo hace medir ROTO en falso si valida sus argumentos.
+  // `etiqueta` queda en el archivo: es la clave con la que el mapa ubica el hook.
+  const raiz = REPO_ROOT.split(path.sep).join("/");
+  const conArgs = [
+    ['node "$CLAUDE_PROJECT_DIR/scripts/ado.mjs" hook edit', "scripts/ado.mjs", ["hook", "edit"]], // linkcheck:ignore
+    ['node x.mjs "hook edit"', "x.mjs", ["hook edit"]],
+    ['node "$CLAUDE_PROJECT_DIR"/x.mjs --root "$CLAUDE_PROJECT_DIR"', "x.mjs", ["--root", raiz]],
+    ["node x.mjs edit 2>/dev/null || true", "x.mjs", ["edit"]],
+    ["graphify hook-guard search", "graphify", ["hook-guard", "search"]],
+  ];
+  for (const [comando, file, args] of conArgs) {
+    const r = analizarComando(comando);
+    if (r?.file === file && r?.etiqueta === file && JSON.stringify(r?.args) === JSON.stringify(args)) continue;
     malos += 1;
-    bad("analizarComando conserva los argumentos", `esperaba ["hook","edit"] y dio ${JSON.stringify(conArgs?.args)}`);
+    bad(`analizarComando(${comando}) y sus argumentos`, `esperaba ${file} ${JSON.stringify(args)} y dio ${r?.file} ${JSON.stringify(r?.args)} (etiqueta ${r?.etiqueta})`);
   }
   if (!malos) ok(`${casos.length} formas de declarar un hook se analizan bien (binario externo, \`$CLAUDE_PROJECT_DIR\`, flags de node, argumentos)`);
 }
@@ -4174,11 +4186,12 @@ if (enParte("costo")) {
       const settingsCebo = path.join(tmp, "settings-args.json");
       fs.writeFileSync(
         settingsCebo,
-        JSON.stringify({ hooks: { PreToolUse: [{ matcher: "Write", hooks: [{ type: "command", command: `node ${hookConArgs} edit` }] }] } }),
+        JSON.stringify({ hooks: { PreToolUse: [{ matcher: "Write", hooks: [{ type: "command", command: `node "${hookConArgs}" edit` }] }] } }),
       );
       const cfg = escribirCebo("hook-con-args.json", { runs: 1, budgets: { [`${hookConArgs} edit`]: 60000 }, probe });
       const r = spawnSync("node", [script, "--config", cfg, "--settings", settingsCebo], { cwd: REPO_ROOT, encoding: "utf8" });
-      if (r.status === 0 && /LATENCIA VERDE/.test(r.stdout ?? "") && /hook-con-args\.mjs edit/.test(r.stdout ?? ""))
+      // Con el presupuesto por comando ignorado la fila sale OMITIDA (el cebo no declara `budgetMs`).
+      if (r.status === 0 && /LATENCIA VERDE/.test(r.stdout ?? "") && /✓.*hook-con-args\.mjs edit/.test(r.stdout ?? "") && !/hook-con-args\.mjs edit — OMITIDO/.test(r.stdout ?? ""))
         ok("un hook con argumentos se mide con ellos y toma el presupuesto declarado para ese comando");
       else bad("un hook con argumentos se mide con sus argumentos", `esperaba exit 0, «LATENCIA VERDE» y el comando con su argumento; dio exit ${r.status}: ${(r.stderr || r.stdout || "").trim().split("\n").slice(-2).join(" · ")}`);
     }

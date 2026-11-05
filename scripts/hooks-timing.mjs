@@ -296,7 +296,7 @@ if (!tiene("--json")) {
   console.log(`Latencia de los hooks (mediana de ${CORRIDAS} corridas)\n`);
   for (const f of filas) {
     if (f.omitido) {
-      console.log(`  – ${f.etiqueta} — OMITIDO: ${f.omitido}`);
+      console.log(`  – ${f.comando} — OMITIDO: ${f.omitido}`);
       continue;
     }
     if (f.roto) {
