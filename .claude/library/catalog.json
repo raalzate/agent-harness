@@ -619,7 +619,10 @@
         "GOTCHA: en Windows un binario ausente no es ENOENT",
         "GOTCHA: se mezcló un PR con un check en rojo y el CI todavía corriendo",
         "GOTCHA: un servidor MCP que edita código pasaba por al lado de las rutas protegidas",
-        "GOTCHA: un hook que no lee todo su stdin tumbó la evaluación determinista en CI"
+        "GOTCHA: un hook que no lee todo su stdin tumbó la evaluación determinista en CI",
+        "GOTCHA: el commit verde del ciclo con pruebas congeladas salía bloqueado por «test primero»",
+        "GOTCHA: el índice regenerado de la biblioteca contaba como código para las prácticas XP",
+        "GOTCHA: una rama con prefijo de carpeta dejó el link-check rojo desde la bitácora"
       ]
     },
     {

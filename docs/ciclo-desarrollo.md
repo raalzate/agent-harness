@@ -92,8 +92,8 @@ alguien saltea saltándose los hooks (que además está en `bash.deny`).
 
 | Práctica | Qué se verifica | Qué NO | Fuga |
 |---|---|---|---|
-| `testFirst` | el commit que cambia comportamiento trae también un archivo de prueba (`testPattern`) | que la prueba se escribiera **antes**, ni que falle sin el cambio | `no-test: <motivo>` |
-| `smallBatch` | archivos y líneas del commit bajo el límite del equipo (`maxFiles`, `maxLines`) | que el lote tenga sentido propio | `big-batch: <motivo>` |
+| `testFirst` | el commit que cambia comportamiento trae también un archivo de prueba (`testPattern`), o la tarea activa tiene pruebas congeladas (`task.mjs lock`) que ya están en la historia: el ciclo rojo → `lock` → verde pone la prueba en el commit anterior | que la prueba se escribiera **antes**, ni que falle sin el cambio | `no-test: <motivo>` |
+| `smallBatch` | archivos y líneas del commit bajo el límite del equipo (`maxFiles`, `maxLines`); el índice regenerado de la biblioteca (`library.catalog`, `library.appendix`) no cuenta, ni acá ni en `testFirst` | que el lote tenga sentido propio | `big-batch: <motivo>` |
 | `refactorSeparate` | un commit que se declara `refactor:` no cambia pruebas | que el refactor sea de verdad un refactor | `mixed-refactor: <motivo>` |
 | `pairing` | el commit deja rastro de con quién se hizo (`Co-authored-by:`) | que la sesión de a dos haya existido | `solo: <motivo>` |
 
