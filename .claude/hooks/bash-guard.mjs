@@ -34,8 +34,9 @@ if (hit) {
 // comando ENTERO casa `exempt`, no hace falta el sí del humano. Sin esto, una pregunta que
 // sale veinte veces por día se contesta «sí» sin leer, y deja de proteger justo el caso raro.
 // El regex se escribe anclado (`^…$`) para que un `&& otra-cosa` encadenado no herede la exención.
+// `exempt` hereda los `flags` de su regla: una regla que distingue mayúsculas no puede eximir sin distinguirlas.
 const confirmar = (config.bash?.ask ?? []).find(
-  (regla) => firstMatch([regla], command) && !(regla.exempt && firstMatch([{ pattern: regla.exempt }], command)),
+  (regla) => firstMatch([regla], command) && !(regla.exempt && firstMatch([{ pattern: regla.exempt, flags: regla.flags }], command)),
 );
 if (confirmar) ask(`CONFIRMACIÓN DEL HUMANO: ${confirmar.reason}`, input);
 

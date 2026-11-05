@@ -397,12 +397,18 @@ export function proposedContent(input, config) {
   return campos.map((c) => ti[c]).find((v) => typeof v === "string") ?? "";
 }
 
-/** Primer patrón de `rules` que casa con `text` (cada regla es {pattern, ...}). */
+/**
+ * Primer patrón de `rules` que casa con `text` (cada regla es {pattern, flags?, ...}).
+ *
+ * `flags` de la REGLA gana sobre el default: sin él, todo se evaluaba sin distinguir
+ * mayúsculas y `git branch -D` (borrado forzado) no se podía separar de `git branch -d`
+ * (el seguro). El default sigue siendo `i` para no cambiar ningún repo ya portado (P3).
+ */
 export function firstMatch(rules, text, flags = "i") {
   for (const rule of rules ?? []) {
     let re;
     try {
-      re = new RegExp(rule.pattern, flags);
+      re = new RegExp(rule.pattern, typeof rule.flags === "string" ? rule.flags : flags);
     } catch {
       continue; // patrón inválido: lo caza el self-test, no el turno del usuario
     }
