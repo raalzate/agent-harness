@@ -1597,6 +1597,64 @@ if (!corre("registro")) {
       fs.rmSync(copia, { recursive: true, force: true });
     }
 
+    // The coder's discipline as mechanism: its own to-do list (`todoFile`) and immutable tests
+    // (`lock`/`unlock`). Both keys are added now, on top of the config above, so every case
+    // before this one keeps proving that without them nothing changes.
+    {
+      const conCoder = { ...tareaCfg, todoFile: "specs/{item}/tasks.md", lockTests: { pattern: "" } };
+      fs.writeFileSync(
+        path.join(tmp, ".claude", "harness.config.json"),
+        JSON.stringify({ protectedPaths: [{ pattern: "^\\.env", reason: "selftest" }], xp: { testFirst: { testPattern: "(^|/)tests/" } }, task: conCoder }),
+      );
+      fs.mkdirSync(path.join(tmp, "tests"), { recursive: true });
+      fs.writeFileSync(path.join(tmp, "tests", "a.test.js"), "assert(sum(1, 2) === 3)\n");
+      fs.writeFileSync(path.join(tmp, "src", "a.js"), "x\n");
+      gitT("add", "-A");
+      gitT("commit", "-qm", "red test");
+      const todo = path.join("specs", "4", "tasks.md");
+      task("start", "#4");
+      caso(editar(todo).status === 0, "the to-do list is writable before any scope (planning comes first)", "the hook blocked the task's own tasks.md");
+      task("scope", "src/", "tests/", "--why", "selftest");
+      task("criterion", "suma");
+      task("evidence", "1", "--", "node", "prueba.js");
+      fs.writeFileSync(path.join(tmp, "src", "a.js"), "ok\n");
+      const sinLista = task("verify");
+      caso(sinLista.status === 1 && /lista de tareas/.test(sinLista.out), "no tasks.md is red: a task that was never planned is not done", `exit ${sinLista.status}`);
+      fs.mkdirSync(path.join(tmp, "specs", "4"), { recursive: true });
+      fs.writeFileSync(path.join(tmp, todo), "# Tareas\n\n- [x] test rojo\n- [ ] implementar suma\n");
+      const abierta = task("verify");
+      caso(abierta.status === 1 && /implementar suma/.test(abierta.out), "an open item in tasks.md is red and is named", `exit ${abierta.status}: ${abierta.out.slice(-200)}`);
+      fs.writeFileSync(path.join(tmp, todo), "# Tareas\n\n- [x] test rojo\n- [x] implementar suma\n");
+      const cerrada = task("verify");
+      caso(cerrada.status === 0, "a closed tasks.md, outside the declared scope, is green", `exit ${cerrada.status}: ${cerrada.out.slice(-200)}`);
+
+      // Immutable tests. Touching a test without ever freezing it is red: the window before `lock`
+      // is where a loosened test hides from the hash.
+      fs.writeFileSync(path.join(tmp, "tests", "c.test.js"), "assert(sum(2, 2) === 4)\n");
+      const sinLock = task("verify");
+      caso(sinLock.status === 1 && /nunca las congel/.test(sinLock.out) && /tests\/c\.test\.js/.test(sinLock.out), "a task that touched tests without `lock` is red and names them", `exit ${sinLock.status}: ${sinLock.out.slice(-200)}`);
+      caso(task("lock").status === 0, "lock freezes the committed tests", "lock failed with a test file present");
+      caso(task("verify").status === 0, "after `lock`, the touched tests are green", "verify stayed red after lock");
+      const bloqueada = editar(path.join("tests", "a.test.js"));
+      caso(bloqueada.status === 2 && /PRUEBA BLOQUEADA/.test(bloqueada.stderr) && /unlock/.test(bloqueada.stderr), "editing a frozen test is denied and the escape is named", `exit ${bloqueada.status}`);
+      caso(editar(path.join("tests", "b.test.js")).status === 0, "a NEW test file stays writable (more tests never weaken done)", "the lock blocked a new test");
+      fs.writeFileSync(path.join(tmp, "tests", "a.test.js"), "assert(true)\n");
+      const aflojada = task("verify");
+      caso(aflojada.status === 1 && /tests\/a\.test\.js/.test(aflojada.out), "a frozen test changed outside the hook (Bash) is red and named", `exit ${aflojada.status}`);
+      caso(task("unlock", "tests/a.test.js").status !== 0, "unlock without a reason is rejected", "released a frozen test silently");
+      caso(task("unlock", "tests/nada.test.js", "--why", "x").status !== 0, "unlock of a test that is not frozen is rejected", "accepted an unknown path");
+      caso(task("unlock", "tests/a.test.js", "--why", "the assertion checked the wrong sign").status === 0, "unlock with a reason is accepted", "rejected a reasoned unlock");
+      caso(task("done").status === 0, "after a reasoned unlock the task closes green", "done failed");
+      const registro = fs.readFileSync(path.join(tmp, tareaCfg.log), "utf8");
+      caso(/"unlocks":\[\{"ruta":"tests\/a\.test\.js","motivo":"the assertion checked the wrong sign"/.test(registro), "every unlock stays in the task log with its reason", `log: ${registro.slice(-200)}`);
+
+      // A lock with the wrong shape lets the human through (P5).
+      fs.writeFileSync(archivoTarea, JSON.stringify({ item: "5", alcance: [{ ruta: "tests/" }], criterios: [], lock: { files: "tests/a.test.js" } }));
+      caso(editar(path.join("tests", "a.test.js")).status === 0, "a corrupt lock lets the edit through", "a broken lock blocked the human");
+      fs.rmSync(archivoTarea, { force: true });
+      fs.writeFileSync(path.join(tmp, ".claude", "harness.config.json"), JSON.stringify({ protectedPaths: [{ pattern: "^\\.env", reason: "selftest" }], task: tareaCfg }));
+    }
+
     // Los criterios salen de las casillas del ítem del gestor.
     task("start", "7", "--from-tracker");
     const desdeGestor = tareaActivaEn(tmp, tareaCfg.file);
@@ -2355,7 +2413,127 @@ if (enParte("reglas") && config.tracker?.artifactsIn === "tracker" && fs.existsS
     const res = spawnSync("node", [abs("scripts/artifacts-check.mjs"), "--dir", tmp], { encoding: "utf8" });
     if (res.status !== 0) ok("artifacts-check caza un artefacto suelto en el repo");
     else bad("artifacts-check caza un artefacto suelto", `exit 0 con el cebo puesto: ${res.stdout.trim()}`);
+
+    // The task's own to-do list (`task.todoFile`) is not a loose artifact: without the exemption
+    // the first tasks.md a coder writes turned this signal red. A sibling file still is.
+    if (config.task?.todoFile) {
+      fs.rmSync(dir, { recursive: true, force: true });
+      const lista = path.join(tmp, config.task.todoFile.split("{item}").join("selftest-7"));
+      fs.mkdirSync(path.dirname(lista), { recursive: true });
+      fs.writeFileSync(lista, "- [x] paso\n");
+      const soloLista = spawnSync("node", [abs("scripts/artifacts-check.mjs"), "--dir", tmp], { encoding: "utf8" });
+      if (soloLista.status === 0) ok("artifacts-check deja pasar la lista de tareas declarada en `task.todoFile`");
+      else bad("artifacts-check y la lista de tareas", `exit ${soloLista.status}: ${`${soloLista.stderr}`.trim().slice(0, 160)}`);
+      fs.writeFileSync(path.join(path.dirname(lista), "plan.md"), "# plan\n");
+      const vecino = spawnSync("node", [abs("scripts/artifacts-check.mjs"), "--dir", tmp], { encoding: "utf8" });
+      if (vecino.status !== 0) ok("artifacts-check sigue cazando un plan suelto al lado de la lista de tareas");
+      else bad("artifacts-check y un plan al lado de la lista", "exit 0: la exención de la lista dejó pasar un archivo vecino");
+    }
   } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+}
+
+// 3g-wt. Worktrees out of sight (`worktrees`). A real temp repo with real worktrees: inside the
+//     root and visible is red; the same folder ignored is green; outside is green; a merged
+//     branch is a warning that never turns red. The script is copied, so this repo's own
+//     worktrees never enter the measurement.
+if (enParte("reglas") && config.worktrees && fs.existsSync(abs("scripts/worktree-check.mjs"))) {
+  const tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "harness-wt-")));
+  const fuera = `${tmp}-fuera`;
+  try {
+    const g = (...a) => spawnSync("git", a, { cwd: tmp, encoding: "utf8" });
+    g("init", "-q", "-b", "main");
+    g("config", "user.email", "selftest@example.com");
+    g("config", "user.name", "selftest");
+    fs.mkdirSync(path.join(tmp, "scripts"), { recursive: true });
+    fs.mkdirSync(path.join(tmp, ".claude"), { recursive: true });
+    fs.copyFileSync(abs("scripts/worktree-check.mjs"), path.join(tmp, "scripts", "worktree-check.mjs"));
+    fs.writeFileSync(path.join(tmp, ".claude", "harness.config.json"), JSON.stringify({ worktrees: { enabled: true }, workflow: { baseBranch: "main" } }));
+    g("add", "-A");
+    g("commit", "-qm", "base");
+    const check = () => spawnSync(process.execPath, [path.join(tmp, "scripts", "worktree-check.mjs")], { cwd: tmp, encoding: "utf8" });
+    const caso = (cond, nombre, falla) => (cond ? ok(`worktrees: ${nombre}`) : bad(`worktrees: ${nombre}`, falla));
+
+    caso(check().status === 0, "no extra worktree is green", "red with only the main checkout");
+    g("worktree", "add", "-q", "-b", "feat/a", path.join(tmp, "wts", "a"));
+    const visible = check();
+    caso(visible.status === 1 && /wts\/a/.test(visible.stderr), "a worktree inside the root, not ignored, is red and named", `exit ${visible.status}`);
+    fs.writeFileSync(path.join(tmp, ".gitignore"), "wts/\n");
+    caso(check().status === 0, "the same worktree under an ignored folder is green", "red with the folder ignored");
+    g("worktree", "add", "-q", "-b", "feat/b", fuera);
+    const huerfano = check();
+    caso(huerfano.status === 0 && /AVISO/.test(huerfano.stdout) && /feat\/b/.test(huerfano.stdout), "a worktree outside the root is green, and a merged branch is only a warning", `exit ${huerfano.status}: ${huerfano.stdout.slice(0, 160)}`);
+  } finally {
+    spawnSync("git", ["worktree", "remove", "--force", fuera], { cwd: tmp });
+    fs.rmSync(fuera, { recursive: true, force: true });
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+}
+
+// 3g-coder. `coder-spawn`: one coder as a main session in a worktree OUTSIDE the root. A fake agent
+//     stands behind `coder.command` (no model, no network) and records where it ran and what it
+//     got by stdin. What is under test is our machine: dry-run by default, the branch pattern,
+//     never inside the root, one unit one worktree, and no verdict line = failed run.
+if (enParte("reglas") && config.coder && fs.existsSync(abs("scripts/coder-spawn.mjs"))) {
+  const tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "harness-coder-")));
+  const unidad = path.basename(tmp).toLowerCase().replace(/[^a-z0-9._-]/g, "-");
+  const wt = (u) => path.join(path.dirname(tmp), `wt-${u}`);
+  const registro = path.join(path.dirname(tmp), `${path.basename(tmp)}-fake.json`);
+  try {
+    const g = (...a) => spawnSync("git", a, { cwd: tmp, encoding: "utf8" });
+    g("init", "-q", "-b", "main");
+    g("config", "user.email", "selftest@example.com");
+    g("config", "user.name", "selftest");
+    for (const d of ["scripts", ".claude/hooks"]) fs.mkdirSync(path.join(tmp, d), { recursive: true });
+    fs.copyFileSync(abs("scripts/coder-spawn.mjs"), path.join(tmp, "scripts", "coder-spawn.mjs"));
+    fs.copyFileSync(abs(".claude/hooks/harness.mjs"), path.join(tmp, ".claude", "hooks", "harness.mjs"));
+    const fake = path.join(tmp, "fake-agent.js");
+    fs.writeFileSync(
+      fake,
+      `const fs=require('fs');const input=fs.readFileSync(0,'utf8');fs.writeFileSync(${JSON.stringify(registro)},JSON.stringify({cwd:process.cwd(),input}));` +
+        `if(!process.env.NO_VERDICT)console.log('trabajo hecho\\nENTREGA: LISTA');else console.log('creo que terminé');`,
+    );
+    const cfg = (extra = {}) =>
+      fs.writeFileSync(
+        path.join(tmp, ".claude", "harness.config.json"),
+        JSON.stringify({
+          workflow: { baseBranch: "main", branchPattern: "^feat/[a-z0-9-]+$" },
+          subagentOutput: { contracts: { coder: { mustMatch: "ENTREGA:\\W*(LISTA|CON PREGUNTAS|BLOQUEADA)" } } },
+          coder: { command: [process.execPath, fake], worktreeDir: "..", setupCommand: [], ...extra },
+        }),
+      );
+    cfg();
+    fs.writeFileSync(path.join(tmp, "brief.md"), "implement the sum\n");
+    g("add", "-A");
+    g("commit", "-qm", "base");
+    const spawn = (args, env = {}) => spawnSync(process.execPath, [path.join(tmp, "scripts", "coder-spawn.mjs"), ...args], { cwd: tmp, encoding: "utf8", env: { ...process.env, ...env } });
+    const caso = (cond, nombre, falla) => (cond ? ok(`coder-spawn: ${nombre}`) : bad(`coder-spawn: ${nombre}`, falla));
+    const base = ["--unit", unidad, "--brief", "brief.md"];
+
+    const seco = spawn([...base, "--branch", "feat/sum"]);
+    caso(seco.status === 0 && /DRY-RUN/.test(seco.stdout) && !fs.existsSync(wt(unidad)), "dry-run by default creates nothing", `exit ${seco.status}, worktree ${fs.existsSync(wt(unidad))}`);
+    caso(spawn([...base, "--branch", "Sum_Branch", "--apply"]).status === 1 && !fs.existsSync(wt(unidad)), "a branch outside `workflow.branchPattern` is rejected", "accepted a bad branch name");
+    cfg({ worktreeDir: "." });
+    caso(spawn([...base, "--branch", "feat/sum", "--apply"]).status === 1, "a worktree INSIDE the root is rejected", "created a worktree under the root");
+    cfg();
+    const hecho = spawn([...base, "--branch", "feat/sum", "--apply"]);
+    const visto = fs.existsSync(registro) ? JSON.parse(fs.readFileSync(registro, "utf8")) : {};
+    caso(
+      hecho.status === 0 && /ENTREGA: LISTA/.test(hecho.stdout) && visto.cwd && fs.realpathSync(visto.cwd) === fs.realpathSync(wt(unidad)) && visto.input === "implement the sum\n",
+      "--apply runs the agent INSIDE its own worktree, outside the root, with the brief by stdin",
+      `exit ${hecho.status}: ${`${hecho.stderr}`.trim().slice(0, 160)} · cwd ${visto.cwd}`,
+    );
+    caso(fs.existsSync(path.join(tmp, ".git", "coder-runs", `${unidad}.log`)), "the transcript goes to .git/, not the source tree", "no transcript under .git/coder-runs");
+    caso(spawn([...base, "--branch", "feat/other", "--apply"]).status === 1, "one unit, one worktree: an existing folder is rejected", "reused an existing worktree folder");
+    const sinVeredicto = spawn(["--unit", `${unidad}-b`, "--brief", "brief.md", "--branch", "feat/sum-b", "--apply"], { NO_VERDICT: "1" });
+    caso(sinVeredicto.status === 1 && /ENTREGA|verdict/.test(sinVeredicto.stderr), "a coder that closes without `ENTREGA:` is a failed run", `exit ${sinVeredicto.status}`);
+  } finally {
+    for (const u of [unidad, `${unidad}-b`]) {
+      spawnSync("git", ["worktree", "remove", "--force", wt(u)], { cwd: tmp });
+      fs.rmSync(wt(u), { recursive: true, force: true });
+    }
+    fs.rmSync(registro, { force: true });
     fs.rmSync(tmp, { recursive: true, force: true });
   }
 }

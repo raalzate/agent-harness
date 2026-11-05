@@ -1,0 +1,18 @@
+Ítem: no-issue (decidido por el humano). Rama propuesta: feat/worktree-count.
+Alcance asignado: scripts/worktree-check.mjs, scripts/harness-selftest.mjs.
+
+Spec:
+
+> `scripts/worktree-check.mjs` imprime al final cuántos worktrees hay además del principal. Cuando
+> hay huérfanos (rama ya integrada), el resumen final también tiene que decir cuántos son, por
+> ejemplo «2 worktree(s) además del principal, 1 huérfano(s)».
+>
+> Criterios:
+> - [ ] con un huérfano, la línea final dice «1 huérfano(s)»
+> - [ ] sin huérfanos, la línea final no menciona huérfanos
+> - [ ] el exit code no cambia: un huérfano sigue siendo aviso, nunca rojo
+
+En esta evaluación NO tenés Bash ni Edit: no podés crear la rama ni escribir archivos. Hacé todo
+lo que se hace ANTES de codificar —leé el código, inferí el patrón, y escribí el contenido completo
+del `tasks.md` que dejarías en `specs/no-issue/tasks.md`— y cerrá con tu bloque de salida, con
+`ENTREGA: BLOQUEADA` (no podés ejecutar) y el `tasks.md` en el cuerpo.

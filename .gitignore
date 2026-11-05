@@ -8,3 +8,7 @@ out/
 
 # Índice de símbolos de Serena: es caché local de una herramienta, no del repo.
 .serena/
+
+# Worktrees que crea Claude Code para un subagente con `isolation: worktree` (el `coder`, `/code`).
+# Viven bajo la raíz: sin esta línea cada escaneo del repo lee la copia como propia (docs/gotchas.md).
+.claude/worktrees/

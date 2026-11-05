@@ -192,7 +192,9 @@ const COPIAR = [
   ".claude/agents/gate-runner.md",
   ".claude/agents/ci-investigator.md",
   ".claude/agents/librarian.md",
+  ".claude/agents/coder.md",
   ".claude/commands/gate.md",
+  ".claude/commands/code.md",
   ".claude/commands/lesson.md",
   ".claude/commands/harness-audit.md",
   ".claude/commands/architecture.md",
@@ -208,6 +210,10 @@ const COPIAR = [
   "scripts/harness-selftest.mjs",
   "scripts/docs-linkcheck.mjs",
   "scripts/artifacts-check.mjs",
+  // La señal «worktrees out of sight» de la plantilla: sin el script apuntaría a la nada.
+  "scripts/worktree-check.mjs",
+  // `/code` lanza coders como sesión propia con este script (clave `coder`).
+  "scripts/coder-spawn.mjs",
   "scripts/cycle-check.mjs",
   "scripts/hooks-timing.mjs",
   // La tarea declarada: `protected-paths` lee su alcance y la señal «task» la verifica. Sin el

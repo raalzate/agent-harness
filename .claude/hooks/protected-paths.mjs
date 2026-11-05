@@ -12,7 +12,7 @@
  * repo FUERA de lo planificado se frena. Vive acá porque es la misma pregunta —¿esta ruta se
  * puede tocar?— y un hook más sería un arranque de node más en cada edición.
  */
-import { readInput, loadConfig, deny, allow, targetPath, targetPaths, firstMatch, escribe, esHerramientaMcp, escrituraAmplia, dentroDelAlcance, tareaActiva } from "./harness.mjs";
+import { readInput, loadConfig, deny, allow, targetPath, targetPaths, firstMatch, escribe, esHerramientaMcp, escrituraAmplia, dentroDelAlcance, tareaActiva, rutaDeTodo, pruebasBloqueadas } from "./harness.mjs";
 
 const input = await readInput();
 const config = loadConfig();
@@ -41,7 +41,26 @@ for (const nombre of targetPaths(input, config).filter((n) => !n.startsWith(".."
 // El alcance de la tarea declarada. Sin tarea activa, nada que ver.
 const tarea = tareaActiva(config);
 if (!tarea) allow();
+
+// Locked tests come first: they are the definition of done, and loosening one is how a red task
+// turns green without the code changing. Checked before the wide-write shortcut below, so the
+// file-by-file answer is given whenever there is a file to answer about.
+const bloqueadas = pruebasBloqueadas(tarea);
+const tocada = targetPaths(input, config).find((n) => bloqueadas.has(n));
+if (tocada) {
+  deny(
+    `PRUEBA BLOQUEADA: \`${tocada}\` quedó congelada en la tarea ${tarea.item} (\`task.mjs lock\`).\n` +
+      `La prueba es la definición de terminado: si el código no la pasa, se cambia el código, no la prueba.\n` +
+      `Si la prueba está MAL (no el código), pará y decilo; con el acuerdo del humano: \`node scripts/task.mjs unlock ${tocada} --why "<qué estaba mal en la prueba>"\`.`,
+  );
+}
+
+// The task's own to-do list is part of planning, so it is always inside the scope.
+const todo = rutaDeTodo(config, tarea.item);
+const alcance = todo ? [...(tarea.alcance ?? []), { ruta: todo }] : tarea.alcance;
 const ampliar = `node scripts/task.mjs scope <ruta> --why "<por qué entra en la tarea>"`;
+const destinos = targetPaths(input, config);
+if (todo && destinos.length && destinos.every((n) => n === todo)) allow();
 if (!tarea.alcance?.length) {
   deny(
     `SIN ALCANCE DECLARADO: la tarea ${tarea.item} está abierta y todavía no dice qué archivos toca.\n` +
@@ -51,7 +70,7 @@ if (!tarea.alcance?.length) {
 // Una escritura MCP sobre todo el proyecto o un directorio no se puede cruzar archivo por archivo:
 // la verificación de la tarea cruza el diff entero después.
 if (escrituraAmplia(input, config)) allow();
-const afuera = targetPaths(input, config).filter((n) => !n.startsWith("..") && !dentroDelAlcance(n, tarea.alcance));
+const afuera = targetPaths(input, config).filter((n) => !n.startsWith("..") && !dentroDelAlcance(n, alcance));
 if (afuera.length) {
   deny(
     `FUERA DEL ALCANCE: \`${afuera[0]}\` no está en lo declarado para la tarea ${tarea.item} (${tarea.alcance.map((a) => a.ruta).join(", ")}).\n` +

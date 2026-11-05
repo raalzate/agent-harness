@@ -550,3 +550,31 @@ export function tareaActiva(config) {
     return null;
   }
 }
+
+/**
+ * Where the task's own to-do list lives (`task.todoFile`, `{item}` replaced), or null when the
+ * config declares none. The item is slugged because it is whatever the tracker calls it (`#12`,
+ * `PROJ-7`, `no-issue`) and a path cannot carry `#` or spaces safely on every OS.
+ *
+ * Shared by the hook (the list is always inside the scope: planning is part of the task) and by
+ * `scripts/task.mjs` (the list must exist and be closed to call the task done). Two copies of
+ * this path would let the hook allow a file the verification then looks for somewhere else.
+ */
+export function rutaDeTodo(config, item) {
+  const plantilla = config?.task?.todoFile;
+  if (!plantilla || !item) return null;
+  const slug = String(item).toLowerCase().replace(/[^a-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "") || "task";
+  return String(plantilla).split("{item}").join(slug).split("\\").join("/");
+}
+
+/**
+ * The test files the active task froze (`task.mjs lock`), as a set of repo-relative paths. A
+ * locked test is the definition of done the code has to meet: editing it to go green turns the
+ * test into a mirror of the code. Empty set when there is no lock or it has the wrong shape
+ * (broken state lets the human through, P5).
+ */
+export function pruebasBloqueadas(tarea) {
+  const archivos = tarea?.lock?.files;
+  if (!archivos || typeof archivos !== "object" || Array.isArray(archivos)) return new Set();
+  return new Set(Object.keys(archivos));
+}
