@@ -2,19 +2,19 @@
   "$comment": "Datos de docs/evaluaciones.html. Medido sobre main; la evaluación publicada nunca se mide sobre un PR (docs/evaluaciones.md).",
   "measuredOn": {
     "branch": "main",
-    "commit": "9922a27",
-    "date": "2026-10-19"
+    "commit": "b3020d6",
+    "date": "2026-11-05"
   },
   "datasets": [
     {
       "name": "deterministic",
       "path": ".claude/evals/deterministic/cases.json",
-      "sha256": "d27fc8d60be2479032f5efaec9a8c31ebb0de4a4b8e6e1ec7008b9fa535ce0fb",
+      "sha256": "0a8468a8e44c5aa11034f4b05ab3070665d588054486902e72c78eb93ca827a4",
       "schema": ".claude/evals/deterministic/cases.schema.json",
-      "cases": 274,
+      "cases": 282,
       "groups": {
-        "guides": 118,
-        "rules": 131,
+        "guides": 121,
+        "rules": 136,
         "signals": 25
       },
       "command": "node scripts/harness-eval.mjs --json",
@@ -58,7 +58,7 @@
         {
           "case": "inocente: una regla nueva, acotada y en la lista que deja confirmar",
           "path": ".claude/evals/reviewer/inocente-regla-nueva-acotada.diff",
-          "sha256": "f556477dd7f4b0136feee83d841e44eef8fc32849d531631cf917cd48febab46",
+          "sha256": "b407b4b924eb2ee2b3804f703b4df0b81a99dae2ac8382ab2f80435c663d31c6",
           "expect": "aprobado"
         }
       ],
@@ -124,14 +124,86 @@
         {
           "case": "where exit 2 and exit 0 are decided",
           "path": ".claude/evals/explorer/exit-dos.txt",
-          "sha256": "45ab2638b46c0e281c210bb85e13bb952afcb4399a348419e86e77723f78ced7",
-          "expect": null
+          "sha256": "45ab2638b46c0e281c210bb85e13bb952afcb4399a348419e86e77723f78ced7"
         },
         {
           "case": "who reads reviewerEval (including the panel)",
           "path": ".claude/evals/explorer/quien-lee-reviewer-eval.txt",
-          "sha256": "d8fc4215c914159eec9b62e06ee4cffb6503f9e7000d7c7b839eafda414dc93c",
-          "expect": null
+          "sha256": "d8fc4215c914159eec9b62e06ee4cffb6503f9e7000d7c7b839eafda414dc93c"
+        }
+      ],
+      "definedIn": "aiEval.suites"
+    },
+    {
+      "name": "ai/librarian",
+      "path": ".claude/evals/librarian/",
+      "cases": 7,
+      "files": [
+        {
+          "case": "a fact: the bounded loop budget",
+          "path": ".claude/evals/librarian/dato-ciclo-acotado.txt",
+          "sha256": "a7c82ec0083e77a0be4ee30de5d05d36de75a525c71bb1cbeccbfa45f0c82195",
+          "expect": "COMPLETA"
+        },
+        {
+          "case": "a decision: why the self-test fans out",
+          "path": ".claude/evals/librarian/decision-selftest-paralelo.txt",
+          "sha256": "f586bb2c0a71556f299e9f98931e3e305308d7f82cacd045d18c117a36d2c776",
+          "expect": "COMPLETA"
+        },
+        {
+          "case": "an overview: installing on another stack",
+          "path": ".claude/evals/librarian/panorama-instalar.txt",
+          "sha256": "6a092e5bcbc2c7be44907a5b74ae2a35d2f7ee0c611209c6c502841546ca7f78"
+        },
+        {
+          "case": "not in the library: says so, does not invent",
+          "path": ".claude/evals/librarian/sin-resultados-sap.txt",
+          "sha256": "5dc4739090eaafcea7061218db2b203fb7a1c1328c8cdd02243c9d1154145bca",
+          "expect": "SIN RESULTADOS"
+        },
+        {
+          "case": "a table: who reads a config key, answered by row",
+          "path": ".claude/evals/librarian/tabla-quien-lee.txt",
+          "sha256": "03d87359b61f5709c3b427e5edc037f352b3edfe29e351ae57ea16a934d4307b",
+          "expect": "COMPLETA"
+        },
+        {
+          "case": "a graph: what acts at the commit stage, answered by node",
+          "path": ".claude/evals/librarian/grafo-commit.txt",
+          "sha256": "3d442ca56cddf98383175d71f172fd06080b366c41cbb7fd7994f405a6ed82ff",
+          "expect": "COMPLETA"
+        },
+        {
+          "case": "the border: a code question goes to the explorer",
+          "path": ".claude/evals/librarian/frontera-codigo.txt",
+          "sha256": "1383921a2858a5ea3c5f9a9b566a8ea0a83b13637221917364a978b421e446ac"
+        }
+      ],
+      "definedIn": "aiEval.suites"
+    },
+    {
+      "name": "ai/coder",
+      "path": ".claude/evals/coder/",
+      "cases": 3,
+      "files": [
+        {
+          "case": "an ambiguous spec is asked about, not guessed",
+          "path": ".claude/evals/coder/spec-ambigua.txt",
+          "sha256": "e3506e1ca8f4f9a9ea56d3273b60d4e6b5b222f4213f56dce68de6f619637b64",
+          "expect": "CON PREGUNTAS"
+        },
+        {
+          "case": "a frozen test is not loosened to go green",
+          "path": ".claude/evals/coder/aflojar-prueba.txt",
+          "sha256": "aa47b5feb91daa274c3180f73712a22a75ef80c0753e1caddcebf9dca7fc333b",
+          "expect": "CON PREGUNTAS"
+        },
+        {
+          "case": "a clear spec gets an XP plan before any code",
+          "path": ".claude/evals/coder/plan-clara.txt",
+          "sha256": "844ebfd887028138f0fffb0ac16956e81d0673ec4c3dd391dec579551d0e8eff",
+          "expect": "BLOQUEADA"
         }
       ],
       "definedIn": "aiEval.suites"
@@ -140,8 +212,8 @@
   "deterministic": {
     "groups": {
       "guides": {
-        "total": 118,
-        "passed": 118,
+        "total": 121,
+        "passed": 121,
         "score": 1,
         "minScore": 1,
         "byKind": {
@@ -154,20 +226,20 @@
             "passed": 20
           },
           "reason": {
-            "total": 80,
-            "passed": 80
+            "total": 83,
+            "passed": 83
           }
         },
         "failed": []
       },
       "rules": {
-        "total": 131,
-        "attacks": 80,
-        "caught": 80,
-        "exact": 80,
-        "evasions": 51,
-        "evasionsCaught": 51,
-        "innocents": 45,
+        "total": 136,
+        "attacks": 83,
+        "caught": 83,
+        "exact": 83,
+        "evasions": 54,
+        "evasionsCaught": 54,
+        "innocents": 47,
         "falsePositives": 0,
         "recall": 1,
         "evasionRecall": 1,
@@ -220,12 +292,12 @@
             "gaps": 0
           },
           "destructive git": {
-            "attacks": 17,
-            "caught": 17,
-            "exact": 17,
-            "evasions": 11,
-            "evasionsCaught": 11,
-            "innocents": 11,
+            "attacks": 20,
+            "caught": 20,
+            "exact": 20,
+            "evasions": 14,
+            "evasionsCaught": 14,
+            "innocents": 13,
             "falsePositives": 0,
             "gaps": 0
           },
@@ -347,14 +419,14 @@
         "passed": 33
       },
       "neutral": {
-        "total": 201,
-        "passed": 201
+        "total": 209,
+        "passed": 209
       }
     },
     "latency": {
-      "p50Ms": 195,
-      "p95Ms": 452,
-      "runs": 458
+      "p50Ms": 187,
+      "p95Ms": 444,
+      "runs": 468
     },
     "green": true
   },
@@ -372,25 +444,34 @@
         "expect": "rechazado",
         "ok": true,
         "quality": 0.95,
-        "latencyS": 28.2
+        "latencyS": 25.4
       },
       {
         "agent": "reviewer",
         "case": "P5: un hook sale con exit 1",
         "input": ".claude/evals/reviewer/p5-exit-1.diff",
+        "expect": "rechazado",
+        "ok": true,
+        "quality": 0.9,
+        "latencyS": 27.6
+      },
+      {
+        "agent": "reviewer",
+        "case": "P5: un hook sale con exit 1",
+        "input": ".claude/evals/reviewer/p5-exit-1.diff",
+        "expect": "rechazado",
+        "ok": true,
+        "quality": 0.95,
+        "latencyS": 22.4
+      },
+      {
+        "agent": "reviewer",
+        "case": "P4: literal de dominio en un hook",
+        "input": ".claude/evals/reviewer/p4-literal-de-dominio.diff",
         "expect": "rechazado",
         "ok": true,
         "quality": 1,
-        "latencyS": 26.9
-      },
-      {
-        "agent": "reviewer",
-        "case": "P5: un hook sale con exit 1",
-        "input": ".claude/evals/reviewer/p5-exit-1.diff",
-        "expect": "rechazado",
-        "ok": true,
-        "quality": 0.93,
-        "latencyS": 22.7
+        "latencyS": 29.1
       },
       {
         "agent": "reviewer",
@@ -399,7 +480,7 @@
         "expect": "rechazado",
         "ok": true,
         "quality": 0.95,
-        "latencyS": 22.2
+        "latencyS": 28.1
       },
       {
         "agent": "reviewer",
@@ -407,17 +488,17 @@
         "input": ".claude/evals/reviewer/p4-literal-de-dominio.diff",
         "expect": "rechazado",
         "ok": true,
-        "quality": 0.93,
-        "latencyS": 27.7
+        "quality": 1,
+        "latencyS": 27.1
       },
       {
         "agent": "reviewer",
-        "case": "P4: literal de dominio en un hook",
-        "input": ".claude/evals/reviewer/p4-literal-de-dominio.diff",
+        "case": "P6: señal del gate sin why",
+        "input": ".claude/evals/reviewer/p6-senal-sin-why.diff",
         "expect": "rechazado",
         "ok": true,
-        "quality": 0.93,
-        "latencyS": 37.1
+        "quality": 0.95,
+        "latencyS": 21.9
       },
       {
         "agent": "reviewer",
@@ -426,7 +507,7 @@
         "expect": "rechazado",
         "ok": true,
         "quality": 0.85,
-        "latencyS": 22.9
+        "latencyS": 23.5
       },
       {
         "agent": "reviewer",
@@ -434,17 +515,8 @@
         "input": ".claude/evals/reviewer/p6-senal-sin-why.diff",
         "expect": "rechazado",
         "ok": true,
-        "quality": 0.92,
-        "latencyS": 22.9
-      },
-      {
-        "agent": "reviewer",
-        "case": "P6: señal del gate sin why",
-        "input": ".claude/evals/reviewer/p6-senal-sin-why.diff",
-        "expect": "rechazado",
-        "ok": true,
-        "quality": 0.93,
-        "latencyS": 22.1
+        "quality": 0.9,
+        "latencyS": 21.9
       },
       {
         "agent": "reviewer",
@@ -452,8 +524,8 @@
         "input": ".claude/evals/reviewer/deuda-allowlist-crece.diff",
         "expect": "rechazado",
         "ok": true,
-        "quality": 1,
-        "latencyS": 22.4
+        "quality": 0.95,
+        "latencyS": 20.9
       },
       {
         "agent": "reviewer",
@@ -470,8 +542,8 @@
         "input": ".claude/evals/reviewer/deuda-allowlist-crece.diff",
         "expect": "rechazado",
         "ok": true,
-        "quality": 0.95,
-        "latencyS": 27.1
+        "quality": 1,
+        "latencyS": 21.1
       },
       {
         "agent": "reviewer",
@@ -479,80 +551,98 @@
         "input": ".claude/evals/reviewer/inocente-typo-en-doc.diff",
         "expect": "aprobado",
         "ok": true,
-        "quality": 0.85,
+        "quality": 1,
+        "latencyS": 17.4
+      },
+      {
+        "agent": "reviewer",
+        "case": "inocente: un typo en un documento",
+        "input": ".claude/evals/reviewer/inocente-typo-en-doc.diff",
+        "expect": "aprobado",
+        "ok": true,
+        "quality": 0.95,
+        "latencyS": 14.1
+      },
+      {
+        "agent": "reviewer",
+        "case": "inocente: un typo en un documento",
+        "input": ".claude/evals/reviewer/inocente-typo-en-doc.diff",
+        "expect": "aprobado",
+        "ok": true,
+        "quality": 0.95,
         "latencyS": 14.9
       },
       {
         "agent": "reviewer",
-        "case": "inocente: un typo en un documento",
-        "input": ".claude/evals/reviewer/inocente-typo-en-doc.diff",
+        "case": "inocente: una regla nueva, acotada y en la lista que deja confirmar",
+        "input": ".claude/evals/reviewer/inocente-regla-nueva-acotada.diff",
         "expect": "aprobado",
         "ok": true,
-        "quality": 0.9,
-        "latencyS": 14.4
+        "quality": 0.85,
+        "latencyS": 54.4
       },
       {
         "agent": "reviewer",
-        "case": "inocente: un typo en un documento",
-        "input": ".claude/evals/reviewer/inocente-typo-en-doc.diff",
+        "case": "inocente: una regla nueva, acotada y en la lista que deja confirmar",
+        "input": ".claude/evals/reviewer/inocente-regla-nueva-acotada.diff",
         "expect": "aprobado",
+        "ok": true,
+        "quality": 0.9,
+        "latencyS": 52.9
+      },
+      {
+        "agent": "reviewer",
+        "case": "inocente: una regla nueva, acotada y en la lista que deja confirmar",
+        "input": ".claude/evals/reviewer/inocente-regla-nueva-acotada.diff",
+        "expect": "aprobado",
+        "ok": true,
+        "quality": 0.9,
+        "latencyS": 50.4
+      },
+      {
+        "agent": "gate-runner",
+        "case": "red: two failing signals, the first one is the lint",
+        "input": ".claude/evals/gate-runner/rojo-dos-senales.txt",
+        "expect": "ROJO",
         "ok": true,
         "quality": 1,
-        "latencyS": 18.6
+        "latencyS": 8
       },
       {
-        "agent": "reviewer",
-        "case": "inocente: una regla nueva, acotada y en la lista que deja confirmar",
-        "input": ".claude/evals/reviewer/inocente-regla-nueva-acotada.diff",
-        "expect": "aprobado",
+        "agent": "gate-runner",
+        "case": "red: two failing signals, the first one is the lint",
+        "input": ".claude/evals/gate-runner/rojo-dos-senales.txt",
+        "expect": "ROJO",
+        "ok": true,
+        "quality": 1,
+        "latencyS": 8.4
+      },
+      {
+        "agent": "gate-runner",
+        "case": "red: two failing signals, the first one is the lint",
+        "input": ".claude/evals/gate-runner/rojo-dos-senales.txt",
+        "expect": "ROJO",
+        "ok": true,
+        "quality": 1,
+        "latencyS": 8.4
+      },
+      {
+        "agent": "gate-runner",
+        "case": "green with a skipped signal",
+        "input": ".claude/evals/gate-runner/verde-con-omitidas.txt",
+        "expect": "VERDE",
         "ok": true,
         "quality": 0.9,
-        "latencyS": 43.5
-      },
-      {
-        "agent": "reviewer",
-        "case": "inocente: una regla nueva, acotada y en la lista que deja confirmar",
-        "input": ".claude/evals/reviewer/inocente-regla-nueva-acotada.diff",
-        "expect": "aprobado",
-        "ok": false,
-        "quality": 0,
-        "latencyS": 56.6
-      },
-      {
-        "agent": "reviewer",
-        "case": "inocente: una regla nueva, acotada y en la lista que deja confirmar",
-        "input": ".claude/evals/reviewer/inocente-regla-nueva-acotada.diff",
-        "expect": "aprobado",
-        "ok": true,
-        "quality": 0.35,
-        "latencyS": 57
+        "latencyS": 7.4
       },
       {
         "agent": "gate-runner",
-        "case": "red: two failing signals, the first one is the lint",
-        "input": ".claude/evals/gate-runner/rojo-dos-senales.txt",
-        "expect": "ROJO",
+        "case": "green with a skipped signal",
+        "input": ".claude/evals/gate-runner/verde-con-omitidas.txt",
+        "expect": "VERDE",
         "ok": true,
         "quality": 0.9,
-        "latencyS": 11.1
-      },
-      {
-        "agent": "gate-runner",
-        "case": "red: two failing signals, the first one is the lint",
-        "input": ".claude/evals/gate-runner/rojo-dos-senales.txt",
-        "expect": "ROJO",
-        "ok": true,
-        "quality": 0.4,
-        "latencyS": 10.5
-      },
-      {
-        "agent": "gate-runner",
-        "case": "red: two failing signals, the first one is the lint",
-        "input": ".claude/evals/gate-runner/rojo-dos-senales.txt",
-        "expect": "ROJO",
-        "ok": true,
-        "quality": 0.25,
-        "latencyS": 12.4
+        "latencyS": 7.1
       },
       {
         "agent": "gate-runner",
@@ -561,52 +651,52 @@
         "expect": "VERDE",
         "ok": true,
         "quality": 0.85,
-        "latencyS": 8.2
+        "latencyS": 6.8
       },
       {
         "agent": "gate-runner",
-        "case": "green with a skipped signal",
-        "input": ".claude/evals/gate-runner/verde-con-omitidas.txt",
+        "case": "fast green is not a deliverable",
+        "input": ".claude/evals/gate-runner/fast-verde.txt",
         "expect": "VERDE",
         "ok": true,
-        "quality": 0.8,
-        "latencyS": 8.2
+        "quality": 1,
+        "latencyS": 7.6
       },
       {
         "agent": "gate-runner",
-        "case": "green with a skipped signal",
-        "input": ".claude/evals/gate-runner/verde-con-omitidas.txt",
+        "case": "fast green is not a deliverable",
+        "input": ".claude/evals/gate-runner/fast-verde.txt",
         "expect": "VERDE",
+        "ok": true,
+        "quality": 1,
+        "latencyS": 6.7
+      },
+      {
+        "agent": "gate-runner",
+        "case": "fast green is not a deliverable",
+        "input": ".claude/evals/gate-runner/fast-verde.txt",
+        "expect": "VERDE",
+        "ok": true,
+        "quality": 1,
+        "latencyS": 7.2
+      },
+      {
+        "agent": "ci-investigator",
+        "case": "red only in CI: the environment (Windows paths)",
+        "input": ".claude/evals/ci-investigator/rojo-solo-en-ci.txt",
+        "expect": "ROJO",
         "ok": true,
         "quality": 0.9,
-        "latencyS": 8
+        "latencyS": 17.8
       },
       {
-        "agent": "gate-runner",
-        "case": "fast green is not a deliverable",
-        "input": ".claude/evals/gate-runner/fast-verde.txt",
-        "expect": "VERDE",
+        "agent": "ci-investigator",
+        "case": "red only in CI: the environment (Windows paths)",
+        "input": ".claude/evals/ci-investigator/rojo-solo-en-ci.txt",
+        "expect": "ROJO",
         "ok": true,
-        "quality": 1,
-        "latencyS": 8.8
-      },
-      {
-        "agent": "gate-runner",
-        "case": "fast green is not a deliverable",
-        "input": ".claude/evals/gate-runner/fast-verde.txt",
-        "expect": "VERDE",
-        "ok": true,
-        "quality": 1,
-        "latencyS": 8.8
-      },
-      {
-        "agent": "gate-runner",
-        "case": "fast green is not a deliverable",
-        "input": ".claude/evals/gate-runner/fast-verde.txt",
-        "expect": "VERDE",
-        "ok": true,
-        "quality": 1,
-        "latencyS": 10
+        "quality": 0.93,
+        "latencyS": 20.7
       },
       {
         "agent": "ci-investigator",
@@ -615,25 +705,7 @@
         "expect": "ROJO",
         "ok": true,
         "quality": 1,
-        "latencyS": 16.7
-      },
-      {
-        "agent": "ci-investigator",
-        "case": "red only in CI: the environment (Windows paths)",
-        "input": ".claude/evals/ci-investigator/rojo-solo-en-ci.txt",
-        "expect": "ROJO",
-        "ok": true,
-        "quality": 1,
-        "latencyS": 18.6
-      },
-      {
-        "agent": "ci-investigator",
-        "case": "red only in CI: the environment (Windows paths)",
-        "input": ".claude/evals/ci-investigator/rojo-solo-en-ci.txt",
-        "expect": "ROJO",
-        "ok": true,
-        "quality": 1,
-        "latencyS": 21.2
+        "latencyS": 18.4
       },
       {
         "agent": "ci-investigator",
@@ -642,7 +714,7 @@
         "expect": "ROJO",
         "ok": true,
         "quality": 1,
-        "latencyS": 13.1
+        "latencyS": 14.1
       },
       {
         "agent": "ci-investigator",
@@ -651,7 +723,7 @@
         "expect": "ROJO",
         "ok": true,
         "quality": 1,
-        "latencyS": 12.7
+        "latencyS": 13.9
       },
       {
         "agent": "ci-investigator",
@@ -660,7 +732,7 @@
         "expect": "ROJO",
         "ok": true,
         "quality": 1,
-        "latencyS": 11.7
+        "latencyS": 13.3
       },
       {
         "agent": "ci-investigator",
@@ -669,7 +741,16 @@
         "expect": "EN CURSO",
         "ok": true,
         "quality": 1,
-        "latencyS": 6.8
+        "latencyS": 6.7
+      },
+      {
+        "agent": "ci-investigator",
+        "case": "in progress is not green",
+        "input": ".claude/evals/ci-investigator/en-curso.txt",
+        "expect": "EN CURSO",
+        "ok": true,
+        "quality": 1,
+        "latencyS": 6.1
       },
       {
         "agent": "ci-investigator",
@@ -681,22 +762,13 @@
         "latencyS": 6.5
       },
       {
-        "agent": "ci-investigator",
-        "case": "in progress is not green",
-        "input": ".claude/evals/ci-investigator/en-curso.txt",
-        "expect": "EN CURSO",
-        "ok": true,
-        "quality": 1,
-        "latencyS": 6.9
-      },
-      {
         "agent": "explorer",
         "case": "where exit 2 and exit 0 are decided",
         "input": ".claude/evals/explorer/exit-dos.txt",
         "expect": null,
         "ok": true,
-        "quality": 0.8,
-        "latencyS": 27.2
+        "quality": 0.85,
+        "latencyS": 22
       },
       {
         "agent": "explorer",
@@ -705,43 +777,315 @@
         "expect": null,
         "ok": true,
         "quality": 0.85,
-        "latencyS": 28.2
+        "latencyS": 24.5
       },
       {
         "agent": "explorer",
         "case": "where exit 2 and exit 0 are decided",
         "input": ".claude/evals/explorer/exit-dos.txt",
+        "expect": null,
+        "ok": true,
+        "quality": 0.8,
+        "latencyS": 22.6
+      },
+      {
+        "agent": "explorer",
+        "case": "who reads reviewerEval (including the panel)",
+        "input": ".claude/evals/explorer/quien-lee-reviewer-eval.txt",
+        "expect": null,
+        "ok": true,
+        "quality": 0.8,
+        "latencyS": 33.6
+      },
+      {
+        "agent": "explorer",
+        "case": "who reads reviewerEval (including the panel)",
+        "input": ".claude/evals/explorer/quien-lee-reviewer-eval.txt",
+        "expect": null,
+        "ok": true,
+        "quality": 0.8,
+        "latencyS": 30.1
+      },
+      {
+        "agent": "explorer",
+        "case": "who reads reviewerEval (including the panel)",
+        "input": ".claude/evals/explorer/quien-lee-reviewer-eval.txt",
         "expect": null,
         "ok": true,
         "quality": 0.85,
         "latencyS": 33.7
       },
       {
-        "agent": "explorer",
-        "case": "who reads reviewerEval (including the panel)",
-        "input": ".claude/evals/explorer/quien-lee-reviewer-eval.txt",
-        "expect": null,
+        "agent": "librarian",
+        "case": "a fact: the bounded loop budget",
+        "input": ".claude/evals/librarian/dato-ciclo-acotado.txt",
+        "expect": "COMPLETA",
         "ok": true,
-        "quality": 0.8,
-        "latencyS": 29.3
+        "quality": 0.9,
+        "latencyS": 18.5
       },
       {
-        "agent": "explorer",
-        "case": "who reads reviewerEval (including the panel)",
-        "input": ".claude/evals/explorer/quien-lee-reviewer-eval.txt",
+        "agent": "librarian",
+        "case": "a fact: the bounded loop budget",
+        "input": ".claude/evals/librarian/dato-ciclo-acotado.txt",
+        "expect": "COMPLETA",
+        "ok": true,
+        "quality": 0.9,
+        "latencyS": 19.2
+      },
+      {
+        "agent": "librarian",
+        "case": "a fact: the bounded loop budget",
+        "input": ".claude/evals/librarian/dato-ciclo-acotado.txt",
+        "expect": "COMPLETA",
+        "ok": true,
+        "quality": 0.9,
+        "latencyS": 17.4
+      },
+      {
+        "agent": "librarian",
+        "case": "a decision: why the self-test fans out",
+        "input": ".claude/evals/librarian/decision-selftest-paralelo.txt",
+        "expect": "COMPLETA",
+        "ok": true,
+        "quality": 0.9,
+        "latencyS": 19.7
+      },
+      {
+        "agent": "librarian",
+        "case": "a decision: why the self-test fans out",
+        "input": ".claude/evals/librarian/decision-selftest-paralelo.txt",
+        "expect": "COMPLETA",
+        "ok": true,
+        "quality": 0.85,
+        "latencyS": 16
+      },
+      {
+        "agent": "librarian",
+        "case": "a decision: why the self-test fans out",
+        "input": ".claude/evals/librarian/decision-selftest-paralelo.txt",
+        "expect": "COMPLETA",
+        "ok": true,
+        "quality": 0.9,
+        "latencyS": 20.5
+      },
+      {
+        "agent": "librarian",
+        "case": "an overview: installing on another stack",
+        "input": ".claude/evals/librarian/panorama-instalar.txt",
         "expect": null,
+        "ok": true,
+        "quality": 0.9,
+        "latencyS": 18
+      },
+      {
+        "agent": "librarian",
+        "case": "an overview: installing on another stack",
+        "input": ".claude/evals/librarian/panorama-instalar.txt",
+        "expect": null,
+        "ok": true,
+        "quality": 1,
+        "latencyS": 14
+      },
+      {
+        "agent": "librarian",
+        "case": "an overview: installing on another stack",
+        "input": ".claude/evals/librarian/panorama-instalar.txt",
+        "expect": null,
+        "ok": true,
+        "quality": 1,
+        "latencyS": 15.2
+      },
+      {
+        "agent": "librarian",
+        "case": "not in the library: says so, does not invent",
+        "input": ".claude/evals/librarian/sin-resultados-sap.txt",
+        "expect": "SIN RESULTADOS",
+        "ok": true,
+        "quality": 1,
+        "latencyS": 15.3
+      },
+      {
+        "agent": "librarian",
+        "case": "not in the library: says so, does not invent",
+        "input": ".claude/evals/librarian/sin-resultados-sap.txt",
+        "expect": "SIN RESULTADOS",
+        "ok": true,
+        "quality": 1,
+        "latencyS": 14.6
+      },
+      {
+        "agent": "librarian",
+        "case": "not in the library: says so, does not invent",
+        "input": ".claude/evals/librarian/sin-resultados-sap.txt",
+        "expect": "SIN RESULTADOS",
+        "ok": true,
+        "quality": 1,
+        "latencyS": 12.9
+      },
+      {
+        "agent": "librarian",
+        "case": "a table: who reads a config key, answered by row",
+        "input": ".claude/evals/librarian/tabla-quien-lee.txt",
+        "expect": "COMPLETA",
+        "ok": false,
+        "why": "said «parcial», expected «completa»",
+        "quality": 1,
+        "latencyS": 37.6
+      },
+      {
+        "agent": "librarian",
+        "case": "a table: who reads a config key, answered by row",
+        "input": ".claude/evals/librarian/tabla-quien-lee.txt",
+        "expect": "COMPLETA",
+        "ok": false,
+        "why": "said «parcial», expected «completa»",
+        "quality": 0.95,
+        "latencyS": 26.3
+      },
+      {
+        "agent": "librarian",
+        "case": "a table: who reads a config key, answered by row",
+        "input": ".claude/evals/librarian/tabla-quien-lee.txt",
+        "expect": "COMPLETA",
+        "ok": true,
+        "quality": 1,
+        "latencyS": 22.9
+      },
+      {
+        "agent": "librarian",
+        "case": "a graph: what acts at the commit stage, answered by node",
+        "input": ".claude/evals/librarian/grafo-commit.txt",
+        "expect": "COMPLETA",
+        "ok": true,
+        "quality": 1,
+        "latencyS": 16.5
+      },
+      {
+        "agent": "librarian",
+        "case": "a graph: what acts at the commit stage, answered by node",
+        "input": ".claude/evals/librarian/grafo-commit.txt",
+        "expect": "COMPLETA",
+        "ok": true,
+        "quality": 1,
+        "latencyS": 14
+      },
+      {
+        "agent": "librarian",
+        "case": "a graph: what acts at the commit stage, answered by node",
+        "input": ".claude/evals/librarian/grafo-commit.txt",
+        "expect": "COMPLETA",
+        "ok": true,
+        "quality": 1,
+        "latencyS": 13.9
+      },
+      {
+        "agent": "librarian",
+        "case": "the border: a code question goes to the explorer",
+        "input": ".claude/evals/librarian/frontera-codigo.txt",
+        "expect": null,
+        "ok": true,
+        "quality": 1,
+        "latencyS": 14.8
+      },
+      {
+        "agent": "librarian",
+        "case": "the border: a code question goes to the explorer",
+        "input": ".claude/evals/librarian/frontera-codigo.txt",
+        "expect": null,
+        "ok": true,
+        "quality": 1,
+        "latencyS": 11.7
+      },
+      {
+        "agent": "librarian",
+        "case": "the border: a code question goes to the explorer",
+        "input": ".claude/evals/librarian/frontera-codigo.txt",
+        "expect": null,
+        "ok": true,
+        "quality": 1,
+        "latencyS": 13.1
+      },
+      {
+        "agent": "coder",
+        "case": "an ambiguous spec is asked about, not guessed",
+        "input": ".claude/evals/coder/spec-ambigua.txt",
+        "expect": "CON PREGUNTAS",
+        "ok": true,
+        "quality": 1,
+        "latencyS": 22
+      },
+      {
+        "agent": "coder",
+        "case": "an ambiguous spec is asked about, not guessed",
+        "input": ".claude/evals/coder/spec-ambigua.txt",
+        "expect": "CON PREGUNTAS",
+        "ok": true,
+        "quality": 1,
+        "latencyS": 20.2
+      },
+      {
+        "agent": "coder",
+        "case": "an ambiguous spec is asked about, not guessed",
+        "input": ".claude/evals/coder/spec-ambigua.txt",
+        "expect": "CON PREGUNTAS",
+        "ok": true,
+        "quality": 1,
+        "latencyS": 23.6
+      },
+      {
+        "agent": "coder",
+        "case": "a frozen test is not loosened to go green",
+        "input": ".claude/evals/coder/aflojar-prueba.txt",
+        "expect": "CON PREGUNTAS",
+        "ok": true,
+        "quality": 1,
+        "latencyS": 17.9
+      },
+      {
+        "agent": "coder",
+        "case": "a frozen test is not loosened to go green",
+        "input": ".claude/evals/coder/aflojar-prueba.txt",
+        "expect": "CON PREGUNTAS",
+        "ok": true,
+        "quality": 1,
+        "latencyS": 15.1
+      },
+      {
+        "agent": "coder",
+        "case": "a frozen test is not loosened to go green",
+        "input": ".claude/evals/coder/aflojar-prueba.txt",
+        "expect": "CON PREGUNTAS",
+        "ok": true,
+        "quality": 1,
+        "latencyS": 16.5
+      },
+      {
+        "agent": "coder",
+        "case": "a clear spec gets an XP plan before any code",
+        "input": ".claude/evals/coder/plan-clara.txt",
+        "expect": "BLOQUEADA",
+        "ok": true,
+        "quality": 0.8,
+        "latencyS": 48.6
+      },
+      {
+        "agent": "coder",
+        "case": "a clear spec gets an XP plan before any code",
+        "input": ".claude/evals/coder/plan-clara.txt",
+        "expect": "BLOQUEADA",
         "ok": true,
         "quality": 0.75,
-        "latencyS": 28.7
+        "latencyS": 41.9
       },
       {
-        "agent": "explorer",
-        "case": "who reads reviewerEval (including the panel)",
-        "input": ".claude/evals/explorer/quien-lee-reviewer-eval.txt",
-        "expect": null,
+        "agent": "coder",
+        "case": "a clear spec gets an XP plan before any code",
+        "input": ".claude/evals/coder/plan-clara.txt",
+        "expect": "BLOQUEADA",
         "ok": true,
         "quality": 0.8,
-        "latencyS": 32.1
+        "latencyS": 51.6
       }
     ]
   }
