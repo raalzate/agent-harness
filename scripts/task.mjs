@@ -16,6 +16,12 @@
  *   node scripts/task.mjs verify                          la señal del gate (exit 1 = no terminado)
  *   node scripts/task.mjs done                            cierra la tarea, sólo en verde
  *   node scripts/task.mjs abandon --why "…"               la descarta, con motivo
+ *   node scripts/task.mjs lock                            freeze the test files (immutable tests)
+ *   node scripts/task.mjs unlock <ruta>… --why "…"        release a frozen test, with a reason
+ *
+ * `lock` / `unlock` and `task.todoFile` (the task's own to-do list, `tasks.md`) are the coder
+ * agent's discipline made mechanism: the tests are written and committed red, then frozen, and
+ * the code is what moves until they pass.
  *
  * Todo lo específico sale de `task` en el config. El archivo vive en `.git/` (P7): es estado de
  * ESTA sesión de trabajo, no del repo. Sin `task` en el config, el script no hace nada.
@@ -23,7 +29,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
-import { REPO_ROOT, CONFIG_PATH, resolverEjecutable, dentroDelAlcance, firstMatch, rutaDeEstado } from "../.claude/hooks/harness.mjs";
+import { createHash } from "node:crypto";
+import { REPO_ROOT, CONFIG_PATH, resolverEjecutable, dentroDelAlcance, firstMatch, rutaDeEstado, rutaDeTodo } from "../.claude/hooks/harness.mjs";
 
 let config;
 try {
@@ -122,6 +129,57 @@ function cambiados(tarea) {
 /** Un alcance que abarca todo el repo no es un alcance: es apagar el freno con un motivo. */
 const esTodoElRepo = (ruta) => /^(\.?\/?|\/|(\*+\/?)+(\*+\.?\*?)?)$/.test(String(ruta).split("\\").join("/").trim());
 
+/**
+ * What counts as a test file. `task.lockTests.pattern` when the repo wants a different answer for
+ * locking; otherwise the same one `xp.testFirst` uses, so «this commit brings its test» and
+ * «this test is frozen» never disagree about which file is the test. null = not declared.
+ */
+function patronDePrueba() {
+  // Last resort `tests.filePattern`, the stack profile's: without it a ported repo whose
+  // `testFirst` declares no pattern (the template's default now) had nothing to freeze.
+  const fuente = spec.lockTests?.pattern || config.xp?.testFirst?.testPattern || config.tests?.filePattern;
+  if (!fuente) return null;
+  try {
+    return new RegExp(fuente);
+  } catch {
+    fallar(`el patrón de pruebas no compila: \`${fuente}\` (\`task.lockTests.pattern\` o \`xp.testFirst.testPattern\`).`);
+  }
+}
+
+/** sha256 of a file's bytes, or null when it is gone (a deleted test is a changed test). */
+function huella(rel) {
+  try {
+    return createHash("sha256").update(fs.readFileSync(path.join(REPO_ROOT, rel))).digest("hex");
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The to-do list's verdict: null when fine, otherwise why the task is not done. The list is the
+ * agent's own plan; a task closed with open items is a plan nobody finished, and a task with no
+ * list at all is one that was never planned.
+ */
+function faltaDeTodo(tarea) {
+  const ruta = rutaDeTodo(config, tarea.item);
+  if (!ruta) return null;
+  let texto;
+  try {
+    texto = fs.readFileSync(path.join(REPO_ROOT, ruta), "utf8");
+  } catch {
+    return `no existe \`${ruta}\`: escribí la lista de tareas antes de codificar`;
+  }
+  let abierta;
+  try {
+    abierta = new RegExp(spec.todoOpenPattern || "^\\s*[-*]\\s+\\[ \\]\\s+(.+)$");
+  } catch {
+    return "`task.todoOpenPattern` no compila";
+  }
+  const pendientes = texto.split(/\r?\n/).filter((l) => abierta.test(l));
+  if (pendientes.length) return `\`${ruta}\` tiene ${pendientes.length} pendiente(s): ${pendientes.slice(0, 3).map((l) => l.trim()).join(" · ")}`;
+  return null;
+}
+
 /** Verifica la tarea. Devuelve la lista de faltas (vacía = terminada) e imprime el detalle. */
 function verificar(tarea) {
   const faltas = [];
@@ -133,11 +191,40 @@ function verificar(tarea) {
     console.log(`  ✗ alcance — no pude calcular qué cambió desde ${tarea.base ?? "el inicio"} (¿la base ya no existe?). Sin diff no hay verificación.`);
     faltas.push("no pude calcular el diff de la tarea");
   }
-  const afuera = (lista ?? []).filter((f) => !dentroDelAlcance(f, tarea.alcance));
+  const todo = rutaDeTodo(config, tarea.item);
+  const alcance = todo ? [...(tarea.alcance ?? []), { ruta: todo }] : tarea.alcance;
+  const afuera = (lista ?? []).filter((f) => !dentroDelAlcance(f, alcance));
   if (afuera.length) {
     console.log(`  ✗ alcance — cambió fuera de lo declarado:\n${afuera.map((f) => `      ${f}`).join("\n")}`);
     faltas.push(`${afuera.length} archivo(s) fuera del alcance`);
   } else if (lista && tarea.alcance?.length) console.log(`  ✓ alcance — todo lo cambiado cae en: ${tarea.alcance.map((a) => a.ruta).join(", ")}`);
+
+  const faltaTodo = faltaDeTodo(tarea);
+  if (faltaTodo) {
+    console.log(`  ✗ lista de tareas — ${faltaTodo}`);
+    faltas.push("lista de tareas sin cerrar");
+  } else if (todo) console.log(`  ✓ lista de tareas — \`${todo}\` sin pendientes`);
+
+  // A task that touched tests and never froze them leaves the window open: a test loosened BEFORE
+  // `lock` is invisible to the hash. With `lockTests` declared, touching tests makes the lock due.
+  if (spec.lockTests && !tarea.lock && lista) {
+    const re = patronDePrueba();
+    const tocadas = re ? lista.filter((f) => re.test(f)) : [];
+    if (tocadas.length) {
+      console.log(`  ✗ pruebas bloqueadas — la tarea tocó ${tocadas.length} prueba(s) y nunca las congeló (${tocadas.slice(0, 3).join(", ")}).`);
+      console.log(`      Commit de la prueba roja y después \`node scripts/task.mjs lock\`: sin eso, una prueba aflojada antes de congelarla no la ve nadie.`);
+      faltas.push("pruebas tocadas sin `lock`");
+    }
+  }
+
+  // Frozen tests: hashed again, so an edit through Bash (which the hook cannot see) is caught too.
+  const congeladas = Object.entries(tarea.lock?.files ?? {});
+  const movidas = congeladas.filter(([rel, sha]) => huella(rel) !== sha).map(([rel]) => rel);
+  if (movidas.length) {
+    console.log(`  ✗ pruebas bloqueadas — cambiaron desde \`lock\`:\n${movidas.map((f) => `      ${f}`).join("\n")}`);
+    console.log(`      Se cambia el código, no la prueba. Si la prueba estaba mal: \`unlock <ruta> --why "…"\` con el acuerdo del humano.`);
+    faltas.push(`${movidas.length} prueba(s) bloqueada(s) modificada(s)`);
+  } else if (congeladas.length) console.log(`  ✓ pruebas bloqueadas — ${congeladas.length} intacta(s)`);
 
   if (!tarea.criterios?.length) faltas.push("la tarea no tiene criterios de aceptación: sin criterios no hay definición de terminado");
   for (const [i, c] of (tarea.criterios ?? []).entries()) {
@@ -184,6 +271,8 @@ function registrar(tarea, verificada, motivo) {
     // amplió y por qué, no sólo cuántas veces.
     alcance: tarea.alcance ?? [],
     ampliaciones: Math.max(0, (tarea.alcance?.length ?? 0) - 1),
+    // Every test released from the lock, with its reason: the reviewer has to see each one.
+    ...(tarea.unlocks?.length ? { unlocks: tarea.unlocks } : {}),
     ...(motivo ? { motivo } : {}),
   };
   try {
@@ -269,6 +358,45 @@ switch (orden) {
     console.log(`tarea ${tarea.item} (desde ${tarea.inicio})`);
     console.log(`  alcance: ${tarea.alcance.length ? tarea.alcance.map((a) => `${a.ruta} («${a.motivo}»)`).join(", ") : "SIN DECLARAR — no se puede editar"}`);
     for (const [i, c] of tarea.criterios.entries()) console.log(`  ${c.evidencia ? "·" : "✗"} ${i + 1}. ${c.texto}${c.evidencia ? ` ← \`${comoTexto(c.evidencia)}\`` : " — sin evidencia"}`);
+    const todo = rutaDeTodo(config, tarea.item);
+    if (todo) console.log(`  lista de tareas: ${todo}${faltaDeTodo(tarea) ? ` — ${faltaDeTodo(tarea)}` : " — cerrada"}`);
+    const n = Object.keys(tarea.lock?.files ?? {}).length;
+    console.log(`  pruebas bloqueadas: ${n ? `${n} (desde ${tarea.lock.at})` : "ninguna — `lock` después del commit rojo"}`);
+    for (const u of tarea.unlocks ?? []) console.log(`  desbloqueada: ${u.ruta} («${u.motivo}»)`);
+    break;
+  }
+  case "lock": {
+    // Freeze every test file the repo has right now — the new red ones and the old ones: an
+    // existing test loosened to make room for the change is the same mirror as a new one.
+    // Adding NEW test files afterwards stays free: more tests never weaken the definition of done.
+    const tarea = exigirTarea();
+    const re = patronDePrueba();
+    if (!re) fallar("no hay patrón de pruebas: declarar `tests.filePattern` (lo trae el perfil del stack), `xp.testFirst.testPattern` o `task.lockTests.pattern`.");
+    const listado = git("ls-files", "--cached", "--others", "--exclude-standard");
+    if (listado === null) fallar("git no pudo listar los archivos: sin lista no hay bloqueo.");
+    const pruebas = listado.split("\n").map((l) => l.trim()).filter((l) => l && re.test(l) && huella(l));
+    if (!pruebas.length) fallar("no hay archivos de prueba que congelar: primero escribí la prueba que falla (rojo), después `lock`.");
+    tarea.lock = { at: new Date().toISOString(), files: Object.fromEntries(pruebas.map((p) => [p, huella(p)])) };
+    guardar(tarea);
+    console.log(`${pruebas.length} prueba(s) bloqueada(s). Desde acá se mueve el código, no la prueba.`);
+    break;
+  }
+  case "unlock": {
+    const tarea = exigirTarea();
+    const motivo = opcion("--why");
+    const rutas = resto.filter((a, i) => !a.startsWith("--") && resto[i - 1] !== "--why").map((r) => r.split("\\").join("/").replace(/^\.\//, ""));
+    if (!rutas.length) fallar("falta la ruta: `unlock <ruta> --why \"…\"`.");
+    // A release with no reason is the silent loosening the lock exists to stop.
+    if (!motivo?.trim()) fallar("desbloquear una prueba exige motivo: `--why \"<qué estaba mal en la prueba>\"`.");
+    const ajenas = rutas.filter((r) => !(r in (tarea.lock?.files ?? {})));
+    if (ajenas.length) fallar(`no está bloqueada: ${ajenas.join(", ")}.`);
+    tarea.unlocks = tarea.unlocks ?? [];
+    for (const r of rutas) {
+      delete tarea.lock.files[r];
+      tarea.unlocks.push({ ruta: r, motivo, fecha: new Date().toISOString() });
+    }
+    guardar(tarea);
+    console.log(`desbloqueada(s): ${rutas.join(", ")} — queda en el registro de la tarea con el motivo.`);
     break;
   }
   case "verify": {
@@ -303,6 +431,6 @@ switch (orden) {
     break;
   }
   default:
-    console.log("uso: node scripts/task.mjs start|scope|criterion|evidence|status|verify|done|abandon (ver el encabezado del script)");
+    console.log("uso: node scripts/task.mjs start|scope|criterion|evidence|status|verify|done|abandon|lock|unlock (ver el encabezado del script)");
     if (orden) process.exitCode = 1;
 }

@@ -192,12 +192,16 @@ const COPIAR = [
   ".claude/agents/gate-runner.md",
   ".claude/agents/ci-investigator.md",
   ".claude/agents/librarian.md",
+  ".claude/agents/coder.md",
   ".claude/commands/gate.md",
+  ".claude/commands/code.md",
   ".claude/commands/lesson.md",
   ".claude/commands/harness-audit.md",
   ".claude/commands/architecture.md",
   ".claude/commands/code-index.md",
   ".claude/commands/ci.md",
+  // `/lesson` cites the ledger, and `/bitacora` debugs it. Both say «off» without `status.events`.
+  ".claude/commands/bitacora.md",
   ".claude/skills/new-guardrail/SKILL.md",
   ".claude/skills/library-index/SKILL.md",
   ".claude/skills/library-migrate/SKILL.md",
@@ -208,11 +212,18 @@ const COPIAR = [
   "scripts/harness-selftest.mjs",
   "scripts/docs-linkcheck.mjs",
   "scripts/artifacts-check.mjs",
+  // La señal «worktrees out of sight» de la plantilla: sin el script apuntaría a la nada.
+  "scripts/worktree-check.mjs",
+  // `/code` lanza coders como sesión propia con este script (clave `coder`).
+  "scripts/coder-spawn.mjs",
   "scripts/cycle-check.mjs",
   "scripts/hooks-timing.mjs",
   // La tarea declarada: `protected-paths` lee su alcance y la señal «task» la verifica. Sin el
   // script, la plantilla declararía una señal que apunta a la nada.
   "scripts/task.mjs",
+  // The status ledger (`status.events`, opt-in): a ported repo keeps its prose STATUS.md until
+  // someone runs `node scripts/status.mjs migrate --apply`.
+  "scripts/status.mjs",
   // El único camino de despliegue: `deploy-guard` lo autoriza, y sin el script el agente quedaría
   // con un punto de entrada que no existe y sólo los CLIs crudos (que piden permiso).
   "scripts/deploy.mjs",

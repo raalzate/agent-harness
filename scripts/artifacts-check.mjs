@@ -56,6 +56,14 @@ if (!fs.existsSync(abs)) {
   process.exit(0);
 }
 
+// The task's own to-do list (`task.todoFile`) is the agent's working plan, versioned with its
+// branch on purpose — not the team's spec drifting into the repo. Without this, the first
+// `tasks.md` the coder writes turns this signal red in every repo that keeps specs in the tracker.
+const todoTemplate = config.task?.todoFile;
+const esListaDeTarea = todoTemplate
+  ? new RegExp(`^${String(todoTemplate).split("\\").join("/").split("{item}").map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("[^/]+")}$`)
+  : null;
+
 const intrusos = [];
 const walk = (dir) => {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -63,7 +71,7 @@ const walk = (dir) => {
     if (entry.isDirectory()) walk(p);
     else {
       const rel = path.relative(raiz, p).split(path.sep).join("/");
-      if (!permitidos.has(rel)) intrusos.push(rel);
+      if (!permitidos.has(rel) && !esListaDeTarea?.test(rel)) intrusos.push(rel);
     }
   }
 };

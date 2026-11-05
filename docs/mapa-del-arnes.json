@@ -168,6 +168,12 @@
       "kind": "computacional"
     },
     {
+      "id": "gate-worktrees-out-of-sight",
+      "label": "gate · worktrees out of sight",
+      "type": "sensor",
+      "kind": "computacional"
+    },
+    {
       "id": "gate-code-index-codegraph",
       "label": "gate · code index (codegraph)",
       "type": "sensor",
@@ -198,6 +204,12 @@
       "kind": "computacional"
     },
     {
+      "id": "gate-status-ledger",
+      "label": "gate · status ledger",
+      "type": "sensor",
+      "kind": "computacional"
+    },
+    {
       "id": "gate-harness-cost-hook-latency",
       "label": "gate · harness cost (hook latency)",
       "type": "sensor",
@@ -207,6 +219,12 @@
       "id": "agente-ci-investigator",
       "label": "agente · ci-investigator",
       "type": "sensor",
+      "kind": "inferencial"
+    },
+    {
+      "id": "agente-coder",
+      "label": "agente · coder",
+      "type": "guía",
       "kind": "inferencial"
     },
     {
@@ -432,6 +450,16 @@
       "label": "actúa en"
     },
     {
+      "from": "gate-worktrees-out-of-sight",
+      "to": "etapa-fin-del-turno",
+      "label": "actúa en"
+    },
+    {
+      "from": "gate-worktrees-out-of-sight",
+      "to": "etapa-integracion",
+      "label": "actúa en"
+    },
+    {
       "from": "gate-code-index-codegraph",
       "to": "etapa-fin-del-turno",
       "label": "actúa en"
@@ -478,6 +506,16 @@
     },
     {
       "from": "gate-library-index-docs",
+      "to": "etapa-integracion",
+      "label": "actúa en"
+    },
+    {
+      "from": "gate-status-ledger",
+      "to": "etapa-fin-del-turno",
+      "label": "actúa en"
+    },
+    {
+      "from": "gate-status-ledger",
       "to": "etapa-integracion",
       "label": "actúa en"
     },
@@ -494,6 +532,11 @@
     {
       "from": "agente-ci-investigator",
       "to": "etapa-integracion",
+      "label": "actúa en"
+    },
+    {
+      "from": "agente-coder",
+      "to": "etapa-accion-decidida",
       "label": "actúa en"
     },
     {

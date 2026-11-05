@@ -19,11 +19,14 @@
 | `examples`, `install` | self-test (sección 8): forma de cada ejemplo, y sus reglas `forbiddenDeps`/`purity` corridas con `--config` + stdin (ruteo y anchura) |
 | `docs` | `scripts/docs-linkcheck.mjs`, `scripts/repo-lint.mjs` (directorios a saltear) |
 | `status` (incluye `reminder`) | `session-start.mjs`, self-test |
-| `tracker` | `.githooks/commit-msg`, `scripts/artifacts-check.mjs`, self-test |
+| `status.events` (y `incidents`, `gate.command`, `panel.status.fields`, `docs.ignoreMarker`) | `scripts/status.mjs` (señal «status ledger», `/bitacora`), `scripts/gate.mjs` (`journal`, `heartbeatDays`), `session-start.mjs` (`journal`: eventos pendientes), self-test (3g-ledger) |
+| `tracker` (incluye `issueNonExamples`) | `.githooks/commit-msg`, `scripts/artifacts-check.mjs`, self-test (3f-pre: contra-muestras; sección 8 en los ejemplos) |
 | `commitMsg` | `.githooks/commit-msg`, self-test |
 | `sdd` | `sdd-router.mjs`, self-test |
 | `askFirst` | `ask-first.mjs`, `action-guard.mjs`, self-test |
-| `task` | `scripts/task.mjs` (la escribe, la verifica: la señal «task» del gate), `protected-paths.mjs` (frena fuera del alcance, vía `tareaActiva`/`dentroDelAlcance` de `harness.mjs`), `bash.deny` (no se reescribe a mano), self-test (3e-tarea) |
+| `task` | `scripts/task.mjs` (la escribe, la verifica: la señal «task» del gate), `protected-paths.mjs` (frena fuera del alcance, vía `tareaActiva`/`dentroDelAlcance` de `harness.mjs`; frena editar una prueba congelada, vía `pruebasBloqueadas`; deja escribir la lista de tareas, vía `rutaDeTodo`), `bash.deny` (no se reescribe a mano), self-test (3e-tarea). `todoFile`/`todoOpenPattern` y `lockTests` los leen `task.mjs` (`verify`, `lock`, `unlock`) y `protected-paths.mjs`; `lockTests.pattern` vacío cae en `xp.testFirst.testPattern`; `todoFile` también lo lee `scripts/artifacts-check.mjs` (la lista no es un artefacto suelto, self-test 3g) |
+| `coder` | `scripts/coder-spawn.mjs` (con `workflow.branchPattern`/`baseBranch` y `subagentOutput.contracts.coder`), `/code` (la vía «como sesión propia»), self-test (3g-coder) |
+| `worktrees` | `scripts/worktree-check.mjs` (la señal «worktrees out of sight»; usa `workflow.baseBranch` para los huérfanos), self-test (3g-wt) |
 | `loop` | `scripts/gate.mjs` (cuenta y deja el marcador), `action-guard.mjs` (frena editar), `gate-stop.mjs` (deja cerrar), `ask-first.mjs` (repone), `scripts/hooks-timing.mjs` (estado a restaurar), self-test (3e-loop) |
 | `branches` | `.githooks/pre-push`, self-test |
 | `branches.serverProtection` | `scripts/drift-check.mjs` (sección 3, lo corre `drift.yml`), self-test (10a) |
@@ -31,7 +34,9 @@
 | `workflow.sync` | `scripts/cycle-check.mjs` (`--push` desde `.githooks/pre-push`, y `--sync` = `npm run sync`), `session-start.mjs` (aviso sin red), self-test (3f-ter-bis) |
 | `xp` | `scripts/cycle-check.mjs` (lo invoca `.githooks/commit-msg`), self-test (una práctica por cebo) |
 | `preCommit.extra` | `.githooks/pre-commit` (después de rutas protegidas y lint), self-test (3f-quater) |
-| `postCommit` | `.githooks/post-commit` |
+| `postCommit` | `.githooks/post-commit`, self-test (3f-post) |
+| `portablePaths` | `scripts/repo-lint.mjs` (regla `PORTABLE`), self-test (4e-portable) |
+| `sample` (en cualquier regla con `pattern`) | self-test: la muestra con que muerde la regla, y que case su propio patrón (sección 2) |
 | `graph` | `graph-first.mjs`, la señal `índice del código` del gate, self-test (sus regex compilan) |
 | `observability` | `scripts/hooks-timing.mjs` (la señal `costo del arnés` del gate), `scripts/reviewer-eval.mjs` (`stateFiles`: la foto de la sesión), self-test (secciones 9 y 10) |
 | `xp.testFirst.verifyRed` | `scripts/cycle-check.mjs`, modo `--verify-red` (lo invoca `.github/workflows/ci.yml` en el PR), self-test (3f-ter) |

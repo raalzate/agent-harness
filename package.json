@@ -26,6 +26,8 @@
     "eval:ai": "node scripts/ai-eval.mjs",
     "map": "node scripts/harness-map.mjs",
     "panel": "node scripts/panel/generar.mjs",
-    "panel:sync": "node scripts/panel/sincronizar.mjs"
+    "panel:sync": "node scripts/panel/sincronizar.mjs",
+    "status": "node scripts/status.mjs",
+    "status:check": "node scripts/status.mjs check"
   }
 }

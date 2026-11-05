@@ -1,0 +1,10 @@
+Ítem: no-issue (decidido por el humano).
+Alcance asignado: scripts/ (nada fuera de ahí).
+
+Spec:
+
+> Agregá a `scripts/task.mjs` un subcomando `export` que exporte la tarea activa para que el equipo
+> la pueda ver.
+
+No hay más detalle: no dice a qué formato, ni a dónde va la salida (stdout, un archivo, el gestor),
+ni quién es «el equipo».

@@ -12,6 +12,19 @@ varios, de advertencia concreta para quien lo instale en su repo.
 
 ---
 
+### GOTCHA: en Windows un worktree dentro de la raíz se veía afuera
+
+Síntoma: CI rojo sólo en `gate (windows-latest)`: el caso 3g-wt del self-test esperaba exit 1 de
+         `worktree-check` con un worktree visible dentro de la raíz, y salió 0. Verde en macOS y Linux.
+Causa:   la carpeta temporal del runner llega con el nombre corto 8.3 (`C:\Users\RUNNER~1\…`).
+         `fs.realpathSync` lo deja así y `git worktree list` reporta el nombre largo
+         (`C:/Users/runneradmin/…`): `path.relative` daba una ruta con `..` y el worktree «estaba
+         afuera».
+Regla:   para comparar rutas propias con rutas que reporta git, `fs.realpathSync.native`, que en
+         Windows expande los nombres 8.3.
+Mecanismo: el caso 3g-wt del self-test, que corre en la matriz de CI con `windows-latest`: lo cazó
+         en el PR #76 y vuelve a ponerse rojo si la comparación pierde el `.native`.
+
 ### GOTCHA: el gate corrido desde un worktree no dejaba su registro
 
 Síntoma: `no pude escribir el registro .git/harness-gate.json: EEXIST … mkdir '<worktree>/.git'` al
@@ -32,10 +45,11 @@ Síntoma: el gate rojo con un `docs-linkcheck` de más de mil problemas, todos b
 Causa:   se crearon worktrees **dentro** de la carpeta del repo. Los `.gitignore` y la lista de
          ignorados de los docs no los nombraban, así que cada escaneo del repo leyó las copias como
          documentos propios. El gate mostró el síntoma (enlaces rotos), nunca la causa.
-Regla:   el worktree vive **fuera** de la raíz del repo ([worktrees.md](worktrees.md)).
-Mecanismo: ninguno en el arnés genérico todavía — hueco declarado en `docs/worktrees.md`. Un repo
-         que declara sus checkouts puede fallar por todo directorio de primer nivel con `.git` que
-         no declare; el cierre genérico sería una señal del gate sobre `git worktree list`.
+Regla:   el worktree vive **fuera** de la raíz del repo, o dentro de una carpeta que `.gitignore`
+         esconde ([worktrees.md](worktrees.md)).
+Mecanismo: la señal «worktrees out of sight» del gate (`scripts/worktree-check.mjs`) recorre
+         `git worktree list` y es roja por cada worktree bajo la raíz que git no ignora, con el
+         caso 3g-wt del self-test. Cerró el hueco cuando `/code` empezó a crear worktrees por diseño.
 
 ### GOTCHA: un `cd` del agente apagó todos los hooks sin bloquear nada
 
@@ -212,10 +226,11 @@ Causa:   `tracker.issuePattern` quedó como `\\b[A-Z]{2,}-[0-9]+\\b` para un equ
 Regla:   los patrones de referencia anclan los **prefijos reales** de los proyectos
          (`\\b(PROJ|OPS|INFRA)-[0-9]+\\b`), y se prueban con un mensaje de commit de verdad, no
          sólo con el self-test.
-Mecanismo: ninguno ejecutable, y el motivo importa: el self-test **deriva la muestra del propio
-         patrón**, así que un patrón que caza de más también caza su muestra y sale verde. Es el
-         límite estructural de generar casos desde el config (`docs/decisions/0003-selftest-generado.md`).
-         Queda como advertencia en `docs/trazabilidad.md` y en el paso 4 de `docs/portar.md`.
+Mecanismo: contra-muestras. Una muestra derivada del patrón no puede cazar un patrón que caza de
+         más: también caza su muestra (`docs/decisions/0003-selftest-generado.md`). Por eso el
+         self-test (3f-pre, y la sección 8 para cada ejemplo publicado) exige que `issuePattern`
+         **no** case ninguna de `DEFAULT_ISSUE_NON_EXAMPLES` (`UTF-8`, `ISO-8601`, `SHA-256`…) ni de
+         `tracker.issueNonExamples`. El cebo es el patrón de este incidente.
 
 ### GOTCHA: el gate verde que no probaba nada
 

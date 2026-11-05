@@ -58,7 +58,7 @@ guiado paso a paso en **[docs/portar.md](docs/portar.md)**.
 scripts/
   gate.mjs               el gate: ejecuta las señales declaradas en el config (Node: corre en Windows)
   gate.sh                envoltorio de una línea sobre gate.mjs, para quien ya lo invoca
-  repo-lint.mjs          las reglas del repo que ningún compilador ve (9 clases)
+  repo-lint.mjs          las reglas del repo que ningún compilador ve (10 clases)
   cycle-check.mjs        el modelo de ramas y las prácticas XP, hechos comando
   harness-selftest.mjs   prueba de vida: ¿cada regla tiene un comando que la hace fallar?
   docs-linkcheck.mjs     que la memoria del agente no apunte a la nada

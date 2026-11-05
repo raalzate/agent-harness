@@ -34,7 +34,7 @@ import path from "node:path";
 import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
-import { resolverEjecutable, rutaDeEstado } from "../.claude/hooks/harness.mjs";
+import { resolverEjecutable, rutaDeEstado, isoLocal, DEFAULT_STATUS_JOURNAL } from "../.claude/hooks/harness.mjs";
 
 const REPO_ROOT = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
 const CONFIG_PATH = path.join(REPO_ROOT, ".claude", "harness.config.json");
@@ -257,12 +257,48 @@ function registrar(veredicto) {
     senalesReg[nombre] = { ...sinCola, fecha, ultimoVerde: res.estado === "verde" ? { fecha, head, ms: res.ms } : antes };
   }
   const registro = { fecha, modo: MODE, veredicto, ms: Date.now() - inicio.getTime(), head, rama: git("rev-parse", "--abbrev-ref", "HEAD"), senales: senalesReg };
+  registro.bitacora = anotarVeredicto(previo.bitacora ?? null, registro, git);
   try {
     fs.mkdirSync(path.dirname(abs), { recursive: true });
     fs.writeFileSync(abs, JSON.stringify(registro, null, 2) + "\n");
   } catch (e) {
     console.log(`  (no pude escribir el registro ${rel}: ${e.message})`);
   }
+}
+
+/**
+ * The status ledger (`status.events`, scripts/status.mjs): a full gate appends a `gate.verdict`
+ * event to the journal when the verdict CHANGES, or when the last one recorded is older than
+ * `heartbeatDays` — without that, months of steady green would leave the date of STATUS.md behind
+ * and `drift` would call it stale. The journal lives in `.git/` (P7): writing STATUS.md from here
+ * would leave a tracked file changed by every verdict, and the task-scope signal red on the next
+ * run. `status.mjs sync` moves it into the log. Fast mode is a development signal: never recorded.
+ * Returns what the registry keeps to compare against next time.
+ */
+function anotarVeredicto(ultimo, registro, git) {
+  const spec = config.status?.events;
+  if (!spec || MODE === "fast") return ultimo;
+  const dias = Number.isFinite(spec.heartbeatDays) ? spec.heartbeatDays : 7;
+  const viejo = ultimo ? Date.now() - Date.parse(ultimo.fecha) > dias * 86400000 : true;
+  if (ultimo && ultimo.veredicto === registro.veredicto && ultimo.rama === registro.rama && !viejo) return ultimo;
+  const evento = {
+    ts: isoLocal(),
+    author: git("config", "user.name") || os.userInfo().username,
+    event: "gate.verdict",
+    key: registro.rama ?? "HEAD",
+    what: registro.veredicto === "verde" ? "VERDE" : `ROJO — ${corridas === 0 ? "ninguna señal corrió" : `señales fallidas: ${fallidas.join(", ")}`}`,
+    evidence: `\`${config.gate?.command ?? "gate"}\` @ ${registro.head ?? "?"}`,
+  };
+  try {
+    const abs = rutaDeEstado(spec.journal ?? DEFAULT_STATUS_JOURNAL);
+    fs.mkdirSync(path.dirname(abs), { recursive: true });
+    fs.appendFileSync(abs, JSON.stringify(evento) + "\n");
+    console.log(`Bitácora: veredicto ${evento.what.split(" ")[0]} anotado — \`node scripts/status.mjs sync\` lo pasa a ${config.status.file ?? "STATUS.md"}.`);
+  } catch (e) {
+    console.log(`  (no pude anotar el veredicto en la bitácora: ${e.message})`);
+    return ultimo;
+  }
+  return { veredicto: registro.veredicto, rama: registro.rama, fecha: registro.fecha };
 }
 
 /**

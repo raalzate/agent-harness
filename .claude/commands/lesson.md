@@ -30,7 +30,15 @@ la regla no es verificable por máquina.
 Si agregaste un freno, agregá **también su caso al self-test**: un freno sin prueba de vida es
 decorativo. Si el freno es una regla del config, el self-test lo cubre solo.
 
-La entrada de gotcha va en formato fijo: **Síntoma → Causa → Regla → Mecanismo**.
+La entrada de gotcha va en formato fijo: **Síntoma → Causa → Regla → Mecanismo**. Con la bitácora
+encendida (`status.events`), el gotcha nuevo queda además como evento — sin él, la señal
+«status ledger» sale roja:
+
+```bash
+node scripts/status.mjs record incident.recorded "<título exacto del gotcha>" --evidence "docs/gotchas.md"
+```
+
+El evento lleva el título y el puntero, no el síntoma: el texto vive una sola vez, en el registro.
 
 ## Fase 3 — Validación por regresión (esta fase es el diseño entero)
 

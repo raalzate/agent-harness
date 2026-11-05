@@ -12,7 +12,7 @@
       "id": "diseno",
       "concept": "Decisiones de diseño: arquitectura y ADR, con su porqué",
       "scope": "la teoría general (metodo) y el uso diario (flujo)",
-      "entries": 17
+      "entries": 19
     },
     {
       "id": "instalacion",
@@ -253,18 +253,22 @@
         "`incidents` — el formato del registro de gotchas",
         "`docs` — alcance del link-check",
         "`status` — el archivo de estado verificado",
+        "`status.events` — la bitácora (event sourcing)",
         "`branches` — cómo entra el trabajo",
         "`workflow` — el modelo de ramas",
         "`xp` — las prácticas de XP con mecanismo",
         "`xp.testFirst.verifyRed` — la prueba falla sin el cambio",
         "`askFirst` — no actuar sobre una pregunta",
         "`task` — la tarea declarada (opcional)",
+        "`worktrees` — worktrees fuera de la vista (opcional)",
+        "`coder` — un coder como sesión propia (opcional)",
         "`loop` — el ciclo acotado (opcional)",
         "`tracker` — el gestor de trabajo, sea cual sea",
         "`commitMsg` — qué commits piden registro",
         "`sdd` — ruteo del trabajo",
         "`preCommit.extra` — frenos propios del repo sobre el commit entero (opcional)",
         "`postCommit` — refrescar lo derivado (opcional)",
+        "`portablePaths` — rutas que se clonan en cualquier sistema (opcional)",
         "`graph` — el índice del código (OBLIGATORIO)",
         "`observability` — el costo del arnés, medido",
         "`panel` — el panel del arnés (opcional)",
@@ -509,6 +513,33 @@
       ]
     },
     {
+      "path": "docs/decisions/0017-status-como-bitacora.md",
+      "kind": "document",
+      "base": "diseno",
+      "title": "ADR 0017 — STATUS.md es una bitácora y el estado es su proyección",
+      "summary": "STATUS.md es lo que el hook SessionStart le presenta al agente como verdad. Se editaba en el lugar: una fila de señal se reescribía sin dejar rastro de lo que decía antes, sin autor y con una sola fecha para todo el arc…",
+      "headings": [
+        "ADR 0017 — STATUS.md es una bitácora y el estado es su proyección",
+        "Contexto",
+        "Decisión",
+        "Consecuencias",
+        "Alternativas descartadas"
+      ]
+    },
+    {
+      "path": "docs/decisions/0018-limites-por-diseno.md",
+      "kind": "document",
+      "base": "diseno",
+      "title": "ADR 0018 — Límites por diseño: lo que el arnés no hace a propósito",
+      "summary": "La «Deuda conocida» de STATUS.md mezclaba dos cosas distintas:",
+      "headings": [
+        "ADR 0018 — Límites por diseño: lo que el arnés no hace a propósito",
+        "Contexto",
+        "Decisión",
+        "Consecuencias"
+      ]
+    },
+    {
       "path": "docs/despliegue.md",
       "kind": "document",
       "base": "flujo",
@@ -558,6 +589,7 @@
       "summary": "Formato fijo: síntoma observable → causa raíz → regla → mecanismo que la hace fallar. Se escribe en el momento en que se paga, no \"cuando haya tiempo\" (/lesson <incidente>).",
       "headings": [
         "Gotchas — lo que ya nos costó horas",
+        "GOTCHA: en Windows un worktree dentro de la raíz se veía afuera",
         "GOTCHA: el gate corrido desde un worktree no dejaba su registro",
         "GOTCHA: un worktree dentro de la raíz del repo puso el gate rojo lejos de la causa",
         "GOTCHA: un `cd` del agente apagó todos los hooks sin bloquear nada",
@@ -614,8 +646,8 @@
       "base": "referencia",
       "title": "Mapa del arnés",
       "summary": "GENERADO por `node scripts/harness-map.mjs --graph`: cada etapa del ciclo y las guías, frenos y sensores que actúan en ella, desde `taxonomy`. No se edita a mano.",
-      "nodes": 46,
-      "edges": 55,
+      "nodes": 49,
+      "edges": 60,
       "nodeTypes": [
         "etapa",
         "freno",
@@ -679,7 +711,7 @@
         "Lo que se arregló, y cómo se ve cuando falta",
         "La prueba: CI en las tres plataformas",
         "Al portar el arnés a un repo",
-        "Lo que sigue sin cubrirse"
+        "Rutas y PowerShell: lo que antes no se cubría"
       ]
     },
     {
@@ -755,7 +787,7 @@
       "kind": "table",
       "base": "referencia",
       "title": "Quién lee cada clave",
-      "summary": "Claves del config y los scripts que las leen (42)",
+      "summary": "Claves del config y los scripts que las leen (47)",
       "tables": [
         {
           "heading": "Claves del config y los scripts que las leen",
@@ -763,7 +795,7 @@
             "Clave",
             "Lo leen"
           ],
-          "rows": 42
+          "rows": 47
         }
       ]
     },
@@ -830,6 +862,7 @@
         "El ciclo",
         "Qué ya garantiza el arnés",
         "Reglas",
+        "Varios coders a la vez: `/code`",
         "Lo que no verifica ninguna máquina (todavía)",
         "Prueba de vida"
       ]

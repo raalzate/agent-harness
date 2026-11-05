@@ -35,7 +35,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 // El mismo helper que usan el hook y el lint: comparar contra la lista DECLARADA dejaba pasar
 // justo el caso del incidente (el gate declara una extensión que el default agnóstico no tiene).
-import { codeExtensions, depsMatcher, importSyntax, segmentosDeRuta, relativaDesdeRaiz, esUnidadPelada, parseHookCommand, firstMatch, existeEjecutable, writeTools, escribe , rutaDeEstado , tareaActiva } from "../.claude/hooks/harness.mjs";
+import { codeExtensions, depsMatcher, importSyntax, segmentosDeRuta, relativaDesdeRaiz, esUnidadPelada, parseHookCommand, firstMatch, existeEjecutable, writeTools, escribe , rutaDeEstado , tareaActiva, DEFAULT_ISSUE_NON_EXAMPLES } from "../.claude/hooks/harness.mjs";
 
 const REPO_ROOT = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
 const abs = (p) => path.join(REPO_ROOT, p);
@@ -264,6 +264,19 @@ function sampleFromPattern(pattern) {
 }
 
 /**
+ * The sample a rule is tested with: the author's `sample` when the rule declares one, else the
+ * one derived from its pattern. Some patterns (lookbehind, nested alternations with quoting) no
+ * generator reduces, and they used to be OMITTED forever — a brake with no proof of life. The
+ * author knows a command the rule exists for; `sample` lets them write it down. A declared sample
+ * that does not match its own pattern is checked separately and is RED: it would prove nothing.
+ */
+function muestraDe(regla, campo = "pattern") {
+  const declarada = campo === "pattern" ? regla?.sample : null;
+  if (typeof declarada === "string" && declarada.trim()) return declarada;
+  return sampleFromPattern(regla?.[campo] ?? "");
+}
+
+/**
  * Qué ejecuta un hook declarado en settings.json.
  *
  * La implementación vive en `harness.mjs`, junto con los otros defaults compartidos: la
@@ -272,6 +285,23 @@ function sampleFromPattern(pattern) {
  * uno de los dos miente. Acá queda el alias para no tocar los casos de abajo.
  */
 const analizarComando = parseHookCommand;
+
+/**
+ * The counter-examples a work-item pattern catches — and must not. A derived sample cannot catch
+ * a pattern that matches too much (it matches its own sample too): `\b[A-Z]{2,}-[0-9]+\b` passed
+ * every check while «UTF-8» counted as a reference (docs/gotchas.md). Default list plus the
+ * team's `tracker.issueNonExamples`.
+ */
+function referenciasFalsas(tracker) {
+  if (!tracker?.issuePattern) return [];
+  let re;
+  try {
+    re = new RegExp(tracker.issuePattern);
+  } catch {
+    return [];
+  }
+  return [...DEFAULT_ISSUE_NON_EXAMPLES, ...(tracker.issueNonExamples ?? [])].filter((s) => re.test(s));
+}
 
 // ¿El ejecutable existe? La pregunta vive en `.claude/hooks/harness.mjs` (`existeEjecutable`):
 // acá había una copia sin la búsqueda de Windows (PATHEXT), la misma falla que tenían
@@ -652,6 +682,36 @@ if (!regexMalos) ok(`${patronesDelConfig.filter(([, p]) => p).length} regex del 
     });
   if (!mentirosas.length) ok("todas las muestras derivadas del config casan su patrón");
   else bad("las muestras derivadas casan su patrón", mentirosas.map(([d, p, m]) => `${d}: \`${p}\` → \`${m}\``).join("\n      "));
+
+  // A declared `sample` (any rule, anywhere in the config) must match its own pattern: a sample
+  // that does not would make the brake's case test a command the rule never sees.
+  const muestrasDeclaradas = (raiz) => {
+    const declaradas = [];
+    const recorrer = (nodo, donde) => {
+      if (Array.isArray(nodo)) nodo.forEach((n, i) => recorrer(n, `${donde}[${i}]`));
+      else if (nodo && typeof nodo === "object") {
+        if (typeof nodo.sample === "string" && typeof nodo.pattern === "string") declaradas.push([donde, nodo]);
+        for (const [k, v] of Object.entries(nodo)) if (!k.startsWith("$")) recorrer(v, donde ? `${donde}.${k}` : k);
+      }
+    };
+    recorrer(raiz, "");
+    const falsas = declaradas.filter(([, r]) => {
+      try {
+        return !new RegExp(r.pattern, "i").test(r.sample);
+      } catch {
+        return true;
+      }
+    });
+    return { declaradas, falsas };
+  };
+  const { declaradas, falsas } = muestrasDeclaradas(config);
+  if (!declaradas.length) skip("los `sample` declarados casan su patrón", "ninguna regla declara `sample`");
+  else if (!falsas.length) ok(`los ${declaradas.length} \`sample\` declarados casan su patrón`);
+  else bad("un `sample` declarado no casa su patrón", falsas.map(([d, r]) => `${d}: \`${r.sample}\``).join("\n      "));
+  // Proof of life of the check itself: a bait config with one honest and one lying sample.
+  const cebo = muestrasDeclaradas({ bash: { deny: [{ pattern: "\\bgit\\s+reset\\s+--hard", sample: "git reset --hard" }, { pattern: "\\bgit\\s+reset\\s+--hard", sample: "git reset --soft" }] } });
+  if (cebo.declaradas.length === 2 && cebo.falsas.length === 1 && cebo.falsas[0][0] === "bash.deny[1]") ok("un `sample` que no casa su patrón se detecta y se nombra (cebo)");
+  else bad("el chequeo de `sample` muerde", `cebo: ${cebo.declaradas.length} declaradas, ${cebo.falsas.length} falsas`);
 }
 
 const rutasDelConfig = [
@@ -681,7 +741,7 @@ section("3. los frenos muerden");
 
 // 3a. Rutas protegidas: una muestra por regla.
 if (enParte("frenos")) for (const regla of config.protectedPaths ?? []) {
-  let muestra = sampleFromPattern(regla.pattern);
+  let muestra = muestraDe(regla);
   if (!muestra) {
     skip(`protectedPaths \`${regla.pattern}\``, "el patrón no se puede reducir a un ejemplo; probalo a mano");
     continue;
@@ -813,9 +873,9 @@ if (enParte("frenos") && hookFiles.has("bash-guard.mjs") && (config.bash?.deny ?
 }
 if (enParte("frenos") && hookFiles.has("bash-guard.mjs")) {
   for (const regla of config.bash?.deny ?? []) {
-    const muestra = sampleFromPattern(regla.pattern);
+    const muestra = muestraDe(regla);
     if (!muestra) {
-      skip(`bash.deny \`${regla.pattern}\``, "el patrón no se puede reducir a un ejemplo; probalo a mano");
+      skip(`bash.deny \`${regla.pattern}\``, "el patrón no se puede reducir a un ejemplo: declarale un `sample`");
       continue;
     }
     const r = runHook("bash-guard.mjs", {
@@ -838,9 +898,9 @@ if (enParte("frenos") && hookFiles.has("bash-guard.mjs")) {
   //     `permissionDecision: "ask"`: un exit 2 acá sería un bloqueo que el sí del humano no
   //     levanta, que es justo el defecto que este nivel existe para arreglar.
   for (const regla of config.bash?.ask ?? []) {
-    const muestra = sampleFromPattern(regla.pattern);
+    const muestra = muestraDe(regla);
     if (!muestra) {
-      skip(`bash.ask \`${regla.pattern}\``, "el patrón no se puede reducir a un ejemplo; probalo a mano");
+      skip(`bash.ask \`${regla.pattern}\``, "el patrón no se puede reducir a un ejemplo: declarale un `sample`");
       continue;
     }
     const r = runHook("bash-guard.mjs", { hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command: muestra } });
@@ -877,7 +937,7 @@ if (enParte("frenos") && hookFiles.has("bash-guard.mjs")) {
     if (libre.status === 0 && !libre.pregunta) ok(`bash-guard deja pasar sin preguntar la forma segura \`${ejemplo}\``);
     else bad(`bash.ask exento: \`${ejemplo}\``, `exit ${libre.status}, ${libre.pregunta ? "preguntó igual" : "bloqueó"}: la exención no aplica`);
 
-    const muestra = sampleFromPattern(regla.pattern);
+    const muestra = muestraDe(regla);
     const encadenado = pedir(`${ejemplo} && ${muestra ?? ejemplo}`);
     if (encadenado.pregunta || encadenado.status === 2) ok("bash-guard: la exención no se hereda encadenando otro comando");
     else bad("bash.ask exento encadenado", `\`${ejemplo} && …\` pasó sin preguntar: \`exempt\` no está anclado`);
@@ -885,7 +945,7 @@ if (enParte("frenos") && hookFiles.has("bash-guard.mjs")) {
 
   // Sin `hook_event_name` el JSON de «ask» no se reconoce y el comando correría sin preguntar:
   // hacia el lado seguro, bloquea.
-  const regla = (config.bash?.ask ?? []).map((r) => sampleFromPattern(r.pattern)).find((m) => m && !firstMatch(config.bash?.deny, m));
+  const regla = (config.bash?.ask ?? []).map((r) => muestraDe(r)).find((m) => m && !firstMatch(config.bash?.deny, m));
   if (regla) {
     const sinEvento = runHook("bash-guard.mjs", { tool_name: "Bash", tool_input: { command: regla } });
     if (sinEvento.status === 2) ok("bash-guard bloquea un «ask» que no puede preguntar (sin evento)");
@@ -914,6 +974,7 @@ if (corre("frenos") && config.deploy && hookFiles.has("deploy-guard.mjs")) {
   // podrían estar mal escritas sin que nadie se entere. Se prueba cada pedazo que casa solo.
   const muestras = (reglas) =>
     (reglas ?? []).flatMap((r) => {
+      if (r.sample) return [[r, muestraDe(r)]];
       const cruda = sampleFromPattern(r.pattern);
       if (!cruda) return [[r, null]];
       const piezas = cruda.split("|").map((p) => p.trim()).filter((p) => p && firstMatch([r], p));
@@ -1597,6 +1658,64 @@ if (!corre("registro")) {
       fs.rmSync(copia, { recursive: true, force: true });
     }
 
+    // The coder's discipline as mechanism: its own to-do list (`todoFile`) and immutable tests
+    // (`lock`/`unlock`). Both keys are added now, on top of the config above, so every case
+    // before this one keeps proving that without them nothing changes.
+    {
+      const conCoder = { ...tareaCfg, todoFile: "specs/{item}/tasks.md", lockTests: { pattern: "" } };
+      fs.writeFileSync(
+        path.join(tmp, ".claude", "harness.config.json"),
+        JSON.stringify({ protectedPaths: [{ pattern: "^\\.env", reason: "selftest" }], xp: { testFirst: { testPattern: "(^|/)tests/" } }, task: conCoder }),
+      );
+      fs.mkdirSync(path.join(tmp, "tests"), { recursive: true });
+      fs.writeFileSync(path.join(tmp, "tests", "a.test.js"), "assert(sum(1, 2) === 3)\n");
+      fs.writeFileSync(path.join(tmp, "src", "a.js"), "x\n");
+      gitT("add", "-A");
+      gitT("commit", "-qm", "red test");
+      const todo = path.join("specs", "4", "tasks.md");
+      task("start", "#4");
+      caso(editar(todo).status === 0, "the to-do list is writable before any scope (planning comes first)", "the hook blocked the task's own tasks.md");
+      task("scope", "src/", "tests/", "--why", "selftest");
+      task("criterion", "suma");
+      task("evidence", "1", "--", "node", "prueba.js");
+      fs.writeFileSync(path.join(tmp, "src", "a.js"), "ok\n");
+      const sinLista = task("verify");
+      caso(sinLista.status === 1 && /lista de tareas/.test(sinLista.out), "no tasks.md is red: a task that was never planned is not done", `exit ${sinLista.status}`);
+      fs.mkdirSync(path.join(tmp, "specs", "4"), { recursive: true });
+      fs.writeFileSync(path.join(tmp, todo), "# Tareas\n\n- [x] test rojo\n- [ ] implementar suma\n");
+      const abierta = task("verify");
+      caso(abierta.status === 1 && /implementar suma/.test(abierta.out), "an open item in tasks.md is red and is named", `exit ${abierta.status}: ${abierta.out.slice(-200)}`);
+      fs.writeFileSync(path.join(tmp, todo), "# Tareas\n\n- [x] test rojo\n- [x] implementar suma\n");
+      const cerrada = task("verify");
+      caso(cerrada.status === 0, "a closed tasks.md, outside the declared scope, is green", `exit ${cerrada.status}: ${cerrada.out.slice(-200)}`);
+
+      // Immutable tests. Touching a test without ever freezing it is red: the window before `lock`
+      // is where a loosened test hides from the hash.
+      fs.writeFileSync(path.join(tmp, "tests", "c.test.js"), "assert(sum(2, 2) === 4)\n");
+      const sinLock = task("verify");
+      caso(sinLock.status === 1 && /nunca las congel/.test(sinLock.out) && /tests\/c\.test\.js/.test(sinLock.out), "a task that touched tests without `lock` is red and names them", `exit ${sinLock.status}: ${sinLock.out.slice(-200)}`);
+      caso(task("lock").status === 0, "lock freezes the committed tests", "lock failed with a test file present");
+      caso(task("verify").status === 0, "after `lock`, the touched tests are green", "verify stayed red after lock");
+      const bloqueada = editar(path.join("tests", "a.test.js"));
+      caso(bloqueada.status === 2 && /PRUEBA BLOQUEADA/.test(bloqueada.stderr) && /unlock/.test(bloqueada.stderr), "editing a frozen test is denied and the escape is named", `exit ${bloqueada.status}`);
+      caso(editar(path.join("tests", "b.test.js")).status === 0, "a NEW test file stays writable (more tests never weaken done)", "the lock blocked a new test");
+      fs.writeFileSync(path.join(tmp, "tests", "a.test.js"), "assert(true)\n");
+      const aflojada = task("verify");
+      caso(aflojada.status === 1 && /tests\/a\.test\.js/.test(aflojada.out), "a frozen test changed outside the hook (Bash) is red and named", `exit ${aflojada.status}`);
+      caso(task("unlock", "tests/a.test.js").status !== 0, "unlock without a reason is rejected", "released a frozen test silently");
+      caso(task("unlock", "tests/nada.test.js", "--why", "x").status !== 0, "unlock of a test that is not frozen is rejected", "accepted an unknown path");
+      caso(task("unlock", "tests/a.test.js", "--why", "the assertion checked the wrong sign").status === 0, "unlock with a reason is accepted", "rejected a reasoned unlock");
+      caso(task("done").status === 0, "after a reasoned unlock the task closes green", "done failed");
+      const registro = fs.readFileSync(path.join(tmp, tareaCfg.log), "utf8");
+      caso(/"unlocks":\[\{"ruta":"tests\/a\.test\.js","motivo":"the assertion checked the wrong sign"/.test(registro), "every unlock stays in the task log with its reason", `log: ${registro.slice(-200)}`);
+
+      // A lock with the wrong shape lets the human through (P5).
+      fs.writeFileSync(archivoTarea, JSON.stringify({ item: "5", alcance: [{ ruta: "tests/" }], criterios: [], lock: { files: "tests/a.test.js" } }));
+      caso(editar(path.join("tests", "a.test.js")).status === 0, "a corrupt lock lets the edit through", "a broken lock blocked the human");
+      fs.rmSync(archivoTarea, { force: true });
+      fs.writeFileSync(path.join(tmp, ".claude", "harness.config.json"), JSON.stringify({ protectedPaths: [{ pattern: "^\\.env", reason: "selftest" }], task: tareaCfg }));
+    }
+
     // Los criterios salen de las casillas del ítem del gestor.
     task("start", "7", "--from-tracker");
     const desdeGestor = tareaActivaEn(tmp, tareaCfg.file);
@@ -1878,6 +1997,63 @@ const huerfanasDe = (cfg) => {
       "lo de afuera del repo se ve como afuera",
       [...malosAfuera.map(([, r]) => `${r} se vio DENTRO`), ...malosAdentro.map(([, r]) => `${r} se vio FUERA`)].join(" · "),
     );
+}
+
+// 3f-post. `.githooks/post-commit` (`postCommit`): after a commit that touches a `watch` extension it
+//     runs the refresh; a commit that touches none does not; a refresh that fails never undoes
+//     the commit; without the key it does nothing. A real temp git repo with the hook installed
+//     through `core.hooksPath`, and a fake refresh that leaves a mark (no codegraph needed).
+if (enParte("registro") && config.postCommit && fs.existsSync(abs(".githooks/post-commit"))) {
+  if (!HAY_BASH) skip("post-commit refresca lo derivado", "no hay bash en esta máquina (en Windows lo trae Git for Windows)");
+  else {
+    const tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "harness-postcommit-")));
+    try {
+      const g = (...a) => spawnSync("git", a, { cwd: tmp, encoding: "utf8" });
+      g("init", "-q", "-b", "main");
+      g("config", "user.email", "selftest@example.com");
+      g("config", "user.name", "selftest");
+      fs.mkdirSync(path.join(tmp, ".githooks"), { recursive: true });
+      fs.mkdirSync(path.join(tmp, ".claude"), { recursive: true });
+      fs.copyFileSync(abs(".githooks/post-commit"), path.join(tmp, ".githooks", "post-commit"));
+      fs.chmodSync(path.join(tmp, ".githooks", "post-commit"), 0o755);
+      g("config", "core.hooksPath", ".githooks");
+      const marca = path.join(tmp, "refrescado.txt");
+      const cfg = (postCommit) => fs.writeFileSync(path.join(tmp, ".claude", "harness.config.json"), JSON.stringify(postCommit ? { postCommit } : {}));
+      const refresco = { name: "cebo", command: ["node", "-e", `require('fs').appendFileSync(${JSON.stringify(marca)}, 'x')`], watch: [".mjs"] };
+      const commit = (archivo) => {
+        fs.writeFileSync(path.join(tmp, archivo), String(Math.random()));
+        g("add", archivo);
+        return g("commit", "-qm", `toca ${archivo}`);
+      };
+      const veces = () => (fs.existsSync(marca) ? fs.readFileSync(marca, "utf8").length : 0);
+      cfg(refresco);
+      const conCodigo = commit("a.mjs");
+      const despuesCodigo = veces();
+      commit("nota.md");
+      const despuesDoc = veces();
+      cfg({ ...refresco, command: ["node", "-e", "process.exit(3)"] });
+      const falla = commit("b.mjs");
+      const head = g("log", "-1", "--format=%s").stdout.trim();
+      cfg(null);
+      commit("c.mjs");
+      if (conCodigo.status === 0 && despuesCodigo === 1 && despuesDoc === 1 && falla.status === 0 && /falló/.test(`${falla.stdout}${falla.stderr}`) && head === "toca b.mjs" && veces() === 1)
+        ok("post-commit refresca tras tocar un `watch`, calla con un .md, un refresco que falla no deshace el commit, y sin la clave no hace nada");
+      else bad("post-commit refresca lo derivado", `code→${despuesCodigo} · doc→${despuesDoc} · failing refresh exit ${falla.status} «${`${falla.stdout}${falla.stderr}`.trim().slice(0, 120)}» head «${head}» · without key→${veces()}`);
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  }
+}
+
+// 3f-pre. The reference pattern does not bite where it should not (P3 for `issuePattern`): none of
+//     the counter-examples counts as a work item. The bait is the gotcha's own pattern.
+if (enParte("registro") && config.tracker?.issuePattern) {
+  const anchas = referenciasFalsas(config.tracker);
+  if (!anchas.length) ok(`\`tracker.issuePattern\` no caza ninguna de las ${DEFAULT_ISSUE_NON_EXAMPLES.length + (config.tracker.issueNonExamples ?? []).length} contra-muestras (UTF-8, ISO-8601…)`);
+  else bad("`tracker.issuePattern` caza de más", `caza ${anchas.map((s) => `«${s}»`).join(", ")}: un commit que lo mencione «tiene referencia»`);
+  const cebo = referenciasFalsas({ issuePattern: "\\b[A-Z]{2,}-[0-9]+\\b" });
+  if (cebo.includes("UTF-8") && !referenciasFalsas({ issuePattern: "\\b(PROJ|OPS)-[0-9]+\\b" }).length) ok("un `issuePattern` ancho (`[A-Z]{2,}-[0-9]+`) se detecta, y uno con prefijos reales pasa (cebo)");
+  else bad("el chequeo de `issuePattern` ancho muerde", `cebo ancho → ${cebo.join(",") || "nada"}`);
 }
 
 // 3f. El trabajo queda registrado: `.githooks/commit-msg` en un repo git DE VERDAD.
@@ -2355,7 +2531,335 @@ if (enParte("reglas") && config.tracker?.artifactsIn === "tracker" && fs.existsS
     const res = spawnSync("node", [abs("scripts/artifacts-check.mjs"), "--dir", tmp], { encoding: "utf8" });
     if (res.status !== 0) ok("artifacts-check caza un artefacto suelto en el repo");
     else bad("artifacts-check caza un artefacto suelto", `exit 0 con el cebo puesto: ${res.stdout.trim()}`);
+
+    // The task's own to-do list (`task.todoFile`) is not a loose artifact: without the exemption
+    // the first tasks.md a coder writes turned this signal red. A sibling file still is.
+    if (config.task?.todoFile) {
+      fs.rmSync(dir, { recursive: true, force: true });
+      const lista = path.join(tmp, config.task.todoFile.split("{item}").join("selftest-7"));
+      fs.mkdirSync(path.dirname(lista), { recursive: true });
+      fs.writeFileSync(lista, "- [x] paso\n");
+      const soloLista = spawnSync("node", [abs("scripts/artifacts-check.mjs"), "--dir", tmp], { encoding: "utf8" });
+      if (soloLista.status === 0) ok("artifacts-check deja pasar la lista de tareas declarada en `task.todoFile`");
+      else bad("artifacts-check y la lista de tareas", `exit ${soloLista.status}: ${`${soloLista.stderr}`.trim().slice(0, 160)}`);
+      fs.writeFileSync(path.join(path.dirname(lista), "plan.md"), "# plan\n");
+      const vecino = spawnSync("node", [abs("scripts/artifacts-check.mjs"), "--dir", tmp], { encoding: "utf8" });
+      if (vecino.status !== 0) ok("artifacts-check sigue cazando un plan suelto al lado de la lista de tareas");
+      else bad("artifacts-check y un plan al lado de la lista", "exit 0: la exención de la lista dejó pasar un archivo vecino");
+    }
   } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+}
+
+// 3g-wt. Worktrees out of sight (`worktrees`). A real temp repo with real worktrees: inside the
+//     root and visible is red; the same folder ignored is green; outside is green; a merged
+//     branch is a warning that never turns red. The script is copied, so this repo's own
+//     worktrees never enter the measurement.
+if (enParte("reglas") && config.worktrees && fs.existsSync(abs("scripts/worktree-check.mjs"))) {
+  const tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "harness-wt-")));
+  const fuera = `${tmp}-fuera`;
+  try {
+    const g = (...a) => spawnSync("git", a, { cwd: tmp, encoding: "utf8" });
+    g("init", "-q", "-b", "main");
+    g("config", "user.email", "selftest@example.com");
+    g("config", "user.name", "selftest");
+    fs.mkdirSync(path.join(tmp, "scripts"), { recursive: true });
+    fs.mkdirSync(path.join(tmp, ".claude"), { recursive: true });
+    fs.copyFileSync(abs("scripts/worktree-check.mjs"), path.join(tmp, "scripts", "worktree-check.mjs"));
+    fs.writeFileSync(path.join(tmp, ".claude", "harness.config.json"), JSON.stringify({ worktrees: { enabled: true }, workflow: { baseBranch: "main" } }));
+    g("add", "-A");
+    g("commit", "-qm", "base");
+    const check = () => spawnSync(process.execPath, [path.join(tmp, "scripts", "worktree-check.mjs")], { cwd: tmp, encoding: "utf8" });
+    const caso = (cond, nombre, falla) => (cond ? ok(`worktrees: ${nombre}`) : bad(`worktrees: ${nombre}`, falla));
+
+    caso(check().status === 0, "no extra worktree is green", "red with only the main checkout");
+    g("worktree", "add", "-q", "-b", "feat/a", path.join(tmp, "wts", "a"));
+    const visible = check();
+    caso(visible.status === 1 && /wts\/a/.test(visible.stderr), "a worktree inside the root, not ignored, is red and named", `exit ${visible.status}`);
+    fs.writeFileSync(path.join(tmp, ".gitignore"), "wts/\n");
+    caso(check().status === 0, "the same worktree under an ignored folder is green", "red with the folder ignored");
+    g("worktree", "add", "-q", "-b", "feat/b", fuera);
+    const huerfano = check();
+    caso(huerfano.status === 0 && /AVISO/.test(huerfano.stdout) && /feat\/b/.test(huerfano.stdout), "a worktree outside the root is green, and a merged branch is only a warning", `exit ${huerfano.status}: ${huerfano.stdout.slice(0, 160)}`);
+  } finally {
+    spawnSync("git", ["worktree", "remove", "--force", fuera], { cwd: tmp });
+    fs.rmSync(fuera, { recursive: true, force: true });
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+}
+
+// 3g-ledger. The status ledger (`status.events`): STATUS.md as an append-only log plus a projection
+//     replayed from it. A new class of check, so its proof of life is written by hand (P2): every
+//     red that `check` promises is provoked once, every green earned once (P3), in a throwaway
+//     git repo (blame needs history) with the script and the panel readers it imports copied.
+//     The gate half (a `gate.verdict` in the journal only when the verdict changes) runs the real
+//     gate.mjs in a second temp folder.
+if (enParte("reglas") && config.status?.events && fs.existsSync(abs("scripts/status.mjs"))) {
+  const tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "harness-ledger-")));
+  const tmpGate = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "harness-ledger-gate-")));
+  const caso = (cond, nombre, falla) => (cond ? ok(`ledger: ${nombre}`) : bad(`ledger: ${nombre}`, falla));
+  try {
+    const g = (...a) => spawnSync("git", a, { cwd: tmp, encoding: "utf8" });
+    g("init", "-q", "-b", "main");
+    g("config", "user.email", "selftest@example.com");
+    g("config", "user.name", "selftest");
+    for (const d of ["scripts/panel", ".claude/hooks", "docs"]) fs.mkdirSync(path.join(tmp, d), { recursive: true });
+    // status.mjs reads markdown with the panel's readers, which pull in the harness map.
+    for (const f of ["scripts/status.mjs", "scripts/harness-map.mjs", ".claude/hooks/harness.mjs"]) fs.copyFileSync(abs(f), path.join(tmp, f));
+    for (const f of fs.readdirSync(abs("scripts/panel")).filter((n) => n.endsWith(".mjs"))) fs.copyFileSync(abs(`scripts/panel/${f}`), path.join(tmp, "scripts", "panel", f));
+    const incidents = { file: "docs/gotchas.md", heading: "### GOTCHA", requiredLines: ["Síntoma:", "Causa:", "Regla:", "Mecanismo:"] };
+    const cfg = (events) =>
+      fs.writeFileSync(path.join(tmp, ".claude", "harness.config.json"), JSON.stringify({ gate: { command: "npm run gate" }, incidents, status: { file: "STATUS.md", ...(events ? { events } : {}) } }));
+    const events = { staleDays: 100000 };
+    cfg(events);
+    const gotcha = (t) => `### GOTCHA: ${t}\n\nSíntoma: algo se rompió.\nCausa: una causa.\nRegla: una regla para ${t}.\nMecanismo: un caso del self-test.\n\n`;
+    fs.writeFileSync(path.join(tmp, "docs", "gotchas.md"), `# Gotchas\n\n${gotcha("el primero")}`);
+    const legacy = [
+      "# STATUS — estado verificado",
+      "",
+      "Lo imprime el hook.",
+      "",
+      "- **Fecha del último gate completo:** 2026-01-02",
+      "- **Rama:** `main` (abc1234)",
+      "- **Veredicto:** VERDE (`npm run gate`)",
+      "",
+      "## Señales",
+      "",
+      "| Señal | Comando | Resultado |",
+      "|---|---|---|",
+      "| Lint | `node lint.mjs` | verde — con un `a \\| b` adentro |",
+      "| Tests | `node test.mjs` | verde — 3 pruebas |",
+      "",
+      "## Deuda conocida",
+      "",
+      "- **Sin Windows.** Nadie lo probó.",
+      "",
+    ].join("\n");
+    const st = path.join(tmp, "STATUS.md");
+    fs.writeFileSync(st, legacy);
+    g("add", "-A");
+    g("commit", "-qm", "base");
+    const run = (...a) => spawnSync(process.execPath, [path.join(tmp, "scripts", "status.mjs"), ...a], { cwd: tmp, encoding: "utf8" });
+    const read = () => fs.readFileSync(st, "utf8");
+    const out = (r) => `${r.stdout}${r.stderr}`;
+
+    const dry = run("migrate");
+    caso(dry.status === 0 && read() === legacy, "migrate is a dry-run by default: STATUS.md untouched", `exit ${dry.status}`);
+    // The reviewer's blocker: on a prose STATUS.md, sync/rebuild/record rewrote everything
+    // below the first `##` and emptied the journal. Now they refuse and touch nothing.
+    const journalLegacy = path.join(tmp, ".git", "harness-status-journal.jsonl");
+    const lineaGate = JSON.stringify({ ts: "2026-01-03T00:00:00+00:00", author: "gate", event: "gate.verdict", key: "main", what: "VERDE", evidence: "x" }) + "\n";
+    fs.writeFileSync(journalLegacy, lineaGate);
+    const sobreProsa = [run("sync"), run("rebuild"), run("record", "note", "x")];
+    caso(
+      sobreProsa.every((r) => r.status === 1 && /not a ledger/.test(out(r))) && read() === legacy && fs.readFileSync(journalLegacy, "utf8") === lineaGate,
+      "on a prose STATUS.md, sync · rebuild · record refuse and leave the file and the journal intact",
+      sobreProsa.map((r) => `exit ${r.status}`).join(" · "),
+    );
+    fs.rmSync(journalLegacy, { force: true });
+    const mig = run("migrate", "--apply");
+    const check1 = run("check");
+    caso(
+      mig.status === 0 && check1.status === 0 && /\| selftest \| signal\.verified \| Lint \|/.test(read()) && /a \\\| b/.test(read()) && /- \*\*Veredicto:\*\* VERDE/.test(read()) && /incident\.recorded \| el primero \| — \| docs\/gotchas\.md:\d+ \|/.test(read()),
+      "migrate --apply: legacy rows, debt and gotchas become events with git's author, escaped pipes survive, check is green",
+      `migrate ${mig.status} · check ${check1.status}: ${out(check1).slice(0, 200)}`,
+    );
+    // One file, no text twice: each long text appears exactly once, in its log row, and the gotcha's
+    // symptom stays in the register only. The projection is an index (verdict word + `#seq`).
+    const veces = (t, s) => t.split(s).length - 1;
+    caso(
+      veces(read(), "3 pruebas") === 1 && veces(read(), "Nadie lo probó") === 1 && !/algo se rompió/.test(read()) && /\| Tests \| `node test\.mjs` \| verde · #\d+ · \d{4}-/.test(read()) && /- \*\*Sin Windows\.\*\* · #\d+/.test(read()),
+      "no text twice: results and debt live only in their log row, a gotcha's symptom only in its register",
+      `«3 pruebas» ×${veces(read(), "3 pruebas")} · «Nadie lo probó» ×${veces(read(), "Nadie lo probó")} · symptom copied: ${/algo se rompió/.test(read())}`,
+    );
+
+    const migrado = read();
+    fs.writeFileSync(st, migrado.replace(/(\| Tests \| `node test\.mjs` \| )verde/, "$1rojo"));
+    const tocado = run("check");
+    caso(tocado.status === 1 && /edited by hand/.test(out(tocado)), "a hand edit of the projection is red and says so", `exit ${tocado.status}`);
+    caso(run("rebuild").status === 0 && run("check").status === 0, "rebuild replays the log and the hand edit is gone", "still red after rebuild");
+
+    const antes = read();
+    const cierre = run("record", "debt.closed", "no abierta", "x");
+    caso(cierre.status === 1 && read() === antes, "closing what was never opened is refused and writes nothing", `exit ${cierre.status}`);
+    const rec = run("record", "signal.verified", "Tests", "verde — 4 pruebas", "--evidence", "`node test.mjs`");
+    const proy = read().split("<!-- status:projection:end -->")[0];
+    const seqRec = /^status: #(\d+)/.exec(rec.stdout)?.[1];
+    const log = run("log", "--key", "Tests");
+    caso(
+      rec.status === 0 && new RegExp(`\\| Tests \\| \`node test\\.mjs\` \\| verde · #${seqRec} ·`).test(proy) && /3 pruebas/.test(out(log)) && /4 pruebas/.test(out(log)) && run("check").status === 0,
+      "record appends an event, the projection points to the newest #seq, and `log --key` shows both texts",
+      out(rec).slice(0, 160),
+    );
+
+    fs.appendFileSync(path.join(tmp, "docs", "gotchas.md"), gotcha("con a | b en el título"));
+    const sinEvento = run("check");
+    caso(sinEvento.status === 1 && /has no `incident\.recorded`/.test(out(sinEvento)), "a gotcha without its incident.recorded event is red", `exit ${sinEvento.status}`);
+    const inc = run("record", "incident.recorded", "con a | b en el título", "--evidence", "docs/gotchas.md");
+    caso(inc.status === 0 && run("check").status === 0, "recording the gotcha by title and pointer alone (with a `|` in the title) turns it green", out(run("check")).slice(0, 200));
+
+    fs.mkdirSync(path.join(tmp, ".git"), { recursive: true });
+    fs.writeFileSync(path.join(tmp, ".git", "harness-status-journal.jsonl"), JSON.stringify({ ts: "2099-01-01T00:00:00+00:00", author: "gate", event: "gate.verdict", key: "main", what: "ROJO — señales fallidas: Lint", evidence: "`npm run gate` @ def5678" }) + "\n");
+    const pendiente = run("check");
+    const sync = run("sync");
+    caso(
+      pendiente.status === 0 && /wait in the journal/.test(out(pendiente)) && sync.status === 0 && /\*\*Veredicto:\*\* ROJO \(`npm run gate`\) · #\d+/.test(read()) && /ROJO — señales fallidas: Lint/.test(read()) && !fs.existsSync(path.join(tmp, ".git", "harness-status-journal.jsonl")),
+      "a pending gate event is a warning; sync moves it into the log, the projection turns ROJO and the journal is emptied",
+      `check ${pendiente.status} · sync ${sync.status}`,
+    );
+
+    const filas = read().trimEnd().split("\n");
+    fs.writeFileSync(st, `${read().trimEnd()}\n${filas[filas.length - 1]}\n`);
+    const dup = run("check");
+    caso(dup.status === 1 && /duplicated/.test(out(dup)) && /--reseq/.test(out(dup)), "a duplicated seq (a merge of two branches) is red and names the fix", `exit ${dup.status}`);
+    caso(run("rebuild", "--reseq").status === 0 && run("check").status === 0, "rebuild --reseq renumbers and the ledger is green again", out(run("check")).slice(0, 200));
+
+    // Every other red that `check` promises, provoked once on a copy of the healthy ledger.
+    const sano = read();
+    const ultima = sano.trimEnd().split("\n").at(-1);
+    const n = Number(/^\| (\d+) \|/.exec(ultima)[1]);
+    const conFila = (fila) => fs.writeFileSync(st, `${sano.trimEnd()}\n${fila}\n`);
+    conFila(ultima.replace(/^\| \d+ \|/, `| ${n + 2} |`));
+    const salto = run("check");
+    const celdas = ultima.split(" | ");
+    celdas[0] = `| ${n + 1}`;
+    celdas[3] = "invented.event"; // # · Timestamp · Autor · EVENTO
+    conFila(celdas.join(" | "));
+    const desconocido = run("check");
+    fs.writeFileSync(st, sano);
+    const gotchasSanos = fs.readFileSync(path.join(tmp, "docs", "gotchas.md"), "utf8");
+    fs.writeFileSync(path.join(tmp, "docs", "gotchas.md"), gotchasSanos.split("### GOTCHA: con a | b")[0]);
+    const huerfano = run("check");
+    fs.writeFileSync(path.join(tmp, "docs", "gotchas.md"), gotchasSanos);
+    caso(
+      salto.status === 1 && /seq jumps/.test(out(salto)) && desconocido.status === 1 && /unknown event/.test(out(desconocido)) && huerfano.status === 1 && /no longer has it/.test(out(huerfano)) && run("check").status === 0,
+      "a seq gap, an unknown event and a recorded incident whose gotcha was removed are each red",
+      `gap ${salto.status} · unknown ${desconocido.status} · orphan ${huerfano.status}`,
+    );
+
+    // Warnings, never red: evidence pointing at an untracked path, and state older than staleDays.
+    cfg({ ...events, staleDays: 0 });
+    run("record", "signal.verified", "Fantasma", "verde", "--evidence", "`node scripts/no-existe.mjs`"); // linkcheck:ignore — ruta ficticia
+    const avisos = run("check");
+    cfg(events);
+    caso(
+      avisos.status === 0 && /obsolete\? signal «Fantasma»/.test(out(avisos)) && /not re-verified in more than 0 days/.test(out(avisos)) && /open for more than 0 days/.test(out(avisos)),
+      "obsolete evidence and stale signals/debt are warnings with their fix, and the ledger stays green",
+      out(avisos).slice(0, 240),
+    );
+
+    cfg(null);
+    caso(run("check").status === 0 && /ledger is off/.test(run("check").stdout), "without `status.events` the ledger is off, never red", "red without the key");
+
+    // The gate writes the journal, never STATUS.md, and only when the verdict changes.
+    for (const d of ["scripts", ".claude/hooks"]) fs.mkdirSync(path.join(tmpGate, d), { recursive: true });
+    fs.copyFileSync(abs("scripts/gate.mjs"), path.join(tmpGate, "scripts", "gate.mjs"));
+    fs.copyFileSync(abs(".claude/hooks/harness.mjs"), path.join(tmpGate, ".claude", "hooks", "harness.mjs"));
+    const senal = ["node", "-e", "process.exit(require('fs').readFileSync('msg.txt','utf8')==='ok'?0:1)"];
+    fs.writeFileSync(
+      path.join(tmpGate, ".claude", "harness.config.json"),
+      JSON.stringify({ gate: { command: "npm run gate", signals: [{ name: "cebo", command: senal, why: "selftest" }] }, panel: { enabled: false }, status: { file: "STATUS.md", events: { journal: ".git/journal.jsonl" } } }),
+    );
+    const journal = path.join(tmpGate, ".git", "journal.jsonl");
+    const gate = (msg, ...a) => {
+      fs.writeFileSync(path.join(tmpGate, "msg.txt"), msg);
+      return spawnSync(process.execPath, [path.join(tmpGate, "scripts", "gate.mjs"), ...a], { cwd: tmpGate, encoding: "utf8" });
+    };
+    const lineas = () => (fs.existsSync(journal) ? fs.readFileSync(journal, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l)) : []);
+    gate("ok");
+    gate("ok");
+    const verdes = lineas();
+    gate("roto");
+    gate("roto");
+    const rojos = lineas();
+    gate("ok", "fast");
+    caso(
+      verdes.length === 1 && verdes[0].event === "gate.verdict" && verdes[0].what === "VERDE" && rojos.length === 2 && /^ROJO — señales fallidas: cebo/.test(rojos[1].what) && lineas().length === 2 && !fs.existsSync(path.join(tmpGate, "STATUS.md")),
+      "the gate journals a verdict only when it changes, never in fast mode, and never writes STATUS.md",
+      `green runs → ${verdes.length} · red runs → ${rojos.length} · after fast → ${lineas().length}`,
+    );
+    // heartbeatDays: an unchanged verdict older than the heartbeat is journaled again, so steady
+    // green does not leave the date in STATUS.md behind for `drift` to call stale.
+    const registroGate = path.join(tmpGate, ".git", "harness-gate.json");
+    const reg = JSON.parse(fs.readFileSync(registroGate, "utf8"));
+    reg.bitacora.fecha = new Date(Date.now() - 8 * 86400000).toISOString();
+    fs.writeFileSync(registroGate, JSON.stringify(reg));
+    gate("roto");
+    const latido = lineas();
+    gate("roto");
+    caso(latido.length === 3 && lineas().length === 3, "an unchanged verdict older than `heartbeatDays` (default 7) is journaled once more, then quiet again", `after the old one → ${latido.length} · next run → ${lineas().length}`);
+  } catch (e) {
+    bad("ledger: cases", e.stack?.split("\n").slice(0, 3).join(" · ") ?? String(e));
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+    fs.rmSync(tmpGate, { recursive: true, force: true });
+  }
+}
+
+// 3g-coder. `coder-spawn`: one coder as a main session in a worktree OUTSIDE the root. A fake agent
+//     stands behind `coder.command` (no model, no network) and records where it ran and what it
+//     got by stdin. What is under test is our machine: dry-run by default, the branch pattern,
+//     never inside the root, one unit one worktree, and no verdict line = failed run.
+if (enParte("reglas") && config.coder && fs.existsSync(abs("scripts/coder-spawn.mjs"))) {
+  const tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "harness-coder-")));
+  const unidad = path.basename(tmp).toLowerCase().replace(/[^a-z0-9._-]/g, "-");
+  const wt = (u) => path.join(path.dirname(tmp), `wt-${u}`);
+  const registro = path.join(path.dirname(tmp), `${path.basename(tmp)}-fake.json`);
+  try {
+    const g = (...a) => spawnSync("git", a, { cwd: tmp, encoding: "utf8" });
+    g("init", "-q", "-b", "main");
+    g("config", "user.email", "selftest@example.com");
+    g("config", "user.name", "selftest");
+    for (const d of ["scripts", ".claude/hooks"]) fs.mkdirSync(path.join(tmp, d), { recursive: true });
+    fs.copyFileSync(abs("scripts/coder-spawn.mjs"), path.join(tmp, "scripts", "coder-spawn.mjs"));
+    fs.copyFileSync(abs(".claude/hooks/harness.mjs"), path.join(tmp, ".claude", "hooks", "harness.mjs"));
+    const fake = path.join(tmp, "fake-agent.js");
+    fs.writeFileSync(
+      fake,
+      `const fs=require('fs');const input=fs.readFileSync(0,'utf8');fs.writeFileSync(${JSON.stringify(registro)},JSON.stringify({cwd:process.cwd(),input}));` +
+        `if(!process.env.NO_VERDICT)console.log('trabajo hecho\\nENTREGA: LISTA');else console.log('creo que terminé');`,
+    );
+    const cfg = (extra = {}) =>
+      fs.writeFileSync(
+        path.join(tmp, ".claude", "harness.config.json"),
+        JSON.stringify({
+          workflow: { baseBranch: "main", branchPattern: "^feat/[a-z0-9-]+$" },
+          subagentOutput: { contracts: { coder: { mustMatch: "ENTREGA:\\W*(LISTA|CON PREGUNTAS|BLOQUEADA)" } } },
+          coder: { command: [process.execPath, fake], worktreeDir: "..", setupCommand: [], ...extra },
+        }),
+      );
+    cfg();
+    fs.writeFileSync(path.join(tmp, "brief.md"), "implement the sum\n");
+    g("add", "-A");
+    g("commit", "-qm", "base");
+    const spawn = (args, env = {}) => spawnSync(process.execPath, [path.join(tmp, "scripts", "coder-spawn.mjs"), ...args], { cwd: tmp, encoding: "utf8", env: { ...process.env, ...env } });
+    const caso = (cond, nombre, falla) => (cond ? ok(`coder-spawn: ${nombre}`) : bad(`coder-spawn: ${nombre}`, falla));
+    const base = ["--unit", unidad, "--brief", "brief.md"];
+
+    const seco = spawn([...base, "--branch", "feat/sum"]);
+    caso(seco.status === 0 && /DRY-RUN/.test(seco.stdout) && !fs.existsSync(wt(unidad)), "dry-run by default creates nothing", `exit ${seco.status}, worktree ${fs.existsSync(wt(unidad))}`);
+    caso(spawn([...base, "--branch", "Sum_Branch", "--apply"]).status === 1 && !fs.existsSync(wt(unidad)), "a branch outside `workflow.branchPattern` is rejected", "accepted a bad branch name");
+    cfg({ worktreeDir: "." });
+    caso(spawn([...base, "--branch", "feat/sum", "--apply"]).status === 1, "a worktree INSIDE the root is rejected", "created a worktree under the root");
+    cfg();
+    const hecho = spawn([...base, "--branch", "feat/sum", "--apply"]);
+    const visto = fs.existsSync(registro) ? JSON.parse(fs.readFileSync(registro, "utf8")) : {};
+    caso(
+      hecho.status === 0 && /ENTREGA: LISTA/.test(hecho.stdout) && visto.cwd && fs.realpathSync(visto.cwd) === fs.realpathSync(wt(unidad)) && visto.input === "implement the sum\n",
+      "--apply runs the agent INSIDE its own worktree, outside the root, with the brief by stdin",
+      `exit ${hecho.status}: ${`${hecho.stderr}`.trim().slice(0, 160)} · cwd ${visto.cwd}`,
+    );
+    caso(fs.existsSync(path.join(tmp, ".git", "coder-runs", `${unidad}.log`)), "the transcript goes to .git/, not the source tree", "no transcript under .git/coder-runs");
+    caso(spawn([...base, "--branch", "feat/other", "--apply"]).status === 1, "one unit, one worktree: an existing folder is rejected", "reused an existing worktree folder");
+    const sinVeredicto = spawn(["--unit", `${unidad}-b`, "--brief", "brief.md", "--branch", "feat/sum-b", "--apply"], { NO_VERDICT: "1" });
+    caso(sinVeredicto.status === 1 && /ENTREGA|verdict/.test(sinVeredicto.stderr), "a coder that closes without `ENTREGA:` is a failed run", `exit ${sinVeredicto.status}`);
+  } finally {
+    for (const u of [unidad, `${unidad}-b`]) {
+      spawnSync("git", ["worktree", "remove", "--force", wt(u)], { cwd: tmp });
+      fs.rmSync(wt(u), { recursive: true, force: true });
+    }
+    fs.rmSync(registro, { force: true });
     fs.rmSync(tmp, { recursive: true, force: true });
   }
 }
@@ -2754,6 +3258,41 @@ if (config.profiles?.dir) {
     } finally {
       fs.rmSync(tmp, { recursive: true, force: true });
     }
+  }
+}
+
+// 4e-portable. PORTABLE: every tracked path can be checked out on Windows, macOS and Linux. Per
+//     path by stdin (the virtual path is the case, nothing is written); the whole-repo half
+//     (case collisions, length) in a temp git repo whose index gets the paths through
+//     `update-index --cacheinfo` — a case-insensitive disk could not even hold both files.
+if (enParte("reglas") && config.portablePaths) {
+  // Under `fixture/`, a root this repo does not have: the link-check does not read these as citations.
+  const muerde = [["fixture/CON.md", "nombre reservado"], ["fixture/lpt1", "nombre reservado sin extensión"], ["fixture/a?b.md", "carácter inválido"], ["fixture/punto.", "punto final"]];
+  const malas = muerde.filter(([p]) => !lint(p, "x").out.includes("PORTABLE"));
+  if (!malas.length) ok(`lint PORTABLE caza ${muerde.map(([, d]) => d).join(" · ")}`);
+  else bad("lint PORTABLE muerde", `pasaron: ${malas.map(([p]) => p).join(", ")}`);
+  const inocentes = ["fixture/console.md", "fixture/auxiliar.md", "fixture/com.md", "fixture/v1.2/notas.md"];
+  const deMas = inocentes.filter((p) => lint(p, "x").out.includes("PORTABLE"));
+  if (!deMas.length) ok(`lint PORTABLE no muerde de más (${inocentes.join(", ")})`);
+  else bad("lint PORTABLE muerde de más", deMas.join(", "));
+
+  const tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "harness-portable-")));
+  try {
+    const g = (...a) => spawnSync("git", a, { cwd: tmp, encoding: "utf8", input: a[0] === "hash-object" ? "x" : undefined });
+    g("init", "-q");
+    for (const d of ["scripts", ".claude/hooks"]) fs.mkdirSync(path.join(tmp, d), { recursive: true });
+    fs.copyFileSync(abs("scripts/repo-lint.mjs"), path.join(tmp, "scripts", "repo-lint.mjs"));
+    fs.copyFileSync(abs(".claude/hooks/harness.mjs"), path.join(tmp, ".claude", "hooks", "harness.mjs"));
+    fs.writeFileSync(path.join(tmp, ".claude", "harness.config.json"), JSON.stringify({ portablePaths: { maxLength: 40 } }));
+    const blob = g("hash-object", "-w", "--stdin").stdout.trim();
+    const largo = `fixture/${"x".repeat(40)}.md`;
+    for (const p of ["fixture/Guia.md", "fixture/guia.md", largo]) g("update-index", "--add", "--cacheinfo", `100644,${blob},${p}`);
+    const r = spawnSync(process.execPath, [path.join(tmp, "scripts", "repo-lint.mjs")], { cwd: tmp, encoding: "utf8" });
+    const out = `${r.stdout}${r.stderr}`;
+    if (r.status === 1 && /choca con «fixture\/Guia\.md»/.test(out) && out.includes(`${largo}:0  [PORTABLE]  ruta de`)) ok("lint PORTABLE caza dos rutas que sólo difieren en mayúsculas y una ruta más larga que `maxLength`");
+    else bad("lint PORTABLE sobre el repo entero", `exit ${r.status}: ${out.slice(0, 240)}`);
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
   }
 }
 
@@ -3204,6 +3743,9 @@ if (corre("perfiles") && config.examples?.dir) {
     if (huerfanas.length) {
       problemas.push(`\`${huerfanas.join(", ")}\` ensucian el gate y el barrido del lint no las lee (declaralas en \`lint.sourceExtensions\`)`);
     }
+
+    const anchas = referenciasFalsas(ej.tracker);
+    if (anchas.length) problemas.push(`\`tracker.issuePattern\` caza ${anchas.map((s) => `«${s}»`).join(", ")}: cualquier commit que lo mencione «tiene referencia»`);
 
     const dep = ej.forbiddenDeps;
     if (dep?.manifest && (dep.packages ?? []).length && !dep.matcher && !esClaveValor(dep.manifest)) {

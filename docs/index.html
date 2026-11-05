@@ -1895,6 +1895,8 @@ DRY-RUN: 38 archivo(s) a copiar, 0 conservado(s).</code></pre>
             <tr><td><a href="https://github.com/raalzate/agent-harness/blob/main/docs/decisions/0014-selftest-en-abanico.md">0014</a></td><td>El self-test corre en partes paralelas; las que tocan los marcadores de sesión van en serie en el mismo grupo. El gate, en serie.</td></tr>
             <tr><td><a href="https://github.com/raalzate/agent-harness/blob/main/docs/decisions/0015-promptfoo-como-corredor.md">0015</a></td><td>promptfoo evalúa a los subagentes como corredor (npx, versión fija), nunca como dependencia; el veredicto y el k/n por caso los calcula el arnés.</td></tr>
             <tr><td><a href="https://github.com/raalzate/agent-harness/blob/main/docs/decisions/0016-biblioteca.md">0016</a></td><td>La documentación se indexa por tipo (grafo, tabla, documento) y se ubica en una sola base de conocimiento; el índice lo genera un comando y lo verifica el gate.</td></tr>
+            <tr><td><a href="https://github.com/raalzate/agent-harness/blob/main/docs/decisions/0017-status-como-bitacora.md">0017</a></td><td>STATUS.md es una bitácora append-only (event sourcing) y el estado es su proyección; el gate anota el veredicto en un journal bajo <code>.git/</code>, nunca en el árbol.</td></tr>
+            <tr><td><a href="https://github.com/raalzate/agent-harness/blob/main/docs/decisions/0018-limites-por-diseno.md">0018</a></td><td>Deuda y límite son cosas distintas: lo que el arnés no hace a propósito sale de la deuda con su porqué, su mitigación y qué lo reabriría.</td></tr>
           </tbody>
         </table>
       </div>
@@ -1995,6 +1997,10 @@ DRY-RUN: 38 archivo(s) a copiar, 0 conservado(s).</code></pre>
         L("artifacts-check: OK — sin artefactos sueltos", "dim"),
         L("    ✓ artifacts in place", "ok"),
         L(""),
+        L("──▶ worktrees out of sight"),
+        L("worktree-check: OK — ninguno visible dentro de la raíz", "dim"),
+        L("    ✓ worktrees out of sight", "ok"),
+        L(""),
         L("──▶ code index (codegraph)"),
         L("codegraph: 1.284 símbolos · índice sincronizado", "dim"),
         L("    ✓ code index (codegraph)", "ok"),
@@ -2016,6 +2022,11 @@ DRY-RUN: 38 archivo(s) a copiar, 0 conservado(s).</code></pre>
         L("──▶ library index (docs)"),
         L("library: OK — 43 entries in 6 bases, index in sync.", "dim"),
         L("    ✓ library index (docs)", "ok"),
+        L(""),
+        L("──▶ status ledger"),
+        L("status ledger: ok — 88 events, 37 signals, 15 debt,", "dim"),
+        L("30 incidents, 2 warning(s).", "dim"),
+        L("    ✓ status ledger", "ok"),
         L(""),
         L("──▶ harness cost (hook latency)"),
         L("LATENCIA VERDE — todos los hooks dentro de", "dim"),
@@ -2056,6 +2067,10 @@ DRY-RUN: 38 archivo(s) a copiar, 0 conservado(s).</code></pre>
         L("──▶ artifacts in place"),
         L("artifacts-check: OK — artefactos en el gestor", "dim"),
         L("    ✓ artifacts in place", "ok"),
+        L(""),
+        L("──▶ worktrees out of sight"),
+        L("worktree-check: OK — ninguno visible dentro de la raíz", "dim"),
+        L("    ✓ worktrees out of sight", "ok"),
         L(""),
         L("──▶ code index (codegraph)"),
         L("codegraph: 1.284 símbolos · índice sincronizado", "dim"),
@@ -2099,6 +2114,10 @@ DRY-RUN: 38 archivo(s) a copiar, 0 conservado(s).</code></pre>
         L("──▶ artifacts in place"),
         L("artifacts-check: OK — artefactos en el gestor", "dim"),
         L("    ✓ artifacts in place", "ok"),
+        L(""),
+        L("──▶ worktrees out of sight"),
+        L("worktree-check: OK — ninguno visible dentro de la raíz", "dim"),
+        L("    ✓ worktrees out of sight", "ok"),
         L(""),
         L("──▶ code index (codegraph)"),
         L("    – OMITIDA: no existe `.codegraph` (omitido ≠ pasó)", "sk"),

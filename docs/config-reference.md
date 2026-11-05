@@ -119,7 +119,22 @@ Regex contra la línea de comandos completa. La lista genérica ya viene; lo que
 lo irreversible **de tu stack** (ver [portar.md](portar.md) paso 2).
 
 Ojo con el falso negativo obvio: el agente puede reformular. Esto no es un sandbox, es un
-guardarraíl — sube el costo del error accidental, no detiene a un adversario.
+guardarraíl: sube el costo del error accidental, no detiene a un adversario (límite declarado
+en [ADR 0018](decisions/0018-limites-por-diseno.md)). Este repo trae también los equivalentes de
+PowerShell (`Remove-Item -Recurse`, `iex (iwr …)`, `Get-ChildItem … | Remove-Item`).
+
+**`sample` (opcional, en cualquier regla con `pattern`).** Es el comando para el que existe la
+regla, escrito por quien la escribió:
+
+```json
+{ "pattern": "\\bgit(?:\\s+…)*\\s+reset\\s+--hard", "reason": "…", "sample": "git -C . reset --hard HEAD" }
+```
+
+El self-test hace morder cada regla con una muestra. Por defecto la deriva del patrón, pero un
+patrón con lookbehind, alternativas anidadas o comillas no se reduce a un ejemplo, y esa regla
+quedaba **omitida para siempre**: un freno sin prueba de vida. Con `sample`, el caso usa la
+muestra del autor. El self-test verifica aparte que cada `sample` declarado case con su propio
+patrón: una muestra que no casa probaría un comando que la regla nunca ve, y eso es rojo.
 
 ### `bash.ask` — que decida el humano (opcional)
 
@@ -348,6 +363,50 @@ de este repo. Vacío = el hook arma uno con `gate.command`.
 Lo imprime el hook `SessionStart` (primeras 40 líneas). Sirve para no releer el repo entero para
 contestar "¿esto anda?". Sólo lo verificado con un comando; lo que se supone va en deuda conocida.
 
+### `status.events` — la bitácora (event sourcing)
+
+```json
+"events": {
+  "journal": ".git/harness-status-journal.jsonl",
+  "staleDays": 30,
+  "heartbeatDays": 7
+}
+```
+
+Con esta clave, `status.file` deja de editarse a mano. Es una **bitácora append-only**, una tabla
+`# · Timestamp · Autor · Evento · Clave · Qué pasó · Evidencia`. El estado actual (fecha, rama,
+veredicto, señales y deuda) es una **proyección** que `scripts/status.mjs` reproduce plegando los
+eventos en orden. Lo de arriba de la proyección (título e introducción) es del humano y se conserva.
+
+**Un solo archivo y ningún texto dos veces.** La proyección es un índice: la deuda primero, por
+título, para que entre en las 40 líneas que lee el hook de sesión; después una línea por señal con
+la palabra del veredicto, el `#` del evento y su fecha. El texto completo vive sólo en la fila de
+su evento (`log --key "<clave>"` la muestra entera). Un `incident.recorded` lleva el título del
+gotcha y el puntero `docs/gotchas.md:línea`, no una copia del síntoma.
+
+| Clave | Qué hace |
+|---|---|
+| `journal` | dónde anota el gate un `gate.verdict` cuando **cambia** el veredicto. Va en `.git/` (P7): el gate nunca escribe `STATUS.md`. `status.mjs sync` (o cualquier `record`) lo pasa a la bitácora |
+| `staleDays` | a partir de cuántos días una señal sin re-verificar o una deuda abierta salen como aviso de obsoleto. Default: `drift.statusMaxAgeDays` |
+| `heartbeatDays` | aunque el veredicto no cambie, el gate anota uno si el último tiene más de estos días: sin eso, meses de verde quietos dejan la fecha atrás y `drift` la da por vencida |
+| `labels` | (opcional) los títulos y columnas que se escriben, si el repo no es en español. Los campos de cabecera salen de `panel.status.fields` |
+
+Eventos (vocabulario cerrado): `gate.verdict`, `signal.verified`, `signal.retired`, `debt.opened`,
+`debt.closed`, `incident.recorded`, `incident.retired`, `note`. Un `*.retired` o
+`debt.closed` sobre una clave que no está abierta se rechaza: la historia no puede cerrar lo que
+nunca abrió.
+
+```bash
+node scripts/status.mjs record signal.verified "Self-test" "verde — 590 casos" --evidence "`node scripts/harness-selftest.mjs`"
+node scripts/status.mjs log --event debt --since 2026-10-01   # consultar la historia
+node scripts/status.mjs log --key "Self-test"                 # una sola coincidencia: la fila entera
+node scripts/status.mjs check                                 # la señal del gate
+node scripts/status.mjs migrate                               # STATUS.md en prosa → bitácora (dry-run)
+```
+
+Sin `status.events` el script no hace nada y `STATUS.md` sigue siendo prosa: un repo portado no se
+rompe por no tener la bitácora. La depuración guiada es `/bitacora`.
+
 ---
 
 ## `branches` — cómo entra el trabajo
@@ -499,7 +558,10 @@ Escribir **fuera** del repo nunca se bloquea: un borrador en el scratchpad es pa
   "criteriaCommand": ["gh", "issue", "view", "{issue}", "--json", "body", "-q", ".body"],
   "criterionPattern": "^\\s*[-*]\\s+\\[[ xX]\\]\\s+(.+)$",
   "trivialEvidence": ["^(true|:|exit 0|exit)$", "^(echo|printf)\\b"],
-  "timeoutMs": 600000 }
+  "timeoutMs": 600000,
+  "todoFile": "specs/{item}/tasks.md",
+  "todoOpenPattern": "^\\s*[-*]\\s+\\[ \\]\\s+(.+)$",
+  "lockTests": { "pattern": "" } }
 ```
 
 Planificar antes de escribir, no salirse de lo planificado, y que «terminado» lo demuestre el
@@ -512,6 +574,67 @@ arnés (#52, #53). `scripts/task.mjs` escribe la tarea en `file`:
 | `criterion "<texto>"` | agrega un criterio |
 | `evidence <n> -- <argv…>` | el comando que FALLA si el criterio n no se cumple. Se rechaza si casa `trivialEvidence` o está en `bash.deny`/`bash.ask`: la verificación la corre el gate, y sin ese chequeo la evidencia era la forma de que el arnés ejecutara lo que `bash-guard` le frena al agente |
 | `status` · `verify` · `done` · `abandon --why "…"` | qué falta · la señal del gate · cerrar (sólo en verde) · descartar con motivo |
+| `lock` | congela (sha256) todos los archivos de prueba que hay en ese momento: los rojos nuevos y los viejos. Se corre **después** del commit rojo |
+| `unlock <ruta>… --why "…"` | libera una prueba congelada; sin motivo se rechaza, y el motivo queda en `log` (`unlocks`) para el `reviewer` |
+
+**La lista de tareas** (`todoFile`, opcional). La lista que el agente escribe **antes** de codificar
+—el `tasks.md` del [agente `coder`](../.claude/agents/coder.md)—, con `{item}` sustituido por el ítem
+en minúsculas y sin caracteres raros (`#12` → `12`). Va **versionada** en la rama: el plan viaja con el
+PR y otro agente lo retoma. Siempre está dentro del alcance (se puede escribir antes de declararlo:
+planificar es parte de la tarea), y `verify` es rojo si no existe o si alguna línea casa
+`todoOpenPattern` (default: una casilla `- [ ]` sin marcar). Sin la clave, la lista no se exige.
+
+**Pruebas inmutables** (`lockTests`, opcional). `pattern` dice qué es un archivo de prueba; vacío
+usa `xp.testFirst.testPattern`, para que «este commit trae su prueba» y «esta prueba está congelada»
+nunca discrepen. Con `lock` hecho, `protected-paths.mjs` deniega editar una prueba congelada y
+`verify` las vuelve a hashear, así que una edición por Bash también es roja. Una prueba **nueva**
+sigue libre: más pruebas nunca aflojan la definición de terminado. Un `lock` con forma rota se ignora
+(P5). Con `lockTests` declarado, una tarea cuyo diff toca archivos de prueba y **nunca** hizo `lock` es
+roja: una prueba aflojada antes de congelarla es invisible para el hash. Y `artifacts-check` acepta
+la lista de tareas bajo `tracker.specsDir`: es el plan de trabajo del agente, no la spec del equipo.
+
+---
+
+## `worktrees` — worktrees fuera de la vista (opcional)
+
+```json
+{ "enabled": true }
+```
+
+Activa la señal «worktrees out of sight» (`scripts/worktree-check.mjs`): recorre `git worktree list`
+y es **roja** por cada worktree bajo la raíz del repo que `.gitignore` no esconde —cada escaneo lo
+leería como archivos propios ([gotcha](gotchas.md))—. Un worktree cuya rama ya está integrada en
+`workflow.baseBranch` es un **aviso**, nunca rojo: se borra a mano y sin `--force`. Si usás `/code`
+(subagentes con `isolation: worktree`, que Claude Code crea dentro de `.claude/`), esa carpeta va en
+`.gitignore`. Ver [worktrees.md](worktrees.md).
+
+---
+
+## `coder` — un coder como sesión propia (opcional)
+
+```json
+{ "command": ["claude", "-p", "--agent", "coder", "--permission-mode", "acceptEdits",
+              "--allowedTools", "Bash,Read,Edit,Write,Grep,Glob,Agent"],
+  "worktreeDir": "..",
+  "setupCommand": [],
+  "timeoutMs": 3600000 }
+```
+
+Lo lee `scripts/coder-spawn.mjs` (`--unit <slug> --branch <rama> --brief <archivo> [--apply]`), la vía
+de `/code` para que el [`coder`](../.claude/agents/coder.md) corra como **sesión principal** —puede
+delegar en `librarian` y `explorer`, cosa que un subagente no puede— dentro de su propio worktree:
+
+| Clave | Qué hace |
+|---|---|
+| `command` | argv del agente; el brief entra por **stdin**, nunca interpolado. Corre con `cwd` en el worktree, así que los hooks se anclan a él |
+| `worktreeDir` | dónde se crea `wt-<unit>`, relativo al repo. Una ruta que cae **dentro** de la raíz se rechaza |
+| `setupCommand` | argv que prepara el worktree antes de que el agente mida nada (git no trae dependencias). Si falla, la corrida falla |
+| `timeoutMs` | tope de la corrida |
+
+Sin `--apply` es dry-run (P9). La rama tiene que casar `workflow.branchPattern`, sale de
+`origin/<workflow.baseBranch>` si existe, y no puede existir de antes. El veredicto es la línea de
+`subagentOutput.contracts.coder.mustMatch`: sin ella la corrida falló, sea cual sea el exit code. La
+transcripción queda en `.git/coder-runs/<unit>.log` (P7).
 
 Con una tarea activa, `protected-paths.mjs` deniega editar un archivo del repo fuera del alcance
 —y cualquiera mientras el alcance no esté declarado—. La señal «task» del gate (`verify`) re-ejecuta
@@ -599,6 +722,7 @@ sí frena `bash.deny` es borrar o reescribir el marcador y el libro. Decisión e
 |---|---|
 | `kind` | informativo, para quien lee el config. Ninguna máquina lo interpreta |
 | `issuePattern` | qué cuenta como referencia a un ítem de trabajo en un mensaje de commit. GitHub y GitLab usan `#123`; Azure Boards, `AB#123`; Jira, `PROJ-123` |
+| `issueNonExamples` | (opcional) texto que **no** es una referencia y que `issuePattern` no puede cazar, además de la lista por defecto (`UTF-8`, `ISO-8601`, `SHA-256`, `HTTP-2`, `color #fff`…). Una muestra derivada del patrón no detecta un patrón que caza de más, porque también caza su muestra. Las contra-muestras sí: el self-test es rojo si alguna casa, en este config y en cada ejemplo publicado |
 | `issueExample` | lo que se le muestra a quien quedó frenado |
 | `newIssueHint` | los comandos concretos para abrir el ítem, en el CLI de **tu** forja |
 | `artifactsIn` | `"tracker"` o `"repo"`: dónde viven spec, plan y tareas |
@@ -671,7 +795,39 @@ al historial de ninguna manera.
 ```
 
 Lo lee `.githooks/post-commit`. Sin esta clave, ese hook no hace nada. Si falla, el commit ya
-ocurrió y no se toca: lo derivado es una ayuda de lectura, no parte del entregable.
+ocurrió y no se toca: lo derivado es una ayuda de lectura, no parte del entregable. Este repo lo
+usa para `codegraph sync`, así el índice del código no queda viejo después de cada commit. El
+caso 3f-post del self-test lo prueba en un repo git real:
+
+- un commit que toca un `watch` refresca;
+- un `.md` no refresca;
+- un refresco que falla no deshace el commit;
+- sin la clave, no hace nada.
+
+Ese caso destapó que el primer commit de un repo nunca refrescaba: a `git diff-tree` le faltaba
+`--root`.
+
+---
+
+## `portablePaths` — rutas que se clonan en cualquier sistema (opcional)
+
+```json
+"portablePaths": { "maxLength": 200 }
+```
+
+Enciende la regla `PORTABLE` de `scripts/repo-lint.mjs`. En cada gate recorre `git ls-files` y
+marca cinco cosas:
+
+- nombres reservados de Windows (`CON`, `PRN`, `AUX`, `NUL`, `COM1-9`, `LPT1-9`, con o sin
+  extensión);
+- caracteres que Windows rechaza (`< > : " | ? * \`);
+- nombres que terminan en punto o espacio;
+- dos rutas que sólo difieren en mayúsculas;
+- rutas de más de `maxLength` caracteres.
+
+En la máquina que creó el archivo no se ve nada: el checkout falla en Windows, o uno de los dos
+archivos desaparece en macOS. `maxLength` deja lugar a la carpeta del clon bajo el MAX_PATH de
+Windows (260). Ver [multiplataforma.md](multiplataforma.md).
 
 ---
 

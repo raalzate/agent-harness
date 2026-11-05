@@ -515,6 +515,26 @@ export function dentroDelAlcance(rel, entradas) {
 }
 
 /**
+ * Text that is never a work-item reference, in any tracker: standard names a commit message
+ * mentions. `tracker.issuePattern` must match none of them (self-test). A pattern derived sample
+ * cannot catch a pattern that matches too much — it matches its own sample too — so the
+ * counter-examples are the proof that it does not bite where it should not. `tracker.issueNonExamples`
+ * adds the team's own (a product code that looks like `ABC-12`).
+ */
+export const DEFAULT_ISSUE_NON_EXAMPLES = ["UTF-8", "ISO-8601", "SHA-256", "HTTP-2", "TLS-1", "x86-64", "color #fff", "#!/bin/sh"];
+
+/** Where the gate leaves `gate.verdict` events for the status ledger (`status.events.journal`). */
+export const DEFAULT_STATUS_JOURNAL = ".git/harness-status-journal.jsonl";
+
+/** Local time with its offset: the ledger is read by people in a timezone, not in UTC. */
+export function isoLocal(d = new Date()) {
+  const pad = (n) => String(Math.abs(n)).padStart(2, "0");
+  const off = -d.getTimezoneOffset();
+  const sign = off >= 0 ? "+" : "-";
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}${sign}${pad(Math.trunc(off / 60))}:${pad(off % 60)}`;
+}
+
+/**
  * Dónde vive un archivo de estado declarado como `.git/<algo>`. En un worktree, `.git` no es un
  * directorio sino un ARCHIVO que dice `gitdir: <ruta>`: escribir en `.git/x` reventaba con
  * EEXIST y el freno quedaba inerte. Se resuelve leyendo ese archivo, sin lanzar git — los hooks
@@ -549,4 +569,32 @@ export function tareaActiva(config) {
   } catch {
     return null;
   }
+}
+
+/**
+ * Where the task's own to-do list lives (`task.todoFile`, `{item}` replaced), or null when the
+ * config declares none. The item is slugged because it is whatever the tracker calls it (`#12`,
+ * `PROJ-7`, `no-issue`) and a path cannot carry `#` or spaces safely on every OS.
+ *
+ * Shared by the hook (the list is always inside the scope: planning is part of the task) and by
+ * `scripts/task.mjs` (the list must exist and be closed to call the task done). Two copies of
+ * this path would let the hook allow a file the verification then looks for somewhere else.
+ */
+export function rutaDeTodo(config, item) {
+  const plantilla = config?.task?.todoFile;
+  if (!plantilla || !item) return null;
+  const slug = String(item).toLowerCase().replace(/[^a-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "") || "task";
+  return String(plantilla).split("{item}").join(slug).split("\\").join("/");
+}
+
+/**
+ * The test files the active task froze (`task.mjs lock`), as a set of repo-relative paths. A
+ * locked test is the definition of done the code has to meet: editing it to go green turns the
+ * test into a mirror of the code. Empty set when there is no lock or it has the wrong shape
+ * (broken state lets the human through, P5).
+ */
+export function pruebasBloqueadas(tarea) {
+  const archivos = tarea?.lock?.files;
+  if (!archivos || typeof archivos !== "object" || Array.isArray(archivos)) return new Set();
+  return new Set(Object.keys(archivos));
 }

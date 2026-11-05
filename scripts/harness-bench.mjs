@@ -455,14 +455,34 @@ function probar(stack, fx) {
     const punteros = correr("node", [path.join(repo, "scripts/docs-linkcheck.mjs")], { cwd: repo });
     registrar(stack, "el arnés instalado no apunta a la nada", punteros.status === 0, punteros.salida.trim());
 
-    // 13. El gate del repo portado, de punta a punta. Se mide que CORRA y que su rojo sea
-    //     explicable (los placeholders del config de arranque), no que sea verde.
+    // 13. El gate del repo portado, de punta a punta, y VERDE. Primero corre tal como quedó
+    //     instalado: rojo, y tiene que ser rojo sólo por lo que el arranque le pide al equipo. Después
+    //     el banco hace esos pasos como los haría el equipo —quitar las violaciones que plantó
+    //     (la dependencia vetada y el import prohibido) y declarar quién corre la deriva
+    //     (`drift.runner`)— y el gate tiene que salir VERDE. Antes se medía sólo que corriera: un
+    //     self-test del arnés rojo en todo repo portado pasaba como «rojo explicable».
     if (CON_GATE) {
-      const gate = correr("bash", [path.join(repo, "scripts/gate.sh")], { cwd: repo });
-      const corrio = /──▶ harness self-test/.test(gate.salida);
-      registrar(stack, "el gate del repo portado corre", corrio, gate.salida.trim().split("\n").slice(-3).join("\n"));
-      const razones = [...gate.salida.matchAll(/✗ (.+)/g)].map((m) => m[1]);
-      console.log(`   · gate del destino: ${gate.status === 0 ? "VERDE" : "ROJO"}${razones.length ? ` (${razones.join(", ")})` : ""}`);
+      const gate = correr("node", [path.join(repo, "scripts/gate.mjs")], { cwd: repo });
+      registrar(stack, "el gate del repo portado corre", /──▶ harness self-test/.test(gate.salida), gate.salida.trim().split("\n").slice(-3).join("\n"));
+
+      const sinLinea = (rel, aguja) => {
+        const abs = path.join(repo, rel);
+        fs.writeFileSync(abs, fs.readFileSync(abs, "utf8").split("\n").filter((l) => !l.includes(aguja)).join("\n"));
+      };
+      sinLinea(fx.manifiesto, fx.veta);
+      sinLinea(fx.fuente, fx.importa);
+      const runner = ".github/workflows/drift.yml";
+      fs.mkdirSync(path.join(repo, path.dirname(runner)), { recursive: true });
+      fs.writeFileSync(path.join(repo, runner), "on: { schedule: [{ cron: '0 6 * * 1' }] }\njobs:\n  drift:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - run: node scripts/drift-check.mjs\n");
+      const cfgArranque = JSON.parse(fs.readFileSync(cfgPath, "utf8"));
+      if (cfgArranque.drift) cfgArranque.drift.runner = runner;
+      fs.writeFileSync(cfgPath, `${JSON.stringify(cfgArranque, null, 2)}\n`);
+      correr("git", ["-C", repo, "add", "-A"]);
+
+      const verde = correr("node", [path.join(repo, "scripts/gate.mjs")], { cwd: repo });
+      const razones = [...verde.salida.matchAll(/✗ (.+)/g)].map((m) => m[1]);
+      registrar(stack, "el gate del repo portado sale VERDE tras los pasos del arranque", verde.status === 0 && /GATE VERDE/.test(verde.salida), razones.join(" · ") || verde.salida.trim().split("\n").slice(-3).join("\n"));
+      console.log(`   · gate del destino: instalado ${gate.status === 0 ? "VERDE" : "ROJO"} → tras el arranque ${verde.status === 0 ? "VERDE" : "ROJO"}`);
     }
 
     // 14. commit-msg: el registro de trabajo funciona en el layout de este stack.

@@ -64,13 +64,20 @@ la unidad pareciendo interna), y el quick start ilegible en CRLF.
    correrlo?** Si la respuesta es "con Git Bash sí", no alcanza para un freno: alcanza para una
    herramienta.
 
-## Lo que sigue sin cubrirse
+## Rutas y PowerShell: lo que antes no se cubría
 
-- **Rutas largas y nombres reservados de Windows** (`CON`, `PRN`, `> 260` caracteres): nadie los
-  prueba. Aparecen en repos con jerarquías profundas.
-- **PowerShell como shell del agente**: los hooks del agente no dependen del shell, pero
-  `bash.deny` describe comandos con sintaxis POSIX. En una sesión que use PowerShell, las mismas
-  acciones destructivas se escriben distinto y los patrones no las cazan.
+- **Rutas que Windows no puede clonar.** La regla `PORTABLE` del lint (`portablePaths` en el
+  config) recorre `git ls-files` en cada gate y marca cinco casos: nombres reservados (`CON`, `PRN`,
+  `AUX`, `NUL`, `COM1-9`, `LPT1-9`, con o sin extensión), caracteres que Windows rechaza, nombres
+  que terminan en punto o espacio, dos rutas que sólo difieren en mayúsculas y rutas más largas
+  que `maxLength` (200 por defecto, para dejar lugar a la carpeta del clon bajo MAX_PATH, 260).
+  Ninguno se ve en la máquina que creó el archivo. Cada uno tiene su caso en el self-test (4e-portable).
+- **PowerShell como shell del agente.** Los comandos de `git` se escriben igual y las reglas de
+  siempre los cubren. Para lo que se escribe distinto, `bash.deny` trae sus equivalentes:
+  `Remove-Item -Recurse` sobre un directorio fuente (y sus alias `ri`, `rm`, `del`, `rd`), `iex (iwr …)`
+  (el `curl | sh` de PowerShell) y `Get-ChildItem … | Remove-Item` (el `find -delete`). Cada regla
+  declara su `sample`, que el self-test hace morder. Como con bash, es un guardarraíl y no un
+  sandbox: sube el costo del error accidental, no aísla.
 
 ---
 

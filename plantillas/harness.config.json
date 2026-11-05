@@ -48,6 +48,14 @@
         "why": "un plan suelto en el repo cuando el trabajo vive en el gestor parte el registro en dos"
       },
       {
+        "name": "worktrees out of sight",
+        "command": [
+          "node",
+          "scripts/worktree-check.mjs"
+        ],
+        "why": "un worktree dentro de la raíz que git no ignora lo leen todos los escaneos como propio, y el gate se pone rojo lejos de la causa; `/code` crea worktrees por diseño"
+      },
+      {
         "name": "task: criteria and scope",
         "command": [
           "node",
@@ -286,7 +294,25 @@
       "^(true|:|exit 0|exit)$",
       "^(echo|printf)\\b"
     ],
-    "timeoutMs": 600000
+    "timeoutMs": 600000,
+    "$todoFile": "La lista de tareas que el agente (`coder`) escribe ANTES de codificar, versionada en su rama. `verify` es rojo si falta o tiene casillas abiertas. Sacá la clave y la lista deja de exigirse.",
+    "todoFile": "specs/{item}/tasks.md",
+    "todoOpenPattern": "^\\s*[-*]\\s+\\[ \\]\\s+(.+)$",
+    "lockTests": {
+      "$comment": "Pruebas inmutables: `task.mjs lock` congela las pruebas (pattern vacío = `xp.testFirst.testPattern`); `protected-paths` frena editarlas y `verify` las re-hashea. Tocar pruebas sin `lock` es rojo. Fuga: `unlock <ruta> --why`.",
+      "pattern": ""
+    }
+  },
+  "coder": {
+    "$comment": "`scripts/coder-spawn.mjs`: un coder como sesión principal en un worktree FUERA de la raíz (`worktreeDir`), rama según `workflow.branchPattern`, brief por stdin, veredicto = la línea `ENTREGA:`. `setupCommand`: lo que un worktree nuevo necesita antes de medir (p. ej. [\"npm\",\"ci\"]): git no trae dependencias. Dry-run por defecto.",
+    "command": ["claude", "-p", "--agent", "coder", "--permission-mode", "acceptEdits", "--allowedTools", "Bash,Read,Edit,Write,Grep,Glob,Agent"],
+    "worktreeDir": "..",
+    "setupCommand": [],
+    "timeoutMs": 3600000
+  },
+  "worktrees": {
+    "$comment": "Activa la señal «worktrees out of sight» (`scripts/worktree-check.mjs`): rojo por un worktree bajo la raíz que `.gitignore` no esconde; aviso por los huérfanos. Si usás `/code`, ignorá `.claude/worktrees/` en tu `.gitignore`.",
+    "enabled": true
   },
   "loop": {
     "$comment": "Ciclo acotado: el gate cuenta los intentos sobre el MISMO error por señal; pasado `maxAttempts` deja `marker`, `action-guard` frena editar, `gate-stop` deja cerrar para escalar y el próximo pedido del humano repone el presupuesto. `normalize` vacío = el default agnóstico (colores, fechas, duraciones, línea:columna, hashes, temporales). Sin esta clave no se cuenta nada.",
@@ -583,8 +609,8 @@
   "xp": {
     "$comment": "Prácticas de XP con mecanismo. TODAS viajan APAGADAS a propósito: una regla instalada sin cicatriz detrás se desactiva en una semana y se lleva puestas a las que servían (P14). Encendé la que tu equipo ya decidió, empezando por `testFirst`. Las lee `.githooks/commit-msg` → `node scripts/cycle-check.mjs --commit`. Ver docs/ciclo-desarrollo.md.",
     "testFirst": {
+      "$testPattern": "Sin `testPattern`: «qué es una prueba» lo dice `tests.filePattern`, que trae el perfil del stack. Un patrón acá viajaba con la forma de JS (`__tests__`, `.spec.ts`) a un repo .NET, y «test primero» y «refactor separado» reconocían pruebas distintas (lo cazó el banco con el gate del repo portado).",
       "enabled": false,
-      "testPattern": "(^|/)(__tests__|tests?)/|\\.(test|spec)\\.[cm]?[jt]sx?$",
       "escapeLine": "no-test:",
       "reason": "un arreglo sin prueba no tiene cómo demostrar que arregló algo."
     },
@@ -637,6 +663,10 @@
       "librarian": {
         "mustMatch": "COBERTURA:\\W*(COMPLETA|PARCIAL|SIN RESULTADOS)",
         "reason": "una respuesta de la biblioteca sin cobertura declarada no distingue lo citado de lo recordado."
+      },
+      "coder": {
+        "mustMatch": "ENTREGA:\\W*(LISTA|CON PREGUNTAS|BLOQUEADA)",
+        "reason": "el orquestador decide con esa línea si la rama va a review, las preguntas van al humano o el trabajo se escala."
       }
     }
   },
@@ -664,7 +694,8 @@
       "reviewer": { "direction": "sensor", "kind": "inferencial", "stage": "fin del turno" },
       "gate-runner": { "direction": "sensor", "kind": "computacional", "stage": "fin del turno" },
       "ci-investigator": { "direction": "sensor", "kind": "inferencial", "stage": "integración" },
-      "librarian": { "direction": "guía", "kind": "inferencial", "stage": "pedido" }
+      "librarian": { "direction": "guía", "kind": "inferencial", "stage": "pedido" },
+      "coder": { "direction": "guía", "kind": "inferencial", "stage": "acción decidida" }
     },
     "$guides": "Agregá `CLAUDE.md` (etapa `sesión`) cuando exista: el instalador no lo copia, porque cada repo escribe el suyo.",
     "guides": {

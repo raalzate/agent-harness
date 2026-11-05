@@ -25,7 +25,9 @@ const spec = c.postCommit;
 if (!spec || !Array.isArray(spec.command) || !spec.command.length) process.exit(0);
 // Sólo si cambió algo que el índice mira (spec.watch: array de extensiones).
 if (Array.isArray(spec.watch) && spec.watch.length) {
-  const out = cp.execSync("git diff-tree --no-commit-id --name-only -r HEAD", { encoding: "utf8" });
+  // `--root`: without it the first commit of a repo lists no files and never refreshes
+  // (found by the self-test case 3f-post).
+  const out = cp.execSync("git diff-tree --root --no-commit-id --name-only -r HEAD", { encoding: "utf8" });
   const tocado = out.split("\n").some(f => spec.watch.some(ext => f.endsWith(ext)));
   if (!tocado) process.exit(0);
 }
