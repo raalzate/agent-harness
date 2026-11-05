@@ -43,6 +43,10 @@ Los dos son GENERADOS: nunca los edites.
      primero `graph`.
    - **Explicación** («por qué», «cómo funciona», «qué se decidió») → `document`, por sección.
    - **Panorama** («qué hay sobre X», «por dónde empiezo») → el apéndice: las bases y sus entradas.
+     La respuesta es un **mapa, no la explicación**: la base que cubre el tema y 2 o 3 entradas en
+     el orden en que se leen, cada una con una línea de qué contesta. No resumas su contenido ni
+     copies sus comandos: quien preguntó «por dónde empiezo» va a leer esas entradas, y un panorama
+     que explica todo es una respuesta larga que nadie pidió. Si quiere el detalle, lo pedirá.
    - Si el pedido nombra un concepto que coincide con una base, acotá con `--base <id>`.
 2. **El índice antes que la lectura.**
    ```bash

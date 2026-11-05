@@ -1,0 +1,1 @@
+¿Cuántos intentos sobre el mismo error permite el ciclo acotado antes de parar y escalar, y quién repone el presupuesto? Contestá desde la documentación.

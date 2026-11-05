@@ -1123,6 +1123,46 @@
             "mustMatch": ["reviewer-eval\\.mjs", "harness-selftest\\.mjs", "leer-arnes\\.mjs"]
           }
         ]
+      },
+      {
+        "agent": "librarian",
+        "$command": "The only suite with Bash, and only for `node scripts/library.mjs`: querying the index IS the behaviour under test. A librarian that cannot run `query` would be evaluated on a fallback it is told to use last. Still no hooks and no writes.",
+        "command": ["claude", "-p", "--agent", "librarian", "--allowedTools", "Read,Grep,Glob,Bash(node scripts/library.mjs:*)", "--disallowedTools", "Edit,Write,NotebookEdit", "--settings", "{\"disableAllHooks\": true}"],
+        "context": [".claude/agents", ".claude/harness.config.json", ".claude/library", "scripts/library.mjs", "docs", "CLAUDE.md"],
+        "rubric": "The answer follows the librarian format: RESPUESTA, FUENTES with path:line (or path#node) and [kind · base], NO ENCONTRADO and COBERTURA. Every claim in RESPUESTA has a source in FUENTES; every cited path exists under docs/. It reads only what the index pointed to (no whole-document dumps) and does not answer from memory.",
+        "cases": [
+          {
+            "name": "a fact: the bounded loop budget",
+            "input": ".claude/evals/librarian/dato-ciclo-acotado.txt",
+            "expect": "COMPLETA",
+            "mustMatch": ["\\b(2|dos)\\b", "docs/[\\w./-]+\\.md:\\d+"]
+          },
+          {
+            "name": "a decision: why the self-test fans out",
+            "input": ".claude/evals/librarian/decision-selftest-paralelo.txt",
+            "expect": "COMPLETA",
+            "mustMatch": ["0014-selftest-en-abanico\\.md"]
+          },
+          {
+            "name": "an overview: installing on another stack",
+            "input": ".claude/evals/librarian/panorama-instalar.txt",
+            "mustMatch": ["instalacion", "perfiles\\.md|portar\\.md"],
+            "rubric": "An overview answer: it names the knowledge base that covers the topic (instalacion) and suggests where to start (2 or 3 entries, in order), citing each. It does not explain the whole topic."
+          },
+          {
+            "name": "not in the library: says so, does not invent",
+            "input": ".claude/evals/librarian/sin-resultados-sap.txt",
+            "expect": "SIN RESULTADOS",
+            "$mustNotMatch": "Dropped after the first run: the agent named the weak keyword hits it discarded (path:line) on the same line as the word SAP, and a line regex cannot tell a discarded hit from a cited one. The verdict plus the rubric judge that; the regex only pointed at the label.",
+            "rubric": "The answer says the library has nothing on the topic, lists the terms it searched, and does not invent a source or answer from general knowledge."
+          },
+          {
+            "name": "the border: a code question goes to the explorer",
+            "input": ".claude/evals/librarian/frontera-codigo.txt",
+            "mustMatch": ["explorer"],
+            "rubric": "The answer recognises the question is about CODE, not documentation, and points to the explorer subagent instead of answering by reading source files. Explaining the function from the source is a failure."
+          }
+        ]
       }
     ]
   },
