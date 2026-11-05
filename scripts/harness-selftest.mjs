@@ -592,7 +592,13 @@ if (corre("base")) {
     malos += 1;
     bad(`analizarComando(${comando})`, `esperaba {${tipo}, ${file}} y dio {${r?.tipo}, ${r?.file}}`);
   }
-  if (!malos) ok(`${casos.length} formas de declarar un hook se analizan bien (binario externo, \`$CLAUDE_PROJECT_DIR\`, flags de node)`);
+  // Los argumentos viajan: medir `ado.mjs` sin `hook edit` es medir otro programa.
+  const conArgs = analizarComando('node "$CLAUDE_PROJECT_DIR/scripts/ado.mjs" hook edit'); // linkcheck:ignore
+  if (JSON.stringify(conArgs?.args) !== JSON.stringify(["hook", "edit"])) {
+    malos += 1;
+    bad("analizarComando conserva los argumentos", `esperaba ["hook","edit"] y dio ${JSON.stringify(conArgs?.args)}`);
+  }
+  if (!malos) ok(`${casos.length} formas de declarar un hook se analizan bien (binario externo, \`$CLAUDE_PROJECT_DIR\`, flags de node, argumentos)`);
 }
 
 // 1d. Si un binario existe se pregunta antes de lanzarlo. En Windows los comandos del config van
@@ -3397,6 +3403,39 @@ if (hookFiles.has("graph-first.mjs") && config.graph) {
   else bad("graph-first se calla en lo trivial", `habló: ${trivialGrafo.stdout.trim().slice(0, 120)}`);
 }
 
+/**
+ * Si el primer argumento con forma de ruta de una señal es del repo, tiene que existir — salvo que
+ * viva DENTRO de lo que la propia señal declara opcional (`skipIfMissing`) y eso falte en esta
+ * máquina: ahí el gate la reporta OMITIDA, y exigir la ruta era un rojo falso en toda máquina sin
+ * ese árbol (un clon que no se bajó, un SDK). Una ruta FUERA de `skipIfMissing` se sigue
+ * exigiendo: un typo no se excusa por tener la señal un opcional en otro lado.
+ * `existe` se inyecta para poder probarla con rutas ficticias.
+ */
+function rutaDeSenal(s, existe = (r) => fs.existsSync(abs(r))) {
+  const posibleRuta = (s.command ?? []).slice(1).find((a) => /[/\\]/.test(a) && !a.startsWith("-"));
+  if (!posibleRuta || existe(posibleRuta)) return { estado: "ok" };
+  const opcional = s.skipIfMissing && !existe(s.skipIfMissing) ? path.normalize(s.skipIfMissing) : null;
+  const r = path.normalize(posibleRuta);
+  if (opcional && (r === opcional || r.startsWith(opcional + path.sep)))
+    return { estado: "omitida", detalle: `\`${s.skipIfMissing}\` no existe en esta máquina: el gate la reporta OMITIDA y su ruta no se puede verificar acá` };
+  return { estado: "falta", detalle: `\`${posibleRuta}\` no existe` };
+}
+
+{
+  // Prueba de vida de la excusa: muerde fuera del opcional, perdona dentro, y no perdona si el opcional existe.
+  const existe = (r) => r === "sdk";
+  const casos = [
+    [{ command: ["dotnet", "build", "clon/app.csproj"], skipIfMissing: "clon" }, "omitida"],
+    [{ command: ["dotnet", "build", "clon/app.csproj"], skipIfMissing: "clon/app.csproj" }, "omitida"],
+    [{ command: ["node", "scripts/tipeo.mjs"], skipIfMissing: "clon" }, "falta"], // linkcheck:ignore (ficticio)
+    [{ command: ["dotnet", "build", "sdk/app.csproj"], skipIfMissing: "sdk" }, "falta"],
+    [{ command: ["node", "scripts/x.mjs"] }, "falta"], // linkcheck:ignore (ficticio)
+  ];
+  const malos = casos.filter(([s, esperado]) => rutaDeSenal(s, existe).estado !== esperado);
+  if (!malos.length) ok("señal con `skipIfMissing` ausente: su ruta se excusa sólo DENTRO del opcional (fuera, o con el opcional presente, sigue siendo rojo)");
+  else bad("la ruta de una señal y su `skipIfMissing`", malos.map(([s, e]) => `${s.command.join(" ")} [skip ${s.skipIfMissing ?? "—"}] esperaba ${e}`).join(" · "));
+}
+
 // ── 6. Señales del gate, subagentes y comandos ──────────────────────────────
 section("6. gate, subagentes y comandos");
 const senales = config.gate?.signals ?? [];
@@ -3407,9 +3446,9 @@ for (const s of senales) {
     bad(`señal «${s.name}»`, "no declara command");
     continue;
   }
-  // Si el segundo argumento es una ruta del repo, tiene que existir.
-  const posibleRuta = argv.slice(1).find((a) => /[/\\]/.test(a) && !a.startsWith("-"));
-  if (posibleRuta && !fs.existsSync(abs(posibleRuta))) bad(`señal «${s.name}»`, `\`${posibleRuta}\` no existe`);
+  const ruta = rutaDeSenal(s);
+  if (ruta.estado === "omitida") skip(`señal «${s.name}»`, ruta.detalle);
+  else if (ruta.estado === "falta") bad(`señal «${s.name}»`, ruta.detalle);
   else if (!s.why) bad(`señal «${s.name}»`, "no declara `why`: una señal sin motivo es una señal que nadie defiende");
   else ok(`señal «${s.name}» → ${argv.join(" ")}`);
 }
@@ -4124,6 +4163,24 @@ if (enParte("costo")) {
       const r = spawnSync("node", [script, "--config", cfg, "--settings", settingsCebo], { cwd: REPO_ROOT, encoding: "utf8" });
       if (r.status === 1 && /MEDICIÓN EN ROJO/.test(r.stderr ?? "")) ok("un hook que no respeta el contrato de exit codes pone la medición en ROJO (barato ≠ roto)");
       else bad("un hook roto no puede medir verde", `esperaba exit 1 y «MEDICIÓN EN ROJO», dio exit ${r.status}`);
+    }
+
+    // Un hook con ARGUMENTOS se mide con sus argumentos. Sin ellos es otro programa: el cebo,
+    // como `ado.mjs hook edit` corrido como `ado.mjs`, sale 1 sin su argumento — y la medición lo
+    // reportaba ROTO mientras el hook real andaba. Y el presupuesto se puede declarar por comando.
+    {
+      const hookConArgs = path.join(tmp, "hook-con-args.mjs");
+      fs.writeFileSync(hookConArgs, 'process.exit(process.argv[2] === "edit" ? 0 : 1);\n');
+      const settingsCebo = path.join(tmp, "settings-args.json");
+      fs.writeFileSync(
+        settingsCebo,
+        JSON.stringify({ hooks: { PreToolUse: [{ matcher: "Write", hooks: [{ type: "command", command: `node ${hookConArgs} edit` }] }] } }),
+      );
+      const cfg = escribirCebo("hook-con-args.json", { runs: 1, budgets: { [`${hookConArgs} edit`]: 60000 }, probe });
+      const r = spawnSync("node", [script, "--config", cfg, "--settings", settingsCebo], { cwd: REPO_ROOT, encoding: "utf8" });
+      if (r.status === 0 && /LATENCIA VERDE/.test(r.stdout ?? "") && /hook-con-args\.mjs edit/.test(r.stdout ?? ""))
+        ok("un hook con argumentos se mide con ellos y toma el presupuesto declarado para ese comando");
+      else bad("un hook con argumentos se mide con sus argumentos", `esperaba exit 0, «LATENCIA VERDE» y el comando con su argumento; dio exit ${r.status}: ${(r.stderr || r.stdout || "").trim().split("\n").slice(-2).join(" · ")}`);
     }
 
     // Una alternativa del matcher que es un regex (`mcp__.*`) es otro camino por el mismo hook.

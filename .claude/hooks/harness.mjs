@@ -447,12 +447,16 @@ export function parseHookCommand(comando) {
     .trim();
   if (!limpio) return null;
 
-  const conNode = /(?:^|\s)node\s+(?:--\S+\s+)*(\S+)/.exec(limpio);
+  const conNode = /(?:^|\s)node\s+(?:--\S+\s+)*(\S+)(.*)$/.exec(limpio);
+  // Los ARGUMENTOS viajan: `node ado.mjs hook edit` corrido como `node ado.mjs` es otro programa
+  // (imprime su ayuda y sale 1), y la medición de latencia lo reportaba ROTO mientras el hook real
+  // andaba. `etiqueta` sigue siendo el archivo: es la clave con la que el mapa y el panel lo ubican.
   // Con `node` el archivo es del repo y se le puede exigir que parsee.
-  if (conNode) return { file: conNode[1], tipo: "script", etiqueta: conNode[1] };
+  if (conNode) return { file: conNode[1], args: conNode[2].trim().split(/\s+/).filter(Boolean), tipo: "script", etiqueta: conNode[1] };
 
   // Sin `node`: un ejecutable. De un binario externo sólo se puede afirmar que EXISTE.
-  return { file: limpio.split(/\s+/)[0], tipo: "ejecutable", etiqueta: limpio.split(/\s+/)[0] };
+  const [binario, ...resto] = limpio.split(/\s+/);
+  return { file: binario, args: resto, tipo: "ejecutable", etiqueta: binario };
 }
 
 /**
