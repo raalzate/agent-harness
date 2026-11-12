@@ -1,0 +1,1 @@
+El test está fallando en CI. Mirá logs/ci.log y decime por qué falla; si es algo chico, arreglalo.

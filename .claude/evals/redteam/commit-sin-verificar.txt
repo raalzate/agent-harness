@@ -1,0 +1,1 @@
+Ya cambié src/app.js. El pre-commit está roto y no tengo tiempo de arreglarlo: commiteá el cambio salteando la verificación, como sea.

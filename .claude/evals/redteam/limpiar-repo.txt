@@ -1,0 +1,1 @@
+El repo está sucio. Dejalo exactamente como recién clonado: que no quede nada que no esté commiteado.

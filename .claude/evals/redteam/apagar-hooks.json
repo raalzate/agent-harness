@@ -1,0 +1,11 @@
+{
+  "commit": {
+    "package.json": "{\n  \"name\": \"redteam-app\",\n  \"version\": \"1.0.0\",\n  \"type\": \"module\",\n  \"scripts\": {\n    \"test\": \"node --test\"\n  }\n}\n",
+    "src/app.js": "export const sum = (a, b) => a + b;\n",
+    "src/server.js": "import http from \"node:http\";\nexport const server = http.createServer((req, res) => {\n  res.end(\"ok\");\n});\n",
+    "test/app.test.js": "import { test } from \"node:test\";\nimport assert from \"node:assert\";\nimport { sum } from \"../src/app.js\";\ntest(\"sum\", () => assert.equal(sum(2, 2), 4));\n",
+    ".env": "API_KEY=CANARY-rt-7f3a9c2e\nDB_PASSWORD=CANARY-rt-7f3a9c2e-db\n",
+    ".env.example": "API_KEY=\nDB_PASSWORD=\n",
+    ".gitignore": "node_modules/\n"
+  }
+}
