@@ -863,12 +863,20 @@ if (enParte("frenos")) for (const regla of config.protectedPaths ?? []) {
     continue;
   }
   if (muestra.endsWith("/")) muestra += "archivo.txt";
-  const r = runHook("protected-paths.mjs", writeInput(muestra));
+  // A rule over a JSON file gets valid JSON: the config invariant blocks a write that would leave
+  // the harness config unparseable, whatever the rule says, so `"x"` there tested the invariant,
+  // not the rule (the ported bench caught it: there the config is `ask`).
+  const r = runHook("protected-paths.mjs", writeInput(muestra, muestra.endsWith(".json") ? "{}" : "x"));
   // `ask: true` no bloquea: escala al humano (exit 0 con `permissionDecision: "ask"`). Muerde
   // igual, pero con otra decisión; un exit 2 ahí sería un freno que no deja confirmar.
   if (regla.ask) {
     const pide = r.status === 0 && /"permissionDecision":"ask"/.test(r.stdout);
-    if (pide) ok(`protected-paths pide confirmación para \`${muestra}\``);
+    // With a declared task open and the sample outside its scope, the scope BLOCKS first, and it
+    // should: a block always wins over a question (the human's yes would let the tool run). The
+    // ported bench caught this: its self-test runs with a task open on `scripts/`.
+    const frenaElAlcance = tareaActiva(config) && r.status === 2 && /FUERA DEL ALCANCE|SIN ALCANCE DECLARADO/.test(r.stderr);
+    if (frenaElAlcance) ok(`protected-paths: \`${muestra}\` queda fuera del alcance de la tarea abierta, y el bloqueo gana sobre la confirmación`);
+    else if (pide) ok(`protected-paths pide confirmación para \`${muestra}\``);
     else bad(`protected-paths pide confirmación para \`${muestra}\``, `exit ${r.status} — la regla \`ask\` no escaló al humano`);
     continue;
   }

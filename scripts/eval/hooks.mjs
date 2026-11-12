@@ -50,7 +50,20 @@ export function installedConfig(root) {
 export async function isolated(root, state, fn) {
   const copy = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "harness-eval-case-")));
   try {
-    await fs.promises.cp(root, copy, { recursive: true });
+    // Cases without state run on `root` itself, in the same pool: a hook there can create and
+    // delete a marker (`.git/agent-answer-first`) while this copy walks the tree, and `cp` dies
+    // with ENOENT on a file it listed a moment before (seen on macOS CI). The copy is retried:
+    // the next walk no longer lists the vanished file, or copies it whole.
+    for (let intento = 1; ; intento++) {
+      try {
+        await fs.promises.cp(root, copy, { recursive: true });
+        break;
+      } catch (e) {
+        if (e?.code !== "ENOENT" || intento >= 5) throw e;
+        fs.rmSync(copy, { recursive: true, force: true });
+        fs.mkdirSync(copy);
+      }
+    }
     seed(copy, state);
     return await fn(copy);
   } finally {
