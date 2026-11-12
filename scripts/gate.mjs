@@ -458,7 +458,17 @@ function fotoDelArbol() {
   // `hash-object` falla, sin blobs: las rutas afectadas firman distinto y corren (de más, no de menos).
   const blobs = {};
   const raiz = sucios.filter((f) => !dentroDeClon(f, Object.keys(clones)) && !f.endsWith("/"));
-  const existen = raiz.filter((f) => fs.existsSync(path.join(REPO_ROOT, f)) && fs.statSync(path.join(REPO_ROOT, f)).isFile());
+  // `try`: un archivo que existe y no se puede leer (un `.env` bajo el sandbox de Claude Code da
+  // EPERM) tumbaba el gate entero antes de correr una sola señal. Sin leerlo, cuenta como borrado:
+  // las rutas afectadas firman distinto y corren (de más, no de menos).
+  const esArchivo = (f) => {
+    try {
+      return fs.statSync(path.join(REPO_ROOT, f)).isFile();
+    } catch {
+      return false;
+    }
+  };
+  const existen = raiz.filter(esArchivo);
   for (const f of raiz) blobs[f] = "-";
   if (existen.length) {
     const r = spawnSync("git", ["hash-object", "--stdin-paths"], { cwd: REPO_ROOT, input: existen.join("\n") + "\n", encoding: "utf8", windowsHide: true });

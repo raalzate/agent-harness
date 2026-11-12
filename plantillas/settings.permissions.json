@@ -1,0 +1,15 @@
+{
+  "$comment": "La capa NATIVA de Claude Code, que el instalador mezcla en el `.claude/settings.json` que copia (sólo si lo crea: uno que ya existe se conserva). Es la defensa que no depende del arnés: los hooks fallan abiertos con el config roto (P5), y estas reglas las aplica Claude Code igual. Cubre los dos huecos que un hook no ve: LEER un secreto (ningún hook mira `Read`; Claude Code extiende el deny de `Read` a Grep y Glob) y desarmar el arnés con el config ilegible (un deny de `Edit` cubre Write y MultiEdit). Un deny gana sobre cualquier allow, también sobre `--allowedTools`. `/ruta` en el settings del proyecto se ancla en la raíz del proyecto (no en el directorio actual, que es lo que significa `./`). Ver docs/seguridad.md.",
+  "permissions": {
+    "deny": [
+      "Read(/.env)",
+      "Read(/.env.local)",
+      "Read(/.env.*.local)",
+      "Read(/.env.production)",
+      "Edit(/.claude/settings.json)",
+      "Edit(/.claude/settings.local.json)",
+      "Edit(/.claude/hooks/**)",
+      "Edit(/.githooks/**)"
+    ]
+  }
+}

@@ -18,10 +18,18 @@ const input = await readInput();
 const config = loadConfig();
 if (!config) allow();
 
-const command = input?.tool_input?.command ?? "";
+const command = typeof input?.tool_input?.command === "string" ? input.tool_input.command : "";
 if (!command) allow();
 
-const hit = firstMatch(config.bash?.deny, command);
+// Lo que el shell borra antes de ejecutar no cambia el comando, pero sí su texto: `--ha''rd`,
+// `--ha""rd` y `g\it` son `--hard` y `git` para bash, y para un regex son otra cosa. Las reglas
+// se miden contra el texto Y contra esta forma: un freno que se esquiva con dos comillas no frena.
+// Sólo se quitan las comillas VACÍAS y la barra delante de una letra: lo que nunca cambia el
+// significado, para no morder de más (un mensaje de commit con comillas sigue igual).
+const desarmado = command.replace(/''|""/g, "").replace(/\\(?=[A-Za-z0-9_-])/g, "");
+const casa = (reglas) => firstMatch(reglas, command) ?? (desarmado !== command ? firstMatch(reglas, desarmado) : null);
+
+const hit = casa(config.bash?.deny);
 if (hit) {
   deny(
     `COMANDO BLOQUEADO: \`${command}\`\n` +
@@ -35,8 +43,12 @@ if (hit) {
 // sale veinte veces por día se contesta «sí» sin leer, y deja de proteger justo el caso raro.
 // El regex se escribe anclado (`^…$`) para que un `&& otra-cosa` encadenado no herede la exención.
 // `exempt` hereda los `flags` de su regla: una regla que distingue mayúsculas no puede eximir sin distinguirlas.
+// Y se mide sólo contra el texto ORIGINAL, no contra el desarmado: la regla busca el peligro en
+// las dos formas (más amplio = más seguro), la exención exige la forma declarada al pie de la
+// letra (más estricto = más seguro). Medirla contra el desarmado dejaría que `g''it` heredara
+// la exención de la forma limpia.
 const confirmar = (config.bash?.ask ?? []).find(
-  (regla) => firstMatch([regla], command) && !(regla.exempt && firstMatch([{ pattern: regla.exempt, flags: regla.flags }], command)),
+  (regla) => casa([regla]) && !(regla.exempt && firstMatch([{ pattern: regla.exempt, flags: regla.flags }], command)),
 );
 if (confirmar) ask(`CONFIRMACIÓN DEL HUMANO: ${confirmar.reason}`, input);
 
