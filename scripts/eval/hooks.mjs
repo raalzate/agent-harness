@@ -71,16 +71,23 @@ export function hooksFor(root, event, tool) {
  * `spawnSync` here stalls the whole pool, so the cases run in series and every latency measured
  * meanwhile includes the wait (a 1 s commit showed up as a 17 s p95).
  */
-export function exec(executable, argv, { cwd, input = "" } = {}) {
+export function exec(executable, argv, { cwd, input = "", timeoutMs = 0 } = {}) {
   return new Promise((resolve) => {
     const t0 = process.hrtime.bigint();
     const child = spawn(executable, argv, { cwd, stdio: ["pipe", "pipe", "pipe"] });
     let stdout = "";
     let stderr = "";
+    // A hook that hangs is a hook that lets the tool run when Claude Code's timeout kills it: the
+    // robustness group measures that, so the run is cut at the budget and reported as `timedOut`.
+    let timedOut = false;
+    const timer = timeoutMs ? setTimeout(() => ((timedOut = true), child.kill("SIGKILL")), timeoutMs) : null;
     child.stdout.on("data", (d) => (stdout += d));
     child.stderr.on("data", (d) => (stderr += d));
     child.on("error", (e) => resolve({ status: null, stdout, stderr: e.message, ms: 0 }));
-    child.on("close", (status) => resolve({ status, stdout, stderr, ms: Number(process.hrtime.bigint() - t0) / 1e6 }));
+    child.on("close", (status) => {
+      if (timer) clearTimeout(timer);
+      resolve({ status, stdout, stderr, timedOut, ms: Number(process.hrtime.bigint() - t0) / 1e6 });
+    });
     // A hook may decide without reading all of stdin and exit: the write then fails with EPIPE.
     // Unhandled, that error killed the whole eval (CI on main); the exit code is what counts.
     child.stdin.on("error", () => {});
@@ -90,11 +97,23 @@ export function exec(executable, argv, { cwd, input = "" } = {}) {
 
 /** Runs one hook command with `payload` on stdin, at the repo root. Never throws. */
 export async function runHook(root, command, payload) {
+  return runHookRaw(root, command, JSON.stringify(payload));
+}
+
+/** The same, with stdin exactly as given: the robustness group sends what is not JSON at all. */
+export async function runHookRaw(root, command, raw, timeoutMs = 0) {
   // Claude Code expands `$CLAUDE_PROJECT_DIR` through its shell; there is no shell here, so resolve it.
   const resolved = command.replace(/"?\$\{?CLAUDE_PROJECT_DIR\}?"?/g, root);
   const [cmd, ...rest] = resolved.split(/\s+/);
   const executable = cmd === "node" ? process.execPath : cmd;
-  return { command, ...(await exec(executable, rest, { cwd: root, input: JSON.stringify(payload) })) };
+  return { command, ...(await exec(executable, rest, { cwd: root, input: raw, timeoutMs })) };
+}
+
+/** Every hook command settings.json declares, for every event, once. */
+export function allHooks(root) {
+  const settings = JSON.parse(fs.readFileSync(path.join(root, ".claude", "settings.json"), "utf8"));
+  const all = Object.values(settings.hooks ?? {}).flatMap((groups) => groups.flatMap((g) => (g.hooks ?? []).filter((h) => h.type === "command").map((h) => h.command)));
+  return [...new Set(all)];
 }
 
 /**

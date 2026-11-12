@@ -191,7 +191,10 @@ export async function readInput() {
 /** Carga la config del arnés. Un config ausente o inválido NO debe bloquear al humano. */
 export function loadConfig() {
   try {
-    return JSON.parse(fs.readFileSync(CONFIG_PATH, "utf8"));
+    const v = JSON.parse(fs.readFileSync(CONFIG_PATH, "utf8"));
+    // `null`, `[]` o un escalar parsean y no son un config: se tratan como ausente, para que el
+    // aviso de `session-start` salga igual que con uno que no parsea.
+    return v && typeof v === "object" && !Array.isArray(v) ? v : null;
   } catch {
     return null;
   }
@@ -279,37 +282,59 @@ export const segmentosDeRuta = (abs, plataforma = process.platform) =>
  */
 export const esUnidadPelada = (p) => /^[A-Za-z]:$/.test(p);
 
+/**
+ * Los prefijos de la ruta que EXISTEN, de la raíz hacia abajo, con su `realpath` (null en la
+ * unidad pelada de Windows y en lo que no existe). Con la ruta ya normalizada (sin `..`:
+ * `rutasAbsolutas` la resuelve), lo que existe es un tramo inicial: si un directorio no existe,
+ * nada debajo de él existe, así que se corta en el primer faltante DESPUÉS de haber entrado a un
+ * directorio real. Antes de eso se sigue, con un tope: en un share de Windows
+ * (`\\server\share\repo`), `\\server` no resuelve y `\\server\share` sí.
+ *
+ * Antes se subía desde la ruta ENTERA rearmando cada prefijo: cuadrático. Una ruta de 128k
+ * segmentos colgaba `protected-paths` hasta el timeout de Claude Code, y un hook muerto por
+ * timeout deja correr la herramienta (lo encontró el grupo `robustness` del eval determinista).
+ */
+const FALTANTES_ANTES_DE_ENTRAR = 4;
+function prefijosReales(partes) {
+  const reales = [];
+  let prefijo = "";
+  let adentro = false;
+  let faltantes = 0;
+  for (let i = 1; i <= partes.length; i += 1) {
+    prefijo = i === 1 ? partes[0] : `${prefijo}${path.sep}${partes[i - 1]}`;
+    const p = prefijo || path.sep;
+    if (esUnidadPelada(p)) {
+      reales.push(null);
+      continue;
+    }
+    try {
+      reales.push(fs.realpathSync(p));
+      if (p !== path.sep && partes[i - 1] !== "") adentro = true;
+    } catch {
+      // Una escritura nueva: lo que falta debajo de un directorio real no existe.
+      if (adentro || (faltantes += 1) > FALTANTES_ANTES_DE_ENTRAR) break;
+      reales.push(null);
+    }
+  }
+  return reales;
+}
+
 function relativaAlRepo(abs) {
   const partes = segmentosDeRuta(abs);
-  for (let i = partes.length; i > 0; i -= 1) {
-    const prefijo = partes.slice(0, i).join(path.sep) || path.sep;
-    if (esUnidadPelada(prefijo)) continue;
-    let real;
-    try {
-      real = fs.realpathSync(prefijo);
-    } catch {
-      continue; // ese prefijo todavía no existe (es una escritura nueva): se sigue subiendo
-    }
-    if (real === REPO_ROOT) return partes.slice(i).join("/");
-  }
+  const reales = prefijosReales(partes);
+  for (let i = reales.length; i > 0; i -= 1) if (reales[i - 1] === REPO_ROOT) return partes.slice(i).join("/");
   return null;
 }
 
 /** La ruta con los symlinks del ancestro existente resueltos (el archivo puede no existir). */
 function conSymlinksResueltos(abs) {
-  let dir = abs;
-  const resto = [];
-  while (!fs.existsSync(dir)) {
-    const padre = path.dirname(dir);
-    if (padre === dir) return abs;
-    resto.unshift(path.basename(dir));
-    dir = padre;
-  }
-  try {
-    return path.join(fs.realpathSync(dir), ...resto);
-  } catch {
-    return abs;
-  }
+  const partes = segmentosDeRuta(abs);
+  const reales = prefijosReales(partes);
+  let i = reales.length;
+  while (i > 0 && !reales[i - 1]) i -= 1;
+  if (!i) return abs;
+  // Un string y no `...partes`: con 128k segmentos, el spread desborda la pila (exit 1).
+  return path.join(reales[i - 1], partes.slice(i).join(path.sep));
 }
 
 /**
@@ -324,7 +349,11 @@ function rutasAbsolutas(input, config) {
   return camposDeRuta(input, config)
     .map((c) => ti[c].trim())
     .filter((raw) => raw || mcp)
-    .map((raw) => (path.isAbsolute(raw) ? raw : path.join(base, raw)));
+    // `resolve` y no `join` para las absolutas también: sin normalizar, `<repo>/nope/../src/x`
+    // llegaba con su `..` crudo, y una regla anclada (`^src/`) no lo veía. Normalizar es lo que
+    // hace verdadera la premisa de `prefijosReales` (sin `..`, si un prefijo no existe, ninguno
+    // más largo existe).
+    .map((raw) => (path.isAbsolute(raw) ? path.resolve(raw) : path.resolve(base, raw)));
 }
 
 /** La primera: alcanza para «¿esto es código?» y para el mensaje. */
