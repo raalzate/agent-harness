@@ -648,14 +648,17 @@ function seccionRegistro(v, m, rutaRaiz) {
   const cab = reg
     ? `<p>${chip(`gate ${escapar(reg.veredicto)}`, reg.veredicto === "verde" ? "chip--ok" : reg.veredicto === "rojo" ? "chip--mal" : "chip--info")} modo <code>${escapar(reg.modo)}</code> · ${fecha(reg.fecha)} · ${segundos(reg.ms)}${reg.head ? ` · HEAD <code>${escapar(reg.head)}</code>` : ""}${reg.rama ? ` · rama <code>${escapar(reg.rama)}</code>` : ""}</p>`
     : `<p>${chip("el gate no corrió en esta máquina", "chip--mal")} Corré <code>${escapar(m.reglas.gate.command ?? "node scripts/gate.mjs")}</code>.</p>`;
-  const verdes = nombres.filter((n) => reg?.senales?.[n]?.estado === "verde").length;
+  // La cuenta es de las señales DECLARADAS: la tabla muestra también las que ya no lo están (con
+  // su etiqueta), pero sumarlas al total decía «12/13» de un gate con todo verde.
+  const declaradas = m.reglas.gate.signals.map((s) => s.name);
+  const verdes = declaradas.filter((n) => reg?.senales?.[n]?.estado === "verde").length;
   // El pipeline es la vista; la tabla queda plegada para quien quiera el script o el HEAD exacto.
   return seccion(
     "registro",
     "Última corrida del gate (pipeline)",
     `${cab}${pipelineDelGate(m)}${detalles(`Ver como tabla <small>${nombres.length} señales</small>`, tabla(["Señal", "Última corrida", "Último verde", "Script"], filas, "verificacion"))}
      <p class="nota">Pasá el mouse (o el foco) por cada caja para ver qué verifica, cuánto tardó y su último verde; un job rojo lleva a su detalle. Sale de <code>${escapar(v.gate.rutaRegistro)}</code>, que el gate escribe en cada corrida: es de ESTA máquina y no se versiona.</p>`,
-    { abierta: true, extra: `<small>${verdes}/${nombres.length}</small>`, resumen: reg ? `${reg.veredicto} · ${fecha(reg.fecha)} · ${verdes} de ${nombres.length} en verde` : "sin registro" },
+    { abierta: true, extra: `<small>${verdes}/${declaradas.length}</small>`, resumen: reg ? `${reg.veredicto} · ${fecha(reg.fecha)} · ${verdes} de ${declaradas.length} en verde` : "sin registro" },
   );
 }
 

@@ -122,8 +122,10 @@ for (const senal of senales) {
     process.exit(1);
   }
   // 0 convertiría un verde en «omitida»: eso no es configuración, es apagar la señal.
-  if (senal.skipExitCode !== undefined && !(Number.isInteger(senal.skipExitCode) && senal.skipExitCode > 0)) {
-    console.log(`GATE ROJO — skipExitCode inválido en «${senal.name}»: ${JSON.stringify(senal.skipExitCode)} (tiene que ser un entero mayor que 0)`);
+  // …y 1 es el código de CUALQUIER fallo (una excepción sin atrapar, un `exit 1` genérico): con
+  // él, todo rojo de la señal saldría «omitida». Tiene que ser un código que el script elija.
+  if (senal.skipExitCode !== undefined && !(Number.isInteger(senal.skipExitCode) && senal.skipExitCode > 1)) {
+    console.log(`GATE ROJO — skipExitCode inválido en «${senal.name}»: ${JSON.stringify(senal.skipExitCode)} (tiene que ser un entero mayor que 1: 0 es «pasó» y 1 es el fallo genérico)`);
     process.exit(1);
   }
 }
@@ -232,6 +234,14 @@ let corridas = 0;
 // el panel sólo podía repetir lo que dice STATUS.md, que es prosa con fecha.
 const resultados = {};
 const inicio = new Date();
+/** El árbol sobre el que se va a medir, visto ANTES de la primera señal (lo usa `registrar`). */
+const arranque = (() => {
+  const git = (...args) => {
+    const r = spawnSync("git", args, { cwd: REPO_ROOT, encoding: "utf8", windowsHide: true });
+    return r.status === 0 ? r.stdout.trim() : null;
+  };
+  return { head: git("rev-parse", "--short", "HEAD"), limpio: git("status", "--porcelain") === "" };
+})();
 
 // El cerrojo va antes de la primera señal y se suelta al salir, pase lo que pase.
 const espera = CERROJO ? await tomarCerrojo() : null;
@@ -310,6 +320,13 @@ function seleccionarPorCambios() {
   for (const s of senales) if (!elegidas.includes(s)) reutilizadas.push({ name: s.name, estado: previa?.senales?.[s.name]?.estado ?? "sin registro" });
   const muestra = cambiados.slice(0, 8).join(" · ") + (cambiados.length > 8 ? ` · …(+${cambiados.length - 8})` : "");
   console.log(`Changed: ${cambiados.length} archivo(s) cambiados desde ${desde} — ${muestra}`);
+  // Todas declaran `paths` y ninguno toca lo cambiado: no hay nada que correr, y decir «todas
+  // quedaron omitidas, revisá el config» mandaba a buscar un defecto que no existe.
+  if (!elegidas.length) {
+    console.log(`GATE CHANGED — lo cambiado no toca el alcance (\`paths\`) de ninguna señal: no hay qué verificar. Para entregar, \`${config.gate?.command ?? "node scripts/gate.mjs"}\` completo.`);
+    soltarCerrojo();
+    process.exit(0);
+  }
   console.log(`Corren ${elegidas.length} de ${senales.length} señales; las otras ${reutilizadas.length} no tocan lo cambiado y conservan su resultado.`);
   if (process.argv.includes("--plan")) {
     console.log(`\nCorrerían:\n${elegidas.map((s) => `  ▶ ${s.name}${s.paths ? "" : "  (sin paths: siempre)"}`).join("\n")}`);
@@ -796,7 +813,10 @@ function registrar(veredicto) {
   };
   const previo = leerRegistro() ?? {};
   const fecha = new Date().toISOString();
-  const head = git("rev-parse", "--short", "HEAD");
+  // El HEAD y «árbol limpio» son los de CUANDO ARRANCÓ: eso es lo que las señales midieron. Leídos
+  // acá, al final, un commit hecho durante la corrida dejaba adoptable (y como base de `changed`)
+  // un veredicto medido sobre otro árbol.
+  const head = arranque.head ?? git("rev-parse", "--short", "HEAD");
   const senalesReg = { ...(previo.senales ?? {}) };
   for (const [nombre, res] of Object.entries(resultados)) {
     const antes = senalesReg[nombre]?.ultimoVerde ?? null;
@@ -815,7 +835,7 @@ function registrar(veredicto) {
   // `ultimaCompleta`: la base del modo changed. Sólo la mueve un gate completo; los de desarrollo
   // la heredan, o cada `gate:changed` mediría contra el anterior y perdería lo cambiado antes.
   const ultimaCompleta = MODE === "full" ? { head: fotoInicial?.head ?? head, fecha, veredicto, ...(fotoInicial ? { clones: fotoInicial.clones, huellas: fotoInicial.huellas } : {}) } : previo.ultimaCompleta ?? (previo.modo === "full" ? { head: previo.head, fecha: previo.fecha, veredicto: previo.veredicto } : null);
-  const registro = { fecha, modo: MODE, veredicto, ms: Date.now() - inicio.getTime(), head, rama: git("rev-parse", "--abbrev-ref", "HEAD"), limpio: git("status", "--porcelain") === "", ultimaCompleta, senales: senalesReg };
+  const registro = { fecha, modo: MODE, veredicto, ms: Date.now() - inicio.getTime(), head, rama: git("rev-parse", "--abbrev-ref", "HEAD"), limpio: arranque.limpio && git("status", "--porcelain") === "", ultimaCompleta, senales: senalesReg };
   registro.bitacora = anotarVeredicto(previo.bitacora ?? null, registro, git);
   try {
     fs.mkdirSync(path.dirname(abs), { recursive: true });
@@ -997,7 +1017,21 @@ async function tomarCerrojo() {
   const t0 = Date.now();
   for (;;) {
     const actual = leer();
-    if (!actual || !vivo(actual.pid)) break;
+    if (!actual || !vivo(actual.pid)) {
+      // Tomarlo es CREAR el archivo (`wx`): si dos gates arrancan a la vez, sólo uno lo crea y el
+      // otro vuelve a mirar y espera. Escribiéndolo a secas lo tomaban los dos (lo vio el reviewer).
+      try {
+        fs.mkdirSync(path.dirname(abs), { recursive: true });
+        if (fs.existsSync(abs)) fs.rmSync(abs, { force: true }); // huérfano: su dueño ya murió
+        fs.writeFileSync(abs, JSON.stringify({ pid: process.pid, inicio: isoLocal(), modo: MODE }) + "\n", { flag: "wx" });
+        break;
+      } catch (e) {
+        // Sin cerrojo el gate corre igual: uno que no se pudo escribir no es un rojo.
+        if (e.code !== "EEXIST") break;
+        await new Promise((r) => setTimeout(r, 50));
+        continue;
+      }
+    }
     if (!ajeno) {
       ajeno = { pid: actual.pid, desde: Date.now() };
       console.log(
@@ -1009,12 +1043,6 @@ async function tomarCerrojo() {
       process.exit(1);
     }
     await new Promise((r) => setTimeout(r, CERROJO.sondeoMs));
-  }
-  try {
-    fs.mkdirSync(path.dirname(abs), { recursive: true });
-    fs.writeFileSync(abs, JSON.stringify({ pid: process.pid, inicio: isoLocal(), modo: MODE }) + "\n");
-  } catch {
-    /* sin cerrojo el gate corre igual: un cerrojo que no se pudo escribir no es un rojo */
   }
   process.on("exit", soltarCerrojo);
   for (const senal of ["SIGINT", "SIGTERM", "SIGHUP"]) {

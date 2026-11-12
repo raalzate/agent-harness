@@ -248,7 +248,7 @@ export function construirBandeja(m) {
     for (const c of sec.chequeos.filter((x) => x.tono !== "verde")) una(humano.hacer, { titulo: `Configurar tu máquina: ${c.texto}`, porque: sec.titulo, comando: c.arreglo ?? null, origen: "máquina" });
   }
   const raiz = v?.repos?.find((x) => !x.ausente) ?? null;
-  if (raiz?.adelante > 0) una(humano.hacer, { titulo: `Empujar ${raiz.adelante} commit(s) a ${rep.remoto}`, porque: `están sólo en esta máquina (rama ${raiz.rama})`, comando: "git push", origen: "git" });
+  if (raiz?.adelante > 0) una(humano.hacer, { titulo: `Empujar ${raiz.adelante} commit(s) hacia ${rep.remoto}`, porque: `están sólo en esta máquina (rama ${raiz.rama})`, comando: "git push", origen: "git" });
   if (raiz && !raiz.limpio && raiz.cambios?.length && !r.gate?.pendiente) una(humano.decidir, { titulo: `Qué hacer con ${raiz.cambios.length} archivo(s) sin commitear`, porque: "commitear es decisión tuya: se commitea con el gate verde, o se descarta", comando: "git status", origen: "git" });
 
   // Los PR: con conflictos piden una decisión; sin conflictos, conseguir el voto.
@@ -401,7 +401,7 @@ export function senalesRojas(m) {
   const declaradas = new Map((m.reglas?.gate?.signals ?? []).map((s) => [s.name, s]));
   const deuda = deudaAccionable(m);
   return Object.entries(reg.senales ?? {})
-    .filter(([, s]) => s.estado === "rojo")
+    .filter(([nombre, s]) => s.estado === "rojo" && (!declaradas.size || declaradas.has(nombre)))
     .map(([nombre, s]) => ({
       nombre,
       motivo: s.motivo ?? "falló",
@@ -456,7 +456,9 @@ export function saludDelArnes(m) {
   // Lo que sólo se sabe corriendo: el self-test y la latencia, de la última corrida del gate.
   // Qué señal es el self-test y cuál la latencia se sabe por el SCRIPT que corre, no por cómo la
   // llamó el repo: buscada por nombre, una señal rebautizada dejaba la dimensión omitida en silencio.
-  const corren = (script) => new Set(senales.filter((s) => Array.isArray(s.command) && s.command.some((a) => String(a).replace(/\\/g, "/").endsWith(script))).map((s) => s.name));
+  // El modelo trae el comando como texto (`command`) y como lista (`argv`); el config crudo, sólo la lista.
+  const argvDe = (s) => (Array.isArray(s.argv) ? s.argv : Array.isArray(s.command) ? s.command : String(s.command ?? "").split(/\s+/));
+  const corren = (script) => new Set(senales.filter((s) => argvDe(s).some((a) => String(a).replace(/\\/g, "/").endsWith(script))).map((s) => s.name));
   const deLaCorrida = (script) => {
     const nombres = corren(script);
     return Object.entries(reg?.senales ?? {}).filter(([n]) => nombres.has(n));
@@ -493,7 +495,8 @@ export function etapasDelPipeline(m) {
   const reg = m.enVivo?.gate?.registro;
   if (!reg) return [];
   const declaradas = m.reglas?.gate?.signals ?? [];
-  const orden = [...declaradas.map((s) => s.name), ...Object.keys(reg.senales ?? {}).filter((n) => !declaradas.some((s) => s.name === n))];
+  // Con señales declaradas, sólo ésas: lo que quedó en el registro de un nombre viejo no es un job.
+  const orden = declaradas.length ? declaradas.map((s) => s.name) : Object.keys(reg.senales ?? {});
   const porNombre = new Map(declaradas.map((s) => [s.name, s]));
   const defs = (m.enVivo?.etapas ?? []).map((e) => ({ nombre: e.name, re: new RegExp(e.match, "i"), jobs: [] }));
   const otras = { nombre: defs.length ? "Otras" : "Gate", re: null, jobs: [] };
@@ -682,7 +685,15 @@ export function construirResumen(m) {
   const v = m.enVivo ?? null;
   const reg = v?.gate?.registro ?? null;
   const declaradas = new Map((m.reglas?.gate?.signals ?? []).map((s) => [s.name, s]));
-  const senales = Object.entries(reg?.senales ?? {}).map(([nombre, s]) => ({ nombre, ...s, declarada: declaradas.get(nombre) ?? null }));
+  // El registro ACUMULA: una señal renombrada o quitada del config deja su última corrida ahí para
+  // siempre. Contada, el Resumen decía «12/13» con todo verde. Cuentan sólo las que el config
+  // declara hoy (sin config legible, las del registro).
+  const todas = Object.entries(reg?.senales ?? {})
+    .filter(([nombre]) => !declaradas.size || declaradas.has(nombre))
+    .map(([nombre, s]) => ({ nombre, ...s, declarada: declaradas.get(nombre) ?? null }));
+  const esOpcional = (s) => s.estado === "omitida" && /^no existe \.git\//.test(s.motivo ?? "");
+  // …y tampoco la apagada a propósito (ver `opcional`, abajo): ni suma ni resta.
+  const senales = todas.filter((s) => !esOpcional(s));
   const rojas = senales.filter((s) => s.estado === "rojo");
   // Una señal que se omite porque falta un marcador LOCAL opcional (`no existe .git/…`, como la
   // tarea declarada) está apagada a propósito: no es «el gate no midió todo». El titular decía

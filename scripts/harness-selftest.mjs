@@ -3128,6 +3128,9 @@ if (enParte("registro") && fs.existsSync(abs("scripts/gate.mjs"))) {
     caso(solo.status !== 0 && /ninguna señal llegó a correr/.test(solo.out), "a gate where the only signal omits itself is red: nothing ran", solo.out.slice(-240));
     const cero = gate([{ name: "verde", command: sale(0) }, { ...declarado, skipExitCode: 0 }]);
     caso(cero.status !== 0 && /skipExitCode/.test(cero.out), "`skipExitCode: 0` is an invalid config (it would turn green into omitted)", cero.out.slice(-240));
+    // 1 is what ANY failure exits with: declaring it would turn every red into «omitted».
+    const uno = gate([{ name: "verde", command: sale(0) }, { ...declarado, command: sale(1), skipExitCode: 1 }]);
+    caso(uno.status !== 0 && /skipExitCode inválido/.test(uno.out), "`skipExitCode: 1` is an invalid config (the generic failure code would read as omitted)", uno.out.slice(-240));
   } catch (e) {
     bad("skipExitCode: cases", e.stack?.split("\n").slice(0, 3).join(" · ") ?? String(e));
   } finally {
@@ -6192,6 +6195,20 @@ if (corre("fuera")) {
         // Rebautizadas («pruebas», «costo»), el panel las reconoce igual: por el script que corren.
         dimension("selftest").total === 1 && dimension("selftest").tono === "rojo" && dimension("latencia").total === 1 && salud.estado.tono === "rojo" &&
         historial.length === 2 && historial[1].rojas === 1 && repetido.length === 2;
+      // El registro acumula: una señal que ya no está en el config (renombrada) y la apagada a
+      // propósito no cuentan. Con el modelo real (`command` como texto, `argv` como lista).
+      const acumulado = R.construirResumen({
+        reglas: { gate: { signals: [{ name: "a", command: "node scripts/harness-selftest.mjs", argv: ["node", "scripts/harness-selftest.mjs"] }, { name: "tarea", command: "node x", argv: ["node", "x"] }] } },
+        enVivo: { gate: { pendiente: false, registro: { fecha: "2026-01-02T00:00:00Z", veredicto: "verde", modo: "full", senales: { a: { estado: "verde" }, "nombre viejo": { estado: "rojo" }, tarea: { estado: "omitida", motivo: "no existe .git/harness-task.json" } } } }, repos: [] },
+      });
+      const saludReal = R.saludDelArnes({
+        reglas: { gate: { signals: [{ name: "a", command: "node scripts/harness-selftest.mjs", argv: ["node", "scripts/harness-selftest.mjs"] }] } },
+        enVivo: { gate: { registro: { senales: { a: { estado: "verde" } } } } },
+      });
+      if (acumulado.gate.total === 1 && acumulado.gate.verdes === 1 && acumulado.gate.rojas === 0 && acumulado.estado.tono === "verde" && saludReal.dimensiones.find((d) => d.clave === "selftest").total === 1)
+        ok("panel: el Resumen cuenta sólo las señales declaradas hoy (ni la renombrada que quedó en el registro ni la apagada a propósito), y reconoce el self-test con el comando como texto");
+      else bad("panel: qué señales cuenta el Resumen", `total ${acumulado.gate.total} · verdes ${acumulado.gate.verdes} · rojas ${acumulado.gate.rojas} · estado ${acumulado.estado.tono} · self-test ${saludReal.dimensiones.find((d) => d.clave === "selftest").total}`);
+
       if (piezas) ok("panel: el diagnóstico de la máquina, el pipeline por etapas, la salud (por el script de la señal, no por su nombre) y el historial salen de sus datos");
       else bad("panel: piezas del Resumen", `doctor ${doc.secciones.length}/${doc.ok}/${doc.bloqueantes}/${doc.avisos} · etapas ${etapas.map((e) => `${e.nombre}:${e.estado}:${e.jobs.length}`).join("|")} · selftest ${dimension("selftest")?.total}/${dimension("selftest")?.tono} · latencia ${dimension("latencia")?.total} · historial ${historial.length}/${repetido.length}`);
 

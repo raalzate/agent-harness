@@ -48,8 +48,11 @@ garantía **si `paths` dice la verdad**, y esa es la condición que se acepta.
   `--no-cache` mide en frío.
 - **El registro es de confianza local** (`.git/harness-gate.json`): quien lo escribe decide la
   caché. CI arranca sin registro y por eso siempre mide.
-- **El cerrojo no es atómico**: dos gates que arrancan en el mismo instante pueden tomarlo los dos.
-  Cubre el caso real —una sesión que lanza el gate mientras otro corre—, no una carrera.
+- **El cerrojo se toma creando el archivo** (`wx`), así que dos gates que arrancan a la vez no lo
+  toman los dos. Queda una ventana al descartar un cerrojo huérfano (dos gates que ven al mismo
+  dueño muerto): cubre el caso real —una sesión que lanza el gate mientras otro corre—.
+- **El HEAD y «árbol limpio» del registro son los del arranque**: un commit hecho durante la
+  corrida no vuelve adoptable un veredicto medido sobre otro árbol.
 
 ## Lo que se descartó
 

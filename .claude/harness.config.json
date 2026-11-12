@@ -504,6 +504,15 @@
       "invocation": "npm run"
     },
     "tokens": true,
+    "$pipeline": "Cómo se dibuja la última corrida del gate en «Ahora»: etapas en orden, cada una con el regex de los nombres de señal que agrupa. Una señal nueva que no case con ninguna sale en «Otras», a la vista.",
+    "pipeline": {
+      "stages": [
+        { "name": "Frenos", "match": "self-test|convention lint|worktrees|^task:" },
+        { "name": "Memoria", "match": "link-check|artifacts|library index|status ledger|code index" },
+        { "name": "Encaje", "match": "profile bench|harness eval" },
+        { "name": "Costo", "match": "harness cost" }
+      ]
+    },
     "memory": {
       "$comment": "La pestaña Memoria: la memoria del agente como LLEGA (docs/panel.md, ADR 0010). `runSessionHooks` es opt-in porque el panel EJECUTA los hooks de SessionStart para ver qué inyectan; acá se enciende porque `.claude/hooks/session-start.mjs` sólo lee (git y STATUS). `promptSources` dice qué hook de pedido lee qué clave del config, para medir lo que inyecta sin ejecutarlo.",
       "decisionsDir": "docs/decisions",
