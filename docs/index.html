@@ -973,8 +973,12 @@ repo-lint: 1 problema(s)
           <p>La única definición de «entregable», declarada en JSON y corrida por tres actores con el
             mismo comando: el humano, el agente y CI. Cada señal declara <code>why</code> — qué error
             atrapa que ninguna otra atrapa.</p>
-          <p class="solves">Evita: «en mi máquina funciona», y que CI verifique algo distinto de lo que
-            verifica quien programa.</p>
+          <p>Y no cuesta lo mismo siempre: mientras arreglás, <code>gate:changed</code> corre sólo las
+            señales que tocan lo que cambiaste y <code>gate:retry</code> sólo las rojas; las señales
+            van por carriles en paralelo y la que no cambió de entradas no se repite. Ninguno de esos
+            atajos entrega: el entregable sigue siendo el gate completo.</p>
+          <p class="solves">Evita: «en mi máquina funciona», que CI verifique algo distinto de lo que
+            verifica quien programa, y que un gate caro se saltee.</p>
         </div>
         <div class="piece">
           <p class="mark">11 hooks del agente · 4 de git</p>
@@ -1319,11 +1323,55 @@ above minScore.</code></pre>
           <strong>regenera en cada corrida del gate</strong>, verde o roja: nunca es más viejo que el
           último gate. Sin dependencias, sin red, sin ningún modelo de lenguaje: se deriva de los
           archivos que el arnés ya exige y del registro que el gate escribe por señal.</p>
-        <p>La prosa y la máquina van separadas a propósito. En la captura, el veredicto escrito en
+        <p>La prosa y la máquina van separadas a propósito. En la cabecera de un repo recién portado
+          (la captura está más abajo), el veredicto escrito en
           STATUS dice <strong>verde</strong> del 21 de septiembre, y el último gate en esta máquina
           salió <strong>rojo</strong> hoy —un test con presupuesto de reloj que falla bajo carga—.
           Sin el panel, esa diferencia se descubre cuando alguien lee el STATUS en voz alta.</p>
+        <p>Tenía todos los datos y ninguna conclusión: quien lo abría armaba el diagnóstico a mano.
+          Ahora abre en <strong>«Qué hacer»</strong>, que contesta dos preguntas y nada más —qué te
+          toca a vos y qué puede hacer el agente ya—, y cada ítem nombra el dato del que sale. El
+          panel no opina: reparte con reglas escritas.</p>
       </div>
+
+      <figure class="panel" style="margin-top:1.75rem">
+        <figcaption>qué hacer — la portada: lo tuyo y lo del agente, con su comando</figcaption>
+        <img src="img/panel-que-hacer.png" alt="Pestaña Qué hacer del panel: a la izquierda lo que le toca a la persona (decidir y hacer), a la derecha lo que el agente puede hacer ya, cada ítem con su origen y su comando" width="1200" height="807" loading="lazy" style="display:block;width:100%;height:auto">
+      </figure>
+
+      <div class="pair">
+        <figure class="panel" style="margin:0">
+          <figcaption>resumen — el estado en una frase, y por qué</figcaption>
+          <img src="img/panel-resumen.png" alt="Pestaña Resumen del panel: de quién es el informe, el estado en una frase, las señales de la última corrida y la tendencia del gate en esta máquina" width="1200" height="807" loading="lazy" style="display:block;width:100%;height:auto">
+        </figure>
+        <figure class="panel" style="margin:0">
+          <figcaption>ahora — la última corrida, como un pipeline</figcaption>
+          <img src="img/panel-pipeline.png" alt="La última corrida del gate dibujada como un pipeline: etapas en columnas y cada señal un job con su estado y su duración" width="1200" height="807" loading="lazy" style="display:block;width:100%;height:auto">
+        </figure>
+      </div>
+
+      <div class="col ideas" style="margin-top:1.75rem">
+        <p><strong>Cada señal roja trae su error real.</strong> El gate guarda en su registro las
+          líneas de la salida que nombran el fallo, así que el panel muestra qué arreglar sin volver
+          a correr nada, con el comando que la reproduce y —si una deuda de la bitácora la nombra— su
+          remedio. Un botón copia el pedido listo para el agente, con esa evidencia adentro.</p>
+        <p><strong>La salud es la peor dimensión, no un «sin alarmas».</strong> Hooks vivos, frenos
+          encendidos, señales con su porqué, incidentes con freno ejecutable, self-test y latencia:
+          cada una cuenta cuántas piezas están bien de cuántas y dice cómo se remedia. Si fallan
+          hooks, frenos o self-test, es roja: ahí un freno deja de frenar en silencio.</p>
+        <p><strong>En vivo, si querés.</strong> <code>npm run panel:serve</code> lo sirve sólo en
+          <code>127.0.0.1</code> y lo regenera cuando algo cambia: un archivo editado, una corrida
+          del gate. Abierto como archivo dice que es una foto.</p>
+        <p><strong>No conoce tu gestor ni a tu cliente.</strong> Qué cuenta como decisión del
+          humano, qué ítem espera a un tercero y con qué comando se toma una tarea lo declara el
+          config (<code>panel.triage</code>). Un comando que no declaraste no aparece en ningún
+          pedido: el panel no manda al agente a correr algo que no existe.</p>
+      </div>
+
+      <figure class="panel" style="margin-top:1.75rem">
+        <figcaption>salud — una dimensión por lo que puede dejar de frenar</figcaption>
+        <img src="img/panel-salud.png" alt="Pestaña Salud del panel: un indicador por dimensión con piezas sanas sobre el total, con piezas sanas sobre el total" width="1200" height="807" loading="lazy" style="display:block;width:100%;height:auto">
+      </figure>
 
       <figure class="panel" style="margin-top:1.75rem">
         <figcaption>el panel de un repo real (processflow-architect), recién portado</figcaption>
