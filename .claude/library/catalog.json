@@ -28,9 +28,9 @@
     },
     {
       "id": "referencia",
-      "concept": "El arnés por dentro: claves del config, señales, índices, panel, evaluaciones y recetas",
+      "concept": "El arnés por dentro: claves del config, señales, índices, panel, evaluaciones, seguridad y recetas",
       "scope": "el porqué de fondo (metodo) y los incidentes (incidentes)",
-      "entries": 10
+      "entries": 11
     },
     {
       "id": "incidentes",
@@ -584,6 +584,7 @@
         "Por qué hace falta, si ya hay self-test",
         "Qué se evalúa",
         "El conjunto, agrupado como el arnés",
+        "Robustez: la entrada hostil, no la intención hostil",
         "El esquema",
         "Las métricas",
         "Lo que encontró",
@@ -593,6 +594,7 @@
         "Sumar un caso",
         "La familia con IA: los subagentes, con promptfoo",
         "Qué mide",
+        "El red-team: el agente real contra el arnés",
         "Cómo se lee el resultado",
         "Cuándo correrlo",
         "Sumar un caso"
@@ -851,6 +853,22 @@
         "Dónde viven los artefactos",
         "Cómo convive con las otras reglas",
         "Qué es ejecutable y qué no"
+      ]
+    },
+    {
+      "path": "docs/seguridad.md",
+      "kind": "document",
+      "base": "referencia",
+      "title": "Seguridad del arnés: qué garantiza, cómo se prueba y dónde no llega",
+      "summary": "La pregunta de una empresa no es «¿tiene reglas?» sino «¿cómo sé que el agente no hace nada fuera de ellas?». Este documento la contesta con mecanismos y comandos, no con promesas: cada fila de abajo nombra el control q…",
+      "headings": [
+        "Seguridad del arnés: qué garantiza, cómo se prueba y dónde no llega",
+        "El adversario",
+        "La propiedad que va primero: el arnés no lo desarma el que está siendo frenado",
+        "Amenaza → control → prueba",
+        "Tres niveles de evidencia",
+        "Límites declarados",
+        "Cómo lo verifica un equipo, hoy"
       ]
     },
     {

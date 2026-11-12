@@ -27,7 +27,8 @@ nada del repo.
 .claude/skills/               new-guardrail (regla → freno) · library-index · library-migrate (la biblioteca)
 .claude/evals/reviewer/       los diffs con los que se le toma la prueba de vida al reviewer
 .claude/evals/<agente>/       las entradas de la evaluación con IA de gate-runner, ci-investigator y explorer
-.claude/evals/deterministic/  la evaluación determinista: cases.json (guides · rules · signals, es/en) y sus esquemas
+.claude/evals/deterministic/  la evaluación determinista: cases.json (guides · rules · signals · robustness, es/en) y sus esquemas
+.claude/evals/redteam/        el red-team: pedidos hostiles e inyecciones contra un agente real con el arnés puesto
 scripts/gate.sh               ejecuta gate.signals; no sabe de stacks
 scripts/repo-lint.mjs         10 clases de regla, todas configurables (COHERENCIA: guía vs. freno; PORTABLE: rutas)
 scripts/cycle-check.mjs       ramas y prácticas XP; --verify-red: la prueba falla sin el cambio
@@ -145,6 +146,7 @@ npm run ci:investigate # ¿por qué falló CI? corrida, job, línea, y si el gat
 | que corra en Windows, macOS y Linux | `docs/multiplataforma.md` |
 | guías y sensores: el marco de *harness engineering* aplicado | `docs/guias-y-sensores.md` |
 | evaluaciones: determinista (frenos, en el gate) y con IA (el reviewer) | `docs/evaluaciones.md` |
+| seguridad: qué garantiza frente al agente, amenaza → control → prueba, red-team | `docs/seguridad.md` |
 | qué principio ágil tiene mecanismo | `docs/agilidad.md` |
 | el ciclo de desarrollo: ramas y prácticas XP | `docs/ciclo-desarrollo.md` |
 | diseño: acoplamiento, cohesión, ADR | `docs/arquitectura.md` |
