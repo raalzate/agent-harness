@@ -6,6 +6,9 @@
     "$command": "Lo que el agente y los mensajes de error le dicen al humano que corra. El default funciona en cualquier repo Y EN CUALQUIER PLATAFORMA porque `scripts/gate.mjs` viene copiado y corre con el mismo node que ya necesitan los hooks; si le pusiste un alias en el manifiesto (npm, make, just), escribilo acá.",
     "command": "node scripts/gate.mjs",
     "fastCommand": "node scripts/gate.mjs fast",
+    "$retryCommand": "RETRY: sólo las señales que la última corrida dejó en rojo o abortadas. CHANGED: sólo las señales cuyo `paths` toca lo que cambió desde el último gate completo (sin `paths`, la señal corre siempre). Los dos son señal de DESARROLLO, no entregable. Carriles (`lanes`), cerrojo (`lock`), límite por señal (`signalTimeoutMinutes`) y caché por `paths`: docs/config-reference.md.",
+    "retryCommand": "node scripts/gate.mjs retry",
+    "changedCommand": "node scripts/gate.mjs changed",
     "marker": ".git/gate-dirty",
     "codeGlobs": [
       "src/"
@@ -332,6 +335,11 @@
       "^\\s*(hay|existe|sirve|conviene|se puede|pod[eé]s|sab[eé]s|vale la pena)(?=\\s|$|[,:])",
       "^\\s*(what|why|how|which|when|where|who|whose)(?=\\s|$|[,:'])",
       "^\\s*(is there|are there|is it|does it|do you know|can i|should i|should we)(?=\\s|$|[,:])"
+    ],
+    "$informativePatterns": "El IMPERATIVO INFORMATIVO al inicio del pedido («contame», «explain»): pide una respuesta igual que una pregunta, sin signo de interrogación. Si el mismo pedido trae un verbo de acción, gana la acción. Opcional.",
+    "informativePatterns": [
+      "^\\s*(cont[aá]me|cu[eé]ntame|dec[ií]me|dime|expl[ií]ca(me)?|expl[ií]came|mostr[aá]me|mu[eé]strame|resum[ií]me|res[uú]meme|list[aá]me|l[ií]stame|describ[ií]me|descr[ií]beme|detall[aá]me|det[aá]llame)(?=\\s|$|[,:.])",
+      "^\\s*(tell me|explain|show me|summari[sz]e|list|describe|walk me through)(?=\\s|$|[,:.])"
     ],
     "actionPatterns": [
       "\\b(arregl|corrig|implement|agreg|a[ñn]ad|cambi|escrib|cre[aá]|aplic|instal|port|actualiz|borr|elimin|quit|refactor|migr|public|commit|push|generá|genera|hacelo|haz|dale|proced)",

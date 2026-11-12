@@ -8,6 +8,8 @@
   "scripts": {
     "gate": "node scripts/gate.mjs",
     "gate:fast": "node scripts/gate.mjs fast",
+    "gate:retry": "node scripts/gate.mjs retry",
+    "gate:changed": "node scripts/gate.mjs changed",
     "lint": "node scripts/repo-lint.mjs",
     "lint:rules": "node scripts/repo-lint.mjs --rules",
     "selftest": "node scripts/harness-selftest.mjs",
@@ -27,6 +29,7 @@
     "map": "node scripts/harness-map.mjs",
     "panel": "node scripts/panel/generar.mjs",
     "panel:sync": "node scripts/panel/sincronizar.mjs",
+    "panel:serve": "node scripts/panel/servir.mjs",
     "status": "node scripts/status.mjs",
     "status:check": "node scripts/status.mjs check"
   }

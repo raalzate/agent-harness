@@ -23,7 +23,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
-import { REPO_ROOT, CONFIG_PATH, resolverEjecutable, rutaDeEstado } from "../.claude/hooks/harness.mjs";
+import { REPO_ROOT, CONFIG_PATH, prepararLanzamiento, rutaDeEstado } from "../.claude/hooks/harness.mjs";
+const lanzarSync = (argv, opciones) => spawnSync(...prepararLanzamiento(argv, opciones));
 
 const fallar = (msg) => {
   console.error(`coder-spawn: ${msg}`);
@@ -92,7 +93,7 @@ const alta = git("worktree", "add", destino, "-b", rama, desde);
 if (alta.status !== 0) fallar(`git worktree add failed: ${`${alta.stderr}`.trim().split("\n")[0]}`);
 
 const enWt = (argv, input) =>
-  spawnSync(resolverEjecutable(argv[0]), argv.slice(1), {
+  lanzarSync(argv, {
     cwd: destino,
     input,
     encoding: "utf8",

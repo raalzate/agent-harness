@@ -88,6 +88,18 @@ if (PARTE !== undefined && !PARTES.some((p) => p.id === PARTE)) {
   process.exit(1);
 }
 const SERIE = PARTE === undefined && PARALELO === 1;
+// Las partes CON ESTADO (`estado`, `costo`) fabrican y leen marcadores de sesión. Van a un
+// directorio APARTE (`HARNESS_STATE_DIR`, que `rutaDeEstado` respeta y los hooks heredan): contra
+// los marcadores reales, el `ask-first` de cualquier prompt concurrente —de esta sesión o de
+// otra en la misma raíz— los borraba en medio de un caso, y «gate-stop deja cerrar un turno de
+// pregunta» salía rojo sin que nada estuviera roto (2026-11-09, dos veces en una tarde). En
+// serie (`--parallel=1`, para depurar) no se aparta: las partes con repos temporales leen sus
+// `.git/` a mano y un desvío global las rompería.
+if (PARTE === "estado" || PARTE === "costo") {
+  const aparte = fs.mkdtempSync(path.join(os.tmpdir(), "harness-estado-"));
+  process.env.HARNESS_STATE_DIR = aparte;
+  process.on("exit", () => fs.rmSync(aparte, { recursive: true, force: true }));
+}
 // Dueño de lo que se imprime: los casos baratos y sin efectos (compilar un regex) corren en
 // cualquier proceso, pero sólo el dueño los reporta y los cuenta. Lo caro o con estado va
 // además detrás de `if (corre(…))`, para no correrlo de más ni a la vez.
@@ -139,6 +151,23 @@ const section = (title) => {
  * correr igual donde ese bash no está — reportando OMITIDO, nunca "pasó".
  */
 const HAY_BASH = spawnSync("bash", ["-c", "exit 0"], { stdio: "ignore" }).status === 0;
+
+/**
+ * ¿El proceso NO llegó a correr? Devuelve el motivo, o null si corrió y entregó su exit code.
+ * Un freno decide con 0, 1 o 2; un `spawnSync` que no arrancó (`error.code`), que murió por una
+ * señal, o que Windows abortó al cargarlo (un NTSTATUS, ≥ 0xC0000000: `0xC0000142` es «no pude
+ * inicializar las DLL», lo que da la máquina sin recursos para un proceso más) NO es un veredicto
+ * del freno. El gate del 2026-11-10 dejó doce casos de `ciclo` en «esperaba exit 1, salió …» con
+ * stderr vacío: parecían doce frenos rotos y era la máquina sin poder lanzar `git` ni `node`.
+ * Sigue siendo ROJO —no se probó nada—, pero dice qué pasó.
+ */
+const fallaDeLanzamiento = (r) => {
+  if (r.error) return `no arrancó (${r.error.code ?? r.error.message})`;
+  if (r.signal) return `murió por la señal ${r.signal}`;
+  if (r.status === null || r.status === undefined) return "terminó sin exit code";
+  if (r.status >= 0xc0000000) return `Windows lo abortó al lanzarlo (exit 0x${r.status.toString(16).toUpperCase()}${r.status === 0xc0000142 ? ": STATUS_DLL_INIT_FAILED, la máquina no pudo crear un proceso más" : ""})`;
+  return null;
+};
 
 const hookFiles = new Set();
 
@@ -419,7 +448,8 @@ if (PARTE === undefined && !SERIE) {
     // excepción del propio self-test desaparecería del total y el veredicto daría verde.
     if (!marca) {
       fallas += 1;
-      console.error(`  ✗ la parte \`${p.id}\` entregó su resultado\n      el proceso terminó con exit ${r.code} sin resultado`);
+      const lanzamiento = fallaDeLanzamiento({ status: r.code });
+      console.error(`  ✗ la parte \`${p.id}\` entregó su resultado\n      el proceso terminó con exit ${r.code} sin resultado${lanzamiento ? ` — ${lanzamiento}` : ""}`);
       continue;
     }
     const n = Number(marca.slice(MARCA_PARTE.length));
@@ -645,6 +675,7 @@ const patronesDelConfig = [
   // arruinar el turno del usuario, así que el único lugar donde puede fallar es este.
   ...(config.graph?.questionPatterns ?? []).map((p) => ["graph.questionPatterns", p]),
   ...(config.askFirst?.questionPatterns ?? []).map((p) => ["askFirst.questionPatterns", p]),
+  ...(config.askFirst?.informativePatterns ?? []).map((p) => ["askFirst.informativePatterns", p]),
   ...(config.askFirst?.actionPatterns ?? []).map((p) => ["askFirst.actionPatterns", p]),
   ...(config.askFirst?.pastPatterns ?? []).map((p) => ["askFirst.pastPatterns", p]),
   ...(config.askFirst?.strongQuestionPatterns ?? []).map((p) => ["askFirst.strongQuestionPatterns", p]),
@@ -720,6 +751,30 @@ if (!regexMalos) ok(`${patronesDelConfig.filter(([, p]) => p).length} regex del 
   }
 }
 
+// `flags` por regla: `firstMatch` compila en un try/catch y una bandera inválida (`"zz"`) deja la
+// regla sin morder nada, en silencio. Este es el único lugar donde puede fallar en voz alta.
+{
+  const conFlags = [
+    ...(config.bash?.deny ?? []).map((r) => ["bash.deny", r]),
+    ...(config.bash?.ask ?? []).map((r) => ["bash.ask", r]),
+    ...(config.deploy?.bash?.deny ?? []).map((r) => ["deploy.bash.deny", r]),
+    ...(config.deploy?.bash?.ask ?? []).map((r) => ["deploy.bash.ask", r]),
+    ...(config.deploy?.mcp?.deny ?? []).map((r) => ["deploy.mcp.deny", r]),
+    ...(config.deploy?.mcp?.ask ?? []).map((r) => ["deploy.mcp.ask", r]),
+  ].filter(([, r]) => r && "flags" in r);
+  const malas = conFlags.filter(([, r]) => {
+    if (typeof r.flags !== "string") return true;
+    try {
+      new RegExp(r.pattern, r.flags);
+      return false;
+    } catch {
+      return true;
+    }
+  });
+  if (malas.length) bad("`flags` de las reglas compilan", malas.map(([d, r]) => `${d}: \`${r.pattern}\` con flags ${JSON.stringify(r.flags)}`).join("\n      "));
+  else if (conFlags.length) ok(`los \`flags\` de ${conFlags.length} regla(s) compilan`);
+}
+
 // Invariante del generador: la muestra que fabrica DEBE casar el patrón del que salió, o ser
 // null. Sin él, una reducción imperfecta produce un falso rojo sobre un freno que funciona —
 // pasó con `\brm\b[^|;&]*tareas\.json`, que se reducía a «rmtareas.json».
@@ -756,7 +811,9 @@ if (!regexMalos) ok(`${patronesDelConfig.filter(([, p]) => p).length} regex del 
     recorrer(raiz, "");
     const falsas = declaradas.filter(([, r]) => {
       try {
-        return !new RegExp(r.pattern, "i").test(r.sample);
+        // Con los `flags` de la regla, como la evalúa `firstMatch`: con `i` fijo, un `sample` en
+        // minúsculas «casaba» una regla que distingue mayúsculas y probaba un comando que pasa.
+        return !new RegExp(r.pattern, typeof r.flags === "string" ? r.flags : "i").test(r.sample);
       } catch {
         return true;
       }
@@ -1000,6 +1057,45 @@ if (enParte("frenos") && hookFiles.has("bash-guard.mjs")) {
     const encadenado = pedir(`${ejemplo} && ${muestra ?? ejemplo}`);
     if (encadenado.pregunta || encadenado.status === 2) ok("bash-guard: la exención no se hereda encadenando otro comando");
     else bad("bash.ask exento encadenado", `\`${ejemplo} && …\` pasó sin preguntar: \`exempt\` no está anclado`);
+  }
+
+  // `flags` por regla. Antes todo se evaluaba con `i` fijo y una regla `ask` sobre `git branch -D`
+  // (borrado forzado) escalaba también `git branch -d` (el seguro): no había forma de escribir la
+  // diferencia. Muerde (con `flags: ""`, `-D` pregunta y `-d` pasa) y no muerde de más (sin
+  // `flags`, el comportamiento de siempre, sin distinguir mayúsculas: ningún repo portado cambia).
+  // El hook COPIADO a un repo temporal con un config cebo: `REPO_ROOT` sale de su ubicación (P7).
+  {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "harness-flags-"));
+    try {
+      fs.mkdirSync(path.join(tmp, ".claude", "hooks"), { recursive: true });
+      for (const h of ["harness.mjs", "bash-guard.mjs"]) fs.copyFileSync(abs(`.claude/hooks/${h}`), path.join(tmp, ".claude", "hooks", h));
+      const decide = (bashCfg, command) => {
+        fs.writeFileSync(path.join(tmp, ".claude", "harness.config.json"), JSON.stringify({ bash: bashCfg }));
+        const r = spawnSync(process.execPath, [path.join(tmp, ".claude", "hooks", "bash-guard.mjs")], {
+          input: JSON.stringify({ hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command } }),
+          encoding: "utf8",
+        });
+        if (r.status === 2) return "block";
+        return r.status === 0 && r.stdout.includes('"ask"') ? "ask" : r.status === 0 ? "pass" : `exit ${r.status}`;
+      };
+      const forzado = { pattern: "git\\s+branch\\s+-D\\b", reason: "cebo" };
+      const casos = [
+        ["`ask` con `flags: \"\"` pregunta por `git branch -D`", { ask: [{ ...forzado, flags: "" }] }, "git branch -D vieja", "ask"],
+        ["`ask` con `flags: \"\"` deja pasar `git branch -d` (el borrado seguro)", { ask: [{ ...forzado, flags: "" }] }, "git branch -d vieja", "pass"],
+        ["`deny` con `flags: \"\"` bloquea `git branch -D`", { deny: [{ ...forzado, flags: "" }] }, "git branch -D vieja", "block"],
+        ["`deny` con `flags: \"\"` deja pasar `git branch -d`", { deny: [{ ...forzado, flags: "" }] }, "git branch -d vieja", "pass"],
+        ["`exempt` hereda los `flags` de su regla", { ask: [{ pattern: "git\\s+branch\\b", flags: "", exempt: "^git\\s+branch\\s+-d\\s+\\S+$" }] }, "git branch -D vieja", "ask"],
+        ["sin `flags`, el default de siempre: `-d` también pregunta", { ask: [forzado] }, "git branch -d vieja", "ask"],
+        ["sin `flags`, el default de siempre: mayúsculas cruzadas casan", { ask: [forzado] }, "GIT BRANCH -D vieja", "ask"],
+      ];
+      const fallas = casos
+        .map(([nombre, cfg, cmd, esperado]) => [nombre, cmd, esperado, decide(cfg, cmd)])
+        .filter(([, , esperado, real]) => esperado !== real);
+      if (!fallas.length) for (const [nombre] of casos) ok(`bash-guard: ${nombre}`);
+      else bad("bash-guard respeta `flags` por regla", fallas.map(([n, c, e, r]) => `${n}: \`${c}\` → ${r}, se esperaba ${e}`).join("\n      "));
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
   }
 
   // Sin `hook_event_name` el JSON de «ask» no se reconoce y el comando correría sin preguntar:
@@ -1289,9 +1385,17 @@ const devolverEstadoLoop = () => {
 process.on("exit", devolverEstadoLoop);
 
 // 3e. El hook Stop no deja cerrar con el gate pendiente.
+//
+// El marcador de pregunta (`askFirst.marker`) se aparta durante TODO el caso: si el self-test corre
+// desde un turno que `ask-first` clasificó como pregunta (un gate lanzado por un subagente al que
+// se le preguntó algo), el marcador real está puesto, gate-stop deja cerrar con exit 0 y el caso
+// salía rojo sin que el freno estuviera roto. Medir no puede depender del turno desde el que se mide.
 if (corre("estado") && hookFiles.has("gate-stop.mjs") && config.gate?.marker) {
   const marker = rutaDeEstado(config.gate.marker);
   const existia = fs.existsSync(marker);
+  const preguntaReal = config.askFirst?.marker ? rutaDeEstado(config.askFirst.marker) : null;
+  const respaldoPreguntaReal = preguntaReal && fs.existsSync(preguntaReal) ? fs.readFileSync(preguntaReal) : null;
+  if (preguntaReal) fs.rmSync(preguntaReal, { force: true });
   try {
     fs.mkdirSync(path.dirname(marker), { recursive: true });
     fs.writeFileSync(marker, "selftest");
@@ -1302,8 +1406,31 @@ if (corre("estado") && hookFiles.has("gate-stop.mjs") && config.gate?.marker) {
     const loop = runHook("gate-stop.mjs", { hook_event_name: "Stop", stop_hook_active: true });
     if (loop.status === 0) ok("gate-stop no entra en loop (stop_hook_active)");
     else bad("gate-stop no entra en loop", `exit ${loop.status} con stop_hook_active: true`);
+
+    // P1 nombra UNA sola excepción del hook `Stop` (el presupuesto agotado, P12). Que el turno sea
+    // una pregunta NO es otra: el marcador de `ask-first` frena las ediciones por herramienta, no
+    // lo que se escribe desde el shell, así que «un turno de pregunta no muta» no está garantizado.
+    // Abrir esa excepción es una enmienda de la constitución, no un efecto de otro cambio.
+    if (config.askFirst?.marker) {
+      const pregunta = rutaDeEstado(config.askFirst.marker);
+      const respaldoPregunta = fs.existsSync(pregunta) ? fs.readFileSync(pregunta) : null;
+      try {
+        fs.mkdirSync(path.dirname(pregunta), { recursive: true });
+        fs.writeFileSync(pregunta, "selftest");
+        const q = runHook("gate-stop.mjs", { hook_event_name: "Stop", stop_hook_active: false });
+        if (q.status === 2) ok("gate-stop bloquea con el gate pendiente también en un turno de pregunta (P1: una sola excepción)");
+        else bad("gate-stop en un turno de pregunta", `exit ${q.status}: el marcador de \`askFirst\` abrió una segunda excepción al gate pendiente que la constitución no nombra`);
+      } finally {
+        if (respaldoPregunta === null) fs.rmSync(pregunta, { force: true });
+        else fs.writeFileSync(pregunta, respaldoPregunta);
+      }
+    }
   } finally {
     if (!existia) fs.rmSync(marker, { force: true });
+    if (preguntaReal) {
+      if (respaldoPreguntaReal === null) fs.rmSync(preguntaReal, { force: true });
+      else fs.writeFileSync(preguntaReal, respaldoPreguntaReal);
+    }
   }
 }
 
@@ -1382,6 +1509,30 @@ if (corre("estado") && config.askFirst?.marker && hookFiles.has("ask-first.mjs")
     ["arreglá el diseño de la página", false],
     ["dale, hacelo", false],
     ["¿podés arreglar el diseño?", false],
+    // Imperativo informativo: pide una respuesta, no un cambio. La clave es OPCIONAL
+    // (`askFirst.informativePatterns`), así que cada pedido se exige sólo si el repo declaró un
+    // patrón que lo casa: sin la clave, o con patrones de otro idioma, no hay nada que frenar y
+    // exigirlo ponía rojo al arnés recién instalado (lo cazó el banco, en el quick start).
+    ...[
+      "contame qué falta",
+      "cuentame bien que necesitas, estas dando vueltas en un loop",
+      "explicame cómo funciona el gate",
+      "mostrame el diff pendiente",
+    ]
+      .filter((pedido) =>
+        (config.askFirst.informativePatterns ?? []).some((p) => {
+          try {
+            return new RegExp(p, "i").test(pedido);
+          } catch {
+            return false; // el regex inválido lo reporta la sección de patrones
+          }
+        }),
+      )
+      .map((pedido) => [pedido, true]),
+    // …y no tapa una orden: el verbo de acción del mismo pedido gana.
+    ["contame qué falta y arreglalo", false],
+    ["listame los temporales y borralos", false],
+    ["explicá el hook y corregí el bug", false],
   ];
   for (const [prompt, debeFrenar] of casos) {
     const frena = tras(prompt);
@@ -1871,6 +2022,53 @@ if (enParte("estado") && hookFiles.has("post-edit-check.mjs") && config.gate?.ma
   }
 }
 
+// 3e-sexies. La SONDA no deja estado: `hooks-timing` corre los hooks de verdad con
+//     `HARNESS_PROBE=1`, y un hook medido no puede fabricar el marcador de `ask-first` ni el
+//     `gate-dirty` —los restauraba después, pero en la ventana de la medición existían, y
+//     `action-guard` frenó una edición legítima citando «¿cómo está el arnés?», el prompt de la
+//     sonda (2026-11-09). Toca los marcadores reales → `estado`.
+if (enParte("estado") && config.gate?.marker && config.askFirst?.marker && hookFiles.has("post-edit-check.mjs") && hookFiles.has("ask-first.mjs") && (config.gate?.codeGlobs ?? []).length && (config.gate?.codeExtensions ?? []).length) {
+  const marcadores = [rutaDeEstado(config.gate.marker), rutaDeEstado(config.askFirst.marker)];
+  const respaldos = marcadores.map((m) => (fs.existsSync(m) ? fs.readFileSync(m, "utf8") : null));
+  const sonda = (hookFile, payload) =>
+    spawnSync("node", [abs(`.claude/hooks/${hookFile}`)], { input: JSON.stringify({ cwd: REPO_ROOT, ...payload }), encoding: "utf8", env: { ...process.env, HARNESS_PROBE: "1" } });
+  try {
+    for (const m of marcadores) fs.rmSync(m, { force: true });
+    const archivo = `${config.gate.codeGlobs[0].replace(/\/$/, "")}/ejemplo-selftest${config.gate.codeExtensions[0]}`;
+    const edicion = sonda("post-edit-check.mjs", { hook_event_name: "PostToolUse", tool_name: "Write", tool_input: { file_path: abs(archivo), content: "" } });
+    const pregunta = sonda("ask-first.mjs", { hook_event_name: "UserPromptSubmit", prompt: "¿cómo está el arnés?" });
+    const sinRastro = !marcadores.some((m) => fs.existsSync(m));
+    if (edicion.status === 0 && pregunta.status === 0 && sinRastro) ok("sonda (HARNESS_PROBE=1): medir un hook no deja ni `gate-dirty` ni el marcador de ask-first");
+    else bad("sonda (HARNESS_PROBE=1) no deja estado", `exit ${edicion.status}/${pregunta.status}; marcadores: ${marcadores.filter((m) => fs.existsSync(m)).map((m) => path.basename(m)).join(", ") || "ninguno"}`);
+    // Y el camino real sigue marcando: la sonda no apaga el freno, sólo su rastro.
+    runHook("ask-first.mjs", { hook_event_name: "UserPromptSubmit", prompt: "¿cómo está el arnés?" });
+    if (fs.existsSync(marcadores[1])) ok("sin la sonda, la misma pregunta sí deja el marcador de ask-first");
+    else bad("sin la sonda, ask-first marca", "la pregunta no dejó el marcador: el freno quedó apagado, no sólo su rastro");
+  } finally {
+    marcadores.forEach((m, i) => (respaldos[i] !== null ? fs.writeFileSync(m, respaldos[i]) : fs.rmSync(m, { force: true })));
+  }
+}
+
+// 3e-septies. El estado del self-test está APARTE de la sesión: con `HARNESS_STATE_DIR` puesto,
+//     una pregunta deja el marcador en ese directorio y NO en el `.git/` real. Sin esto, el
+//     self-test y un prompt concurrente se pisaban los marcadores (ver arriba, `PARTE`).
+if (enParte("estado") && config.askFirst?.marker && hookFiles.has("ask-first.mjs")) {
+  const aparte = process.env.HARNESS_STATE_DIR;
+  const real = path.join(REPO_ROOT, config.askFirst.marker);
+  const existiaReal = fs.existsSync(real);
+  if (!aparte) skip("estado aparte (HARNESS_STATE_DIR)", "esta corrida no aparta el estado (serie / --parallel=1)");
+  else {
+    const dentro = rutaDeEstado(config.askFirst.marker);
+    fs.rmSync(dentro, { force: true });
+    runHook("ask-first.mjs", { hook_event_name: "UserPromptSubmit", prompt: "¿qué hace esto?" });
+    const enAparte = fs.existsSync(dentro);
+    const realIntacto = fs.existsSync(real) === existiaReal;
+    fs.rmSync(dentro, { force: true });
+    if (dentro.startsWith(aparte) && enAparte && realIntacto) ok("estado aparte: el marcador de una pregunta cae en HARNESS_STATE_DIR y el `.git/` de la sesión queda intacto");
+    else bad("estado aparte (HARNESS_STATE_DIR)", `ruta ${dentro} · en aparte: ${enAparte} · real intacto: ${realIntacto}`);
+  }
+}
+
 // 3e-quinquies. La rama por DEFAULT, que es la que usa todo repo portado sin perfil.
 //     `codeExtensions: []` es lo que trae la plantilla, así que el default agnóstico del hook
 //     es el código que más se ejecuta en el mundo real — y era la rama donde vivía el bug.
@@ -1944,7 +2142,7 @@ if (corre("frenos") && hookFiles.has("protected-paths.mjs")) {
         protectedPaths: [{ pattern: "^node_modules/", reason: "dependencias: no las edita el agente." }],
       }),
     );
-    fs.symlinkSync(afuera, path.join(repo, "node_modules/dep"), "dir");
+    fs.symlinkSync(afuera, path.join(repo, "node_modules/dep"), "junction"); // junction: Windows la crea sin privilegios
 
     const escribir = (archivo) =>
       spawnSync("node", [path.join(repo, ".claude/hooks/protected-paths.mjs")], {
@@ -1967,7 +2165,7 @@ if (corre("frenos") && hookFiles.has("protected-paths.mjs")) {
     // Tercera variante del mismo incidente: un alias DENTRO del repo. No es una ruta nueva,
     // es otro nombre de una que ya tiene dueño — y por el nombre nuevo pasaba.
     fs.mkdirSync(path.join(repo, "src/secreto"), { recursive: true });
-    fs.symlinkSync(path.join(repo, "src/secreto"), path.join(repo, "alias"), "dir");
+    fs.symlinkSync(path.join(repo, "src/secreto"), path.join(repo, "alias"), "junction");
     fs.writeFileSync(
       path.join(repo, ".claude/harness.config.json"),
       JSON.stringify({
@@ -2258,7 +2456,14 @@ if (corre("registro")) {
     const correr = (archivos, mensaje, configOverride, { previo = null, tarea = null } = {}) => {
       const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "harness-ciclo-"));
       try {
-        const git = (...a) => spawnSync("git", a, { cwd: tmp, encoding: "utf8" });
+        // El repo temporal es el ANDAMIO del caso: si un paso de git no corre, el freno juzga un
+        // índice vacío y su exit no dice nada del freno. Se anota el primero que falla.
+        let andamio = null;
+        const git = (...a) => {
+          const r = spawnSync("git", a, { cwd: tmp, encoding: "utf8" });
+          if (r.status !== 0 && !andamio) andamio = `\`git ${a.join(" ")}\` ${fallaDeLanzamiento(r) ?? `salió con ${r.status}: ${(r.stderr ?? "").trim().slice(0, 160)}`}`;
+          return r;
+        };
         git("init", "-q");
         git("config", "user.email", "selftest@example.com");
         git("config", "user.name", "selftest");
@@ -2286,7 +2491,9 @@ if (corre("registro")) {
         const msgFile = path.join(tmp, "MSG");
         fs.writeFileSync(msgFile, mensaje);
         const res = spawnSync("node", [script, "--commit", msgFile, "--config", rutaCfg], { cwd: tmp, encoding: "utf8" });
-        return { status: res.status, stderr: res.stderr ?? "" };
+        const lanzamiento = fallaDeLanzamiento(res);
+        const noSeProbo = andamio ? `no se armó el repo temporal — ${andamio}` : lanzamiento ? `\`cycle-check --commit\` ${lanzamiento}` : null;
+        return { status: res.status, stderr: res.stderr ?? "", noSeProbo };
       } finally {
         fs.rmSync(tmp, { recursive: true, force: true });
       }
@@ -2364,13 +2571,15 @@ if (corre("registro")) {
 
       for (const [nombre, archivos, mensaje, cfg, esperado, extra] of casos) {
         const res = correr(archivos, mensaje, cfg, extra);
-        if (res.status === esperado) ok(`ciclo: ${nombre}`);
+        if (res.noSeProbo) bad(`ciclo: ${nombre}`, `el caso NO se probó (fallo de lanzamiento, no veredicto del freno): ${res.noSeProbo}`);
+        else if (res.status === esperado) ok(`ciclo: ${nombre}`);
         else bad(`ciclo: ${nombre}`, `esperaba exit ${esperado}, salió ${res.status}. stderr: ${res.stderr.trim().slice(0, 200)}`);
       }
 
       // Y el caso que se olvida: con las prácticas APAGADAS, el freno no dice nada.
       const apagado = correr({ [archivoCodigo]: "// x\n" }, "fix: algo", { ...config, xp: {} });
-      if (apagado.status === 0) ok("ciclo: sin `xp` configurado, el freno no corre");
+      if (apagado.noSeProbo) bad("ciclo: sin `xp` configurado", `el caso NO se probó (fallo de lanzamiento, no veredicto del freno): ${apagado.noSeProbo}`);
+      else if (apagado.status === 0) ok("ciclo: sin `xp` configurado, el freno no corre");
       else bad("ciclo: sin `xp` configurado", `exit ${apagado.status}: el freno bloquea sin estar encendido`);
     }
   }
@@ -2884,6 +3093,48 @@ if (enParte("reglas") && config.status?.events && fs.existsSync(abs("scripts/sta
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true });
     fs.rmSync(tmpGate, { recursive: true, force: true });
+  }
+}
+
+// 3f-skip. `skipExitCode`: a signal that has nothing to verify on this checkout says so with an
+//     exit code it DECLARES, and the gate reports it OMITTED — never green, never counted as run.
+//     Without it, a karma suite whose scoped tsconfig lives on another branch could only be red
+//     (a lie: there is no defect) or exit 0 (a worse lie: green over nothing).
+if (enParte("registro") && fs.existsSync(abs("scripts/gate.mjs"))) {
+  const tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "harness-skipexit-")));
+  const caso = (cond, nombre, falla) => (cond ? ok(`skipExitCode: ${nombre}`) : bad(`skipExitCode: ${nombre}`, falla));
+  try {
+    for (const d of ["scripts", ".claude/hooks", ".git"]) fs.mkdirSync(path.join(tmp, d), { recursive: true });
+    fs.copyFileSync(abs("scripts/gate.mjs"), path.join(tmp, "scripts", "gate.mjs"));
+    fs.copyFileSync(abs(".claude/hooks/harness.mjs"), path.join(tmp, ".claude", "hooks", "harness.mjs"));
+    const sale = (n) => ["node", "-e", `process.exit(${n})`];
+    const gate = (signals) => {
+      fs.writeFileSync(path.join(tmp, ".claude", "harness.config.json"), JSON.stringify({ gate: { signals }, panel: { enabled: false } }));
+      const r = spawnSync(process.execPath, [path.join(tmp, "scripts", "gate.mjs")], { cwd: tmp, encoding: "utf8" });
+      return { status: r.status, out: `${r.stdout ?? ""}${r.stderr ?? ""}` };
+    };
+    const declarado = { name: "sin-trabajo", command: sale(78), skipExitCode: 78 };
+    const mixto = gate([{ name: "verde", command: sale(0) }, declarado]);
+    caso(
+      mixto.status === 0 && /OMITIDA/.test(mixto.out) && /Señales omitidas \(NO son verde\): sin-trabajo/.test(mixto.out),
+      "the declared exit code is reported OMITTED, next to a green signal",
+      mixto.out.slice(-240),
+    );
+    const sinDeclarar = gate([{ name: "verde", command: sale(0) }, { name: "sin-trabajo", command: sale(78) }]);
+    caso(sinDeclarar.status !== 0, "the same exit code WITHOUT `skipExitCode` is red", `exit ${sinDeclarar.status}`);
+    const otroCodigo = gate([{ name: "verde", command: sale(0) }, { ...declarado, command: sale(1) }]);
+    caso(otroCodigo.status !== 0, "any other non-zero exit of that signal is still red", `exit ${otroCodigo.status}`);
+    const solo = gate([declarado]);
+    caso(solo.status !== 0 && /ninguna señal llegó a correr/.test(solo.out), "a gate where the only signal omits itself is red: nothing ran", solo.out.slice(-240));
+    const cero = gate([{ name: "verde", command: sale(0) }, { ...declarado, skipExitCode: 0 }]);
+    caso(cero.status !== 0 && /skipExitCode/.test(cero.out), "`skipExitCode: 0` is an invalid config (it would turn green into omitted)", cero.out.slice(-240));
+    // 1 is what ANY failure exits with: declaring it would turn every red into «omitted».
+    const uno = gate([{ name: "verde", command: sale(0) }, { ...declarado, command: sale(1), skipExitCode: 1 }]);
+    caso(uno.status !== 0 && /skipExitCode inválido/.test(uno.out), "`skipExitCode: 1` is an invalid config (the generic failure code would read as omitted)", uno.out.slice(-240));
+  } catch (e) {
+    bad("skipExitCode: cases", e.stack?.split("\n").slice(0, 3).join(" · ") ?? String(e));
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
   }
 }
 
@@ -3536,6 +3787,595 @@ for (const s of senales) {
     else ok("scripts/gate.sh es ejecutable");
   }
 }
+// 6-bis. Carriles y cerrojo del gate, en un repo temporal con una copia de `gate.mjs`:
+//     - con `lanes.max` > 1 dos carriles corren A LA VEZ y la exclusiva al FINAL, sola;
+//       sin `lanes`, todo en serie y en el orden declarado (el gate de siempre);
+//     - un cerrojo de un PID muerto se descarta; uno vivo hace ESPERAR y después corre;
+//       si el dueño no termina en `waitMinutes`, ROJO con el motivo;
+//     - el que esperó ADOPTA el veredicto del otro cuando es el mismo HEAD con el árbol limpio,
+//       y con `adopt: false` corre igual.
+//     Dos gates a la vez se pisaban los artefactos del BFF (CS2012) y 15 minutos en serie eran
+//     27 señales que no compartían nada (2026-11-09).
+if (enParte("reglas") && fs.existsSync(abs("scripts/gate.mjs")) && fs.existsSync(abs(".claude/hooks/harness.mjs"))) {
+  const tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "harness-gate-lanes-")));
+  const caso = (cond, nombre, falla) => (cond ? ok(`gate: ${nombre}`) : bad(`gate: ${nombre}`, falla));
+  const git = (...a) => spawnSync("git", ["-c", "user.name=selftest", "-c", "user.email=selftest@example.com", ...a], { cwd: tmp, encoding: "utf8" });
+  try {
+    for (const d of ["scripts", ".claude/hooks", ".git"]) fs.mkdirSync(path.join(tmp, d), { recursive: true });
+    fs.copyFileSync(abs("scripts/gate.mjs"), path.join(tmp, "scripts", "gate.mjs"));
+    fs.copyFileSync(abs(".claude/hooks/harness.mjs"), path.join(tmp, ".claude", "hooks", "harness.mjs"));
+    // Las señales escriben en `.git/`, que no ensucia el árbol: el caso de adopción exige árbol limpio.
+    // Cada una anota cuándo EMPEZÓ y cuándo TERMINÓ: el paralelismo se afirma por solapamiento de
+    // intervalos, nunca por el reloj total —bajo carga (el gate real corriendo al lado) un umbral de
+    // milisegundos daba rojo sin que nada estuviera roto.
+    const duerme = (nombre, ms) => ["node", "-e", `const f=require('fs');f.writeFileSync('.git/${nombre}.ini',String(Date.now()));setTimeout(()=>f.writeFileSync('.git/${nombre}.fin',String(Date.now())),${ms})`];
+    const marca = (nombre) => ["node", "-e", `require('fs').writeFileSync('.git/${nombre}.ini',String(Date.now()))`];
+    const cfg = (gate) => fs.writeFileSync(path.join(tmp, ".claude", "harness.config.json"), JSON.stringify({ gate: { command: "npm run gate", ...gate }, panel: { enabled: false } }));
+    const leer = (nombre) => Number(fs.readFileSync(path.join(tmp, ".git", nombre), "utf8"));
+    const gate = (...a) => spawnSync(process.execPath, [path.join(tmp, "scripts", "gate.mjs"), ...a], { cwd: tmp, encoding: "utf8", timeout: 60000 });
+    const limpiar = () => {
+      for (const f of fs.readdirSync(path.join(tmp, ".git"))) if (/\.(ini|fin)$|^gate\.lock$|^harness-gate\.json$/.test(f)) fs.rmSync(path.join(tmp, ".git", f), { force: true });
+    };
+    const senales = [
+      { name: "A", lane: "a", command: duerme("A", 1200), why: "cebo" },
+      { name: "B", lane: "b", command: duerme("B", 1200), why: "cebo" },
+      { name: "C", exclusive: true, command: marca("C"), why: "cebo" },
+    ];
+
+    cfg({ signals: senales, lanes: { max: 2 }, lock: false });
+    const paralelo = gate();
+    const salida = `${paralelo.stdout}${paralelo.stderr}`;
+    const aIni = leer("A.ini");
+    const aFin = leer("A.fin");
+    const bIni = leer("B.ini");
+    const bFin = leer("B.fin");
+    const cIni = leer("C.ini");
+    const solapan = aIni < bFin && bIni < aFin;
+    caso(
+      paralelo.status === 0 && solapan && /Carriles: a \(1\) · b \(1\)/.test(salida) && /──▶ A\n/.test(salida) && /──▶ B\n/.test(salida),
+      "con `lanes.max: 2`, dos carriles corren a la vez (sus intervalos se solapan)",
+      `exit ${paralelo.status} · A ${aIni}–${aFin} · B ${bIni}–${bFin} · ${salida.split("\n").filter((l) => /Carriles|──▶|GATE/.test(l)).join(" · ")}`,
+    );
+    caso(cIni >= aFin && cIni >= bFin, "la señal `exclusive` corre al final, cuando los carriles terminaron", `C arrancó en ${cIni}; A terminó ${aFin}, B ${bFin}`);
+
+    limpiar();
+    cfg({ signals: senales, lock: false });
+    const serie = gate();
+    const texto = `${serie.stdout}${serie.stderr}`;
+    caso(
+      serie.status === 0 && !/Carriles:/.test(texto) && leer("A.fin") <= leer("B.ini") && texto.indexOf("──▶ A") < texto.indexOf("──▶ B") && texto.indexOf("──▶ B") < texto.indexOf("──▶ C"),
+      "sin `lanes`, las señales corren en serie y en el orden declarado (el gate de siempre)",
+      `exit ${serie.status} · A termina ${leer("A.fin")}, B empieza ${leer("B.ini")} · ${texto.split("\n").filter((l) => /Carriles|──▶/.test(l)).join(" · ")}`,
+    );
+
+    // Cerrojo. Un `node` que ya terminó presta un PID muerto; uno que duerme, un PID vivo.
+    //
+    // El «otro gate» tiene que ser un proceso AJENO, no un hijo de este self-test: mientras
+    // `spawnSync` bloquea este proceso, un hijo directo que termina queda ZOMBI (nadie lo cosecha),
+    // y en POSIX a un zombi `kill(pid, 0)` le contesta «vivo» — el gate esperaba para siempre a un
+    // dueño muerto y el caso salía rojo sin defecto (macOS; en Windows no hay zombis y pasaba). Un
+    // nieto cuyo padre ya salió lo adopta init, que sí lo cosecha: es la forma de un gate de otra sesión.
+    const ajeno = (codigo) => {
+      const r = spawnSync(process.execPath, ["-e", `const h=require('child_process').spawn(process.execPath,['-e',${JSON.stringify(codigo)}],{detached:true,stdio:'ignore'});h.unref();console.log(h.pid)`], { encoding: "utf8" });
+      const pid = Number(r.stdout.trim());
+      return {
+        pid,
+        kill: () => {
+          try {
+            process.kill(pid);
+          } catch {
+            /* ya terminó */
+          }
+        },
+      };
+    };
+    limpiar();
+    const rapida = [{ name: "rapida", command: marca("R"), why: "cebo" }];
+    const lockFile = path.join(tmp, ".git", "gate.lock");
+    const muerto = spawnSync(process.execPath, ["-e", ""], { encoding: "utf8" }).pid;
+    cfg({ signals: rapida, lock: { file: ".git/gate.lock", waitMinutes: 1, pollMs: 100 } });
+    fs.writeFileSync(lockFile, JSON.stringify({ pid: muerto, inicio: "ayer" }));
+    const huerfano = gate();
+    caso(
+      huerfano.status === 0 && !/GATE EN CURSO/.test(huerfano.stdout) && !fs.existsSync(lockFile),
+      "un cerrojo cuyo dueño ya murió se descarta, y el gate suelta el suyo al terminar",
+      `exit ${huerfano.status}; en curso: ${/GATE EN CURSO/.test(huerfano.stdout)}; lock queda: ${fs.existsSync(lockFile)}`,
+    );
+
+    limpiar();
+    const vivo = ajeno("setTimeout(()=>{},1500)");
+    fs.writeFileSync(lockFile, JSON.stringify({ pid: vivo.pid, inicio: "ahora" }));
+    const t1 = Date.now();
+    const espero = gate();
+    const esperado = Date.now() - t1;
+    caso(
+      espero.status === 0 && /GATE EN CURSO/.test(espero.stdout) && esperado >= 1300 && fs.existsSync(path.join(tmp, ".git", "R.ini")),
+      "un cerrojo vivo hace esperar, y el gate corre cuando el otro termina",
+      `exit ${espero.status} · esperó ${esperado} ms · en curso: ${/GATE EN CURSO/.test(espero.stdout)} · corrió: ${fs.existsSync(path.join(tmp, ".git", "R.ini"))}`,
+    );
+
+    limpiar();
+    const lento = ajeno("setTimeout(()=>{},4000)");
+    fs.writeFileSync(lockFile, JSON.stringify({ pid: lento.pid, inicio: "ahora" }));
+    cfg({ signals: rapida, lock: { file: ".git/gate.lock", waitMinutes: 0.005, pollMs: 100 } });
+    const vencido = gate();
+    lento.kill();
+    caso(vencido.status === 1 && /GATE ROJO — el gate PID \d+ no terminó/.test(vencido.stdout) && !fs.existsSync(path.join(tmp, ".git", "R.ini")), "si el dueño del cerrojo no termina en `waitMinutes`, ROJO con el motivo y sin correr", `exit ${vencido.status} · ${vencido.stdout.trim().split("\n").slice(-1)[0]}`);
+
+    // Adopción: repo git limpio; el otro gate «termina» escribiendo el registro sobre este HEAD.
+    limpiar();
+    // El config se escribe ANTES de cada commit: adoptar exige el árbol limpio, y un config
+    // recién reescrito es un archivo modificado.
+    cfg({ signals: rapida, lock: { file: ".git/gate.lock", waitMinutes: 1, pollMs: 100 } });
+    if (git("init", "-q").status === 0 && git("add", "-A").status === 0 && git("commit", "-qm", "fixture").status === 0) {
+      const registro = path.join(tmp, ".git", "harness-gate.json");
+      // El otro escribe su registro TARDE (3 s) y muere enseguida: el que espera sólo adopta un
+      // registro posterior al momento en que empezó a esperar (`espera.desde`). Con 700 ms, bajo la
+      // carga de un gate completo el que espera arrancaba después de la escritura, descartaba el
+      // registro por viejo y corría (visto en el repo donde nació el cerrojo).
+      const otro = (veredicto) => {
+        const head = git("rev-parse", "--short", "HEAD").stdout.trim();
+        return ajeno(`setTimeout(()=>require('fs').writeFileSync(${JSON.stringify(registro)},JSON.stringify({modo:'full',veredicto:'${veredicto}',head:'${head}',limpio:true,fecha:new Date().toISOString(),senales:{}})),3000);setTimeout(()=>{},3300)`);
+      };
+      fs.writeFileSync(lockFile, JSON.stringify({ pid: otro("rojo").pid, inicio: "ahora" }));
+      const adopta = gate();
+      caso(
+        adopta.status === 1 && /VEREDICTO ADOPTADO/.test(adopta.stdout) && /ROJO/.test(adopta.stdout) && !fs.existsSync(path.join(tmp, ".git", "R.ini")),
+        "el que esperó adopta el veredicto del otro (mismo HEAD, árbol limpio) y no vuelve a correr",
+        `exit ${adopta.status} · ${adopta.stdout.trim().split("\n").filter((l) => /ADOPTADO|GATE/.test(l)).join(" · ")}`,
+      );
+      limpiar();
+      cfg({ signals: rapida, lock: { file: ".git/gate.lock", waitMinutes: 1, pollMs: 100, adopt: false } });
+      git("commit", "-qam", "adopt false");
+      fs.writeFileSync(lockFile, JSON.stringify({ pid: otro("verde").pid, inicio: "ahora" }));
+      const repite = gate();
+      caso(repite.status === 0 && !/VEREDICTO ADOPTADO/.test(repite.stdout) && fs.existsSync(path.join(tmp, ".git", "R.ini")), "con `adopt: false` el que esperó corre igual", `exit ${repite.status} · adoptó: ${/ADOPTADO/.test(repite.stdout)} · corrió: ${fs.existsSync(path.join(tmp, ".git", "R.ini"))}`);
+    } else skip("gate: adopción del veredicto", "no se pudo crear el repo git temporal");
+  } catch (e) {
+    bad("gate: carriles y cerrojo", e.stack?.split("\n").slice(0, 3).join(" · ") ?? String(e));
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+}
+
+// 6-ter. `gate retry`: reanuda desde lo rojo. Sin registro no hay desde dónde (ROJO); corre SÓLO
+//     las señales rojas de la última corrida y las verdes NO vuelven a correr; si siguen rojas,
+//     ROJO; si pasan, «RETRY VERDE» que NO es entregable: no borra el marcador ni anota la bitácora;
+//     y sin rojos, «nada que reintentar». Reintentar una señal costaba las 27 (2026-11-09).
+if (enParte("reglas") && fs.existsSync(abs("scripts/gate.mjs")) && fs.existsSync(abs(".claude/hooks/harness.mjs"))) {
+  const tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "harness-gate-retry-")));
+  const caso = (cond, nombre, falla) => (cond ? ok(`gate retry: ${nombre}`) : bad(`gate retry: ${nombre}`, falla));
+  try {
+    for (const d of ["scripts", ".claude/hooks", ".git"]) fs.mkdirSync(path.join(tmp, d), { recursive: true });
+    fs.copyFileSync(abs("scripts/gate.mjs"), path.join(tmp, "scripts", "gate.mjs"));
+    fs.copyFileSync(abs(".claude/hooks/harness.mjs"), path.join(tmp, ".claude", "hooks", "harness.mjs"));
+    const en = (f) => path.join(tmp, ".git", f);
+    fs.writeFileSync(
+      path.join(tmp, ".claude", "harness.config.json"),
+      JSON.stringify({
+        gate: {
+          command: "npm run gate",
+          retryCommand: "npm run gate:retry",
+          marker: ".git/gate-dirty",
+          lock: false,
+          signals: [
+            { name: "roja", command: ["node", "-e", "process.exit(require('fs').existsSync('.git/arreglo.txt')?0:1)"], why: "cebo" },
+            { name: "verde", command: ["node", "-e", "require('fs').writeFileSync('.git/verde.corrio','1')"], why: "cebo" },
+          ],
+        },
+        panel: { enabled: false },
+        status: { file: "STATUS.md", events: { journal: ".git/journal.jsonl" } },
+      }),
+    );
+    const gate = (...a) => spawnSync(process.execPath, [path.join(tmp, "scripts", "gate.mjs"), ...a], { cwd: tmp, encoding: "utf8", timeout: 60000 });
+    const eventos = () => (fs.existsSync(en("journal.jsonl")) ? fs.readFileSync(en("journal.jsonl"), "utf8").split("\n").filter(Boolean).length : 0);
+
+    const sinRegistro = gate("retry");
+    caso(sinRegistro.status === 1 && /no hay corrida previa/.test(sinRegistro.stdout), "sin registro de una corrida previa es ROJO y manda al gate completo", `exit ${sinRegistro.status}: ${sinRegistro.stdout.trim().split("\n").slice(-1)[0]}`);
+
+    const completo = gate();
+    const anotados = eventos();
+    fs.rmSync(en("verde.corrio"), { force: true });
+    fs.writeFileSync(en("gate-dirty"), "x");
+    const sigueRoja = gate("retry");
+    caso(
+      completo.status === 1 && sigueRoja.status === 1 && /Retry: 1 señal\(es\) rojas/.test(sigueRoja.stdout) && /──▶ roja/.test(sigueRoja.stdout) && !/──▶ verde/.test(sigueRoja.stdout) && !fs.existsSync(en("verde.corrio")) && /GATE ROJO/.test(sigueRoja.stdout) && /gate:retry/.test(completo.stdout),
+      "corre SÓLO la señal roja (la verde no vuelve a correr), sigue ROJO si no se arregló, y el gate rojo sugiere el retry",
+      `completo exit ${completo.status} · retry exit ${sigueRoja.status} · verde corrió: ${fs.existsSync(en("verde.corrio"))} · ${sigueRoja.stdout.trim().split("\n").filter((l) => /Retry|──▶|GATE/.test(l)).join(" · ")}`,
+    );
+
+    fs.writeFileSync(en("arreglo.txt"), "fix");
+    const arreglado = gate("retry");
+    caso(
+      arreglado.status === 0 && /GATE RETRY VERDE/.test(arreglado.stdout) && /NO es entregable/.test(arreglado.stdout) && !fs.existsSync(en("verde.corrio")) && fs.existsSync(en("gate-dirty")) && eventos() === anotados,
+      "arreglada la roja, «RETRY VERDE» no es entregable: no borra el marcador del gate ni anota la bitácora, y la verde sigue sin correr",
+      `exit ${arreglado.status} · marcador queda: ${fs.existsSync(en("gate-dirty"))} · eventos ${anotados}→${eventos()} · ${arreglado.stdout.trim().split("\n").slice(-1)[0]}`,
+    );
+
+    const nada = gate("retry");
+    caso(nada.status === 0 && /nada que reintentar/.test(nada.stdout), "sin señales rojas en el registro no hay nada que reintentar (y lo dice)", `exit ${nada.status}: ${nada.stdout.trim().split("\n").slice(-1)[0]}`);
+
+    const cierre = gate();
+    caso(cierre.status === 0 && /GATE VERDE — entregable/.test(cierre.stdout) && !fs.existsSync(en("gate-dirty")) && fs.existsSync(en("verde.corrio")), "el gate completo después del retry sí entrega: corre todo y borra el marcador", `exit ${cierre.status} · marcador queda: ${fs.existsSync(en("gate-dirty"))}`);
+  } catch (e) {
+    bad("gate retry", e.stack?.split("\n").slice(0, 3).join(" · ") ?? String(e));
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+}
+
+// 6-quater. `gate changed`: corre SÓLO las señales cuyo `paths` toca lo cambiado desde el último gate
+//     COMPLETO (una sin `paths` corre siempre); lo que ya estaba sucio y sigue igual no cuenta
+//     (huella); una roja ajena se informa sin teñir el veredicto; «CHANGED VERDE» no entrega (no
+//     borra el marcador ni anota la bitácora); y un `paths` mal formado es ROJO, no «nunca
+//     relevante». Arreglar un hook costaba el gate entero: 21 min (2026-11-10).
+if (enParte("reglas") && fs.existsSync(abs("scripts/gate.mjs")) && fs.existsSync(abs(".claude/hooks/harness.mjs"))) {
+  const tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "harness-gate-changed-")));
+  const caso = (cond, nombre, falla) => (cond ? ok(`gate changed: ${nombre}`) : bad(`gate changed: ${nombre}`, falla));
+  try {
+    const sh = (...a) => spawnSync("git", ["-c", "user.name=selftest", "-c", "user.email=selftest@example.test", "-c", "core.hooksPath=/dev/null", ...a], { cwd: tmp, encoding: "utf8" });
+    sh("init", "-q");
+    for (const d of ["scripts", ".claude/hooks", "hooks", "app", "otra"]) fs.mkdirSync(path.join(tmp, d), { recursive: true });
+    fs.copyFileSync(abs("scripts/gate.mjs"), path.join(tmp, "scripts", "gate.mjs"));
+    fs.copyFileSync(abs(".claude/hooks/harness.mjs"), path.join(tmp, ".claude", "hooks", "harness.mjs"));
+    const en = (f) => path.join(tmp, ".git", f);
+    const marca = (n) => ["node", "-e", `require('fs').writeFileSync('.git/${n}.corrio','1')`];
+    const configurar = (extra = {}) =>
+      fs.writeFileSync(
+        path.join(tmp, ".claude", "harness.config.json"),
+        JSON.stringify({
+          gate: {
+            command: "npm run gate",
+            changedCommand: "npm run gate:changed",
+            marker: ".git/gate-dirty",
+            lock: false,
+            signals: [
+              { name: "arnes", paths: ["hooks/"], command: marca("arnes"), why: "cebo" },
+              { name: "producto", paths: ["app/"], command: marca("producto"), why: "cebo" },
+              { name: "siempre", command: marca("siempre"), why: "cebo" },
+              { name: "ajena-roja", paths: ["otra/"], command: ["node", "-e", "process.exit(1)"], why: "cebo", ...extra },
+            ],
+          },
+          panel: { enabled: false },
+          status: { file: "STATUS.md", events: { journal: ".git/journal.jsonl" } },
+        }),
+      );
+    configurar();
+    fs.writeFileSync(path.join(tmp, "hooks", "a.js"), "1");
+    fs.writeFileSync(path.join(tmp, "app", "b.js"), "1");
+    fs.writeFileSync(path.join(tmp, "otra", "c.js"), "1");
+    sh("add", "-A");
+    sh("commit", "-qm", "base");
+    fs.writeFileSync(path.join(tmp, "app", "sucio.js"), "ya estaba"); // sucio ANTES del gate completo
+    const gate = (...a) => spawnSync(process.execPath, [path.join(tmp, "scripts", "gate.mjs"), ...a], { cwd: tmp, encoding: "utf8", timeout: 60000 });
+    const corrio = (n) => fs.existsSync(en(`${n}.corrio`));
+    const limpiar = () => ["arnes", "producto", "siempre"].forEach((n) => fs.rmSync(en(`${n}.corrio`), { force: true }));
+    const eventos = () => (fs.existsSync(en("journal.jsonl")) ? fs.readFileSync(en("journal.jsonl"), "utf8").split("\n").filter(Boolean).length : 0);
+
+    gate(); // completo: rojo por `ajena-roja`, y deja la foto del árbol
+    const anotados = eventos();
+    limpiar();
+    const quieto = gate("changed");
+    caso(quieto.status === 0 && /nada cambió/.test(quieto.stdout) && !corrio("siempre"), "sin cambios desde el gate completo no corre nada (y lo dice)", `exit ${quieto.status}: ${quieto.stdout.trim().split("\n").slice(-1)[0]}`);
+
+    fs.writeFileSync(path.join(tmp, "hooks", "a.js"), "2");
+    fs.writeFileSync(en("gate-dirty"), "x");
+    const arnes = gate("changed");
+    caso(
+      arnes.status === 0 && corrio("arnes") && corrio("siempre") && !corrio("producto") && /GATE CHANGED VERDE/.test(arnes.stdout) && /NO es entregable/.test(arnes.stdout),
+      "un cambio en hooks/ corre la señal de hooks/ y la que no declara paths, no la de app/ (cuyo archivo sucio sigue igual: huella)",
+      `exit ${arnes.status} · arnes ${corrio("arnes")} · siempre ${corrio("siempre")} · producto ${corrio("producto")} · ${arnes.stdout.trim().split("\n").filter((l) => /Changed|GATE/.test(l)).join(" · ")}`,
+    );
+    caso(
+      /Siguen ROJAS, sin relación con este cambio: ajena-roja/.test(arnes.stdout) && fs.existsSync(en("gate-dirty")) && eventos() === anotados,
+      "la roja ajena se informa sin teñir el veredicto, y CHANGED VERDE no borra el marcador ni anota la bitácora",
+      `marcador queda: ${fs.existsSync(en("gate-dirty"))} · eventos ${anotados}→${eventos()} · ${arnes.stdout.trim().split("\n").slice(-2).join(" · ")}`,
+    );
+
+    limpiar();
+    fs.writeFileSync(path.join(tmp, "app", "sucio.js"), "editado después");
+    const producto = gate("changed");
+    caso(producto.status === 0 && corrio("producto"), "editar un archivo que ya estaba sucio (huella distinta) vuelve relevante a su señal", `exit ${producto.status} · producto ${corrio("producto")}`);
+
+    configurar({ paths: "otra/" });
+    const malformado = gate("changed");
+    caso(malformado.status === 1 && /`paths` de «ajena-roja»/.test(malformado.stdout), "un `paths` que no es lista es ROJO (no «nunca relevante»)", `exit ${malformado.status}: ${malformado.stdout.trim().split("\n").slice(-1)[0]}`);
+  } catch (e) {
+    bad("gate changed", e.stack?.split("\n").slice(0, 3).join(" · ") ?? String(e));
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+}
+
+// 6-quater-bis. REPOS ANIDADOS (`gate.nestedRepos`): un repo de git propio dentro de la raíz, que la
+//     raíz no versiona, es invisible para `git diff` de la raíz. Declarada su carpeta, `changed` ve
+//     lo que cambia adentro —editado sin commitear Y commiteado desde el último gate completo— y
+//     corre la señal que lo cubre; sin declararla no lo ve, que es el default de un repo común. El
+//     nombre de la carpeta sale del config: cableado, el modo changed sólo servía en un layout.
+if (enParte("reglas") && fs.existsSync(abs("scripts/gate.mjs")) && fs.existsSync(abs(".claude/hooks/harness.mjs"))) {
+  const tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "harness-gate-anidados-")));
+  const caso = (cond, nombre, falla) => (cond ? ok(`gate changed (repos anidados): ${nombre}`) : bad(`gate changed (repos anidados): ${nombre}`, falla));
+  try {
+    const anidado = path.join(tmp, "vendor", "lib");
+    const git = (cwd, ...a) => spawnSync("git", ["-c", "user.name=selftest", "-c", "user.email=selftest@example.test", "-c", "core.hooksPath=/dev/null", ...a], { cwd, encoding: "utf8" });
+    for (const d of ["scripts", ".claude/hooks", "app", "vendor/lib"]) fs.mkdirSync(path.join(tmp, d), { recursive: true });
+    fs.copyFileSync(abs("scripts/gate.mjs"), path.join(tmp, "scripts", "gate.mjs"));
+    fs.copyFileSync(abs(".claude/hooks/harness.mjs"), path.join(tmp, ".claude", "hooks", "harness.mjs"));
+    const en = (f) => path.join(tmp, ".git", f);
+    // Las marcas van a la ruta ABSOLUTA del `.git` de la raíz: el repo anidado tiene el suyo.
+    const marca = (n) => ["node", "-e", `require('fs').writeFileSync(${JSON.stringify(en(`${n}.corrio`))},'1')`];
+    const configurar = (nestedRepos) =>
+      fs.writeFileSync(
+        path.join(tmp, ".claude", "harness.config.json"),
+        JSON.stringify({
+          gate: {
+            command: "npm run gate",
+            lock: false,
+            ...(nestedRepos ? { nestedRepos } : {}),
+            signals: [
+              { name: "anidado", paths: ["vendor/lib/"], command: marca("anidado"), why: "cebo" },
+              { name: "raiz", paths: ["app/"], command: marca("raiz"), why: "cebo" },
+            ],
+          },
+          panel: { enabled: false },
+        }),
+      );
+    fs.writeFileSync(path.join(tmp, ".gitignore"), "vendor/\n");
+    fs.writeFileSync(path.join(tmp, "app", "a.js"), "1");
+    fs.writeFileSync(path.join(anidado, "x.js"), "1");
+    git(anidado, "init", "-q");
+    git(anidado, "add", "-A");
+    git(anidado, "commit", "-qm", "base del anidado");
+    configurar(["vendor"]);
+    git(tmp, "init", "-q");
+    git(tmp, "add", "-A");
+    git(tmp, "commit", "-qm", "base");
+    const gate = (...a) => spawnSync(process.execPath, [path.join(tmp, "scripts", "gate.mjs"), ...a], { cwd: tmp, encoding: "utf8", timeout: 60000 });
+    const corrio = (n) => fs.existsSync(en(`${n}.corrio`));
+    const limpiar = () => ["anidado", "raiz"].forEach((n) => fs.rmSync(en(`${n}.corrio`), { force: true }));
+
+    const completo = gate();
+    limpiar();
+    fs.writeFileSync(path.join(anidado, "x.js"), "2");
+    const editado = gate("changed");
+    caso(
+      completo.status === 0 && editado.status === 0 && corrio("anidado") && !corrio("raiz") && /vendor\/lib\/x\.js/.test(editado.stdout),
+      "una edición sin commitear dentro del repo anidado corre SU señal y no la de la raíz",
+      `completo ${completo.status} · changed ${editado.status} · anidado ${corrio("anidado")} · raiz ${corrio("raiz")} · ${editado.stdout.trim().split("\n").filter((l) => /Changed|GATE/.test(l)).join(" · ")}`,
+    );
+
+    gate(); // completo otra vez: la foto guarda el HEAD del anidado y la huella de lo sucio
+    git(anidado, "commit", "-qam", "avanza el anidado");
+    fs.writeFileSync(path.join(anidado, "x.js"), "3");
+    git(anidado, "commit", "-qam", "avanza de nuevo");
+    limpiar();
+    const commiteado = gate("changed");
+    caso(commiteado.status === 0 && corrio("anidado") && !corrio("raiz"), "un commit dentro del repo anidado (su HEAD avanzó, árbol limpio) también cuenta como cambio", `exit ${commiteado.status} · anidado ${corrio("anidado")} · ${commiteado.stdout.trim().split("\n").slice(-2).join(" · ")}`);
+
+    // Sin la clave, el mismo cambio es invisible: es el default, y lo que prueba que la clave manda.
+    configurar(null);
+    git(tmp, "commit", "-qam", "sin nestedRepos");
+    gate();
+    limpiar();
+    fs.writeFileSync(path.join(anidado, "x.js"), "4");
+    const sinClave = gate("changed");
+    caso(sinClave.status === 0 && !corrio("anidado") && /nada cambió/.test(sinClave.stdout), "sin `gate.nestedRepos`, el repo anidado no se mira (un repo común no paga por la clave)", `exit ${sinClave.status} · anidado ${corrio("anidado")} · ${sinClave.stdout.trim().split("\n").slice(-1)[0]}`);
+  } catch (e) {
+    bad("gate changed (repos anidados)", e.stack?.split("\n").slice(0, 3).join(" · ") ?? String(e));
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+}
+
+// 6-quinquies. Una señal que NO LLEGA A MEDIR queda `abortada` con su motivo, nunca roja ni muda.
+//     El 2026-11-10 la consola del gate murió a mitad de la corrida y siete señales quedaron
+//     «rojo · 30 ms · salió con 3221225794», sin una línea: el panel las mostró como siete defectos
+//     del producto y eran cero. Acá: la cortada desde afuera no entra en «señales fallidas», la que
+//     falla sin escribir lo dice, ningún estado no verde queda sin motivo, y `retry` repite las dos.
+if (enParte("reglas") && fs.existsSync(abs("scripts/gate.mjs")) && fs.existsSync(abs(".claude/hooks/harness.mjs"))) {
+  const tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "harness-gate-abortada-")));
+  const caso = (cond, nombre, falla) => (cond ? ok(`gate abortada: ${nombre}`) : bad(`gate abortada: ${nombre}`, falla));
+  try {
+    const sh = (...a) => spawnSync("git", ["-c", "user.name=selftest", "-c", "user.email=selftest@example.test", "-c", "core.hooksPath=/dev/null", ...a], { cwd: tmp, encoding: "utf8" });
+    sh("init", "-q");
+    for (const d of ["scripts", ".claude/hooks"]) fs.mkdirSync(path.join(tmp, d), { recursive: true });
+    fs.copyFileSync(abs("scripts/gate.mjs"), path.join(tmp, "scripts", "gate.mjs"));
+    fs.copyFileSync(abs(".claude/hooks/harness.mjs"), path.join(tmp, ".claude", "hooks", "harness.mjs"));
+    const en = (f) => path.join(tmp, ".git", f);
+    const marca = (n, fin) => ["node", "-e", `require('fs').writeFileSync('.git/${n}.corrio','1');${fin}`];
+    // Cortada desde afuera: en Windows es el NTSTATUS de Ctrl+C; en POSIX, la señal misma.
+    const corte = process.platform === "win32" ? "process.exit(0xC000013A)" : "process.kill(process.pid,'SIGTERM');setTimeout(()=>{},5000)";
+    fs.writeFileSync(
+      path.join(tmp, ".claude", "harness.config.json"),
+      JSON.stringify({
+        gate: {
+          command: "npm run gate",
+          retryCommand: "npm run gate:retry",
+          marker: ".git/gate-dirty",
+          lock: false,
+          signals: [
+            { name: "pasa", command: marca("pasa", "process.exit(0)"), why: "cebo" },
+            { name: "cortada", command: marca("cortada", corte), why: "cebo" },
+            { name: "muda", command: marca("muda", "process.exit(1)"), why: "cebo" },
+          ],
+        },
+        panel: { enabled: false },
+        status: { file: "STATUS.md", events: { journal: ".git/journal.jsonl" } },
+      }),
+    );
+    sh("add", "-A");
+    sh("commit", "-qm", "base");
+    // `input: ""`: stdin sin terminal, que es como corre el gate lanzado por un agente.
+    const gate = (...a) => spawnSync(process.execPath, [path.join(tmp, "scripts", "gate.mjs"), ...a], { cwd: tmp, encoding: "utf8", timeout: 60000, input: "" });
+    const corrio = (n) => fs.existsSync(en(`${n}.corrio`));
+    const limpiar = () => ["pasa", "cortada", "muda"].forEach((n) => fs.rmSync(en(`${n}.corrio`), { force: true }));
+
+    const r = gate();
+    const registro = JSON.parse(fs.readFileSync(en("harness-gate.json"), "utf8"));
+    const s = registro.senales ?? {};
+    const resumen = `exit ${r.status} · ${Object.entries(s).map(([n, v]) => `${n}=${v.estado}(${v.motivo ?? "sin motivo"})`).join(" · ")}`;
+    caso(r.status === 1 && registro.veredicto === "rojo" && s.pasa?.estado === "verde", "una señal abortada tiñe el veredicto de rojo y la verde sigue verde", resumen);
+    caso(s.cortada?.estado === "abortada" && /STATUS_CONTROL_C_EXIT|SIGTERM/.test(s.cortada?.motivo ?? ""), "la cortada desde afuera queda ABORTADA y su motivo nombra el corte", resumen);
+    caso(s.muda?.estado === "rojo" && /sin salida/.test(s.muda?.motivo ?? ""), "la que falla sin escribir queda ROJA y el motivo dice que no hubo salida", resumen);
+    caso(Object.values(s).every((v) => v.estado === "verde" || (typeof v.motivo === "string" && v.motivo.trim() && !/^salió con \d{7,}$/.test(v.motivo))), "ningún estado no verde queda sin motivo ni con un NTSTATUS en decimal pelado", resumen);
+    const fallidasDichas = (r.stdout.match(/señales fallidas:[^\n]*/) ?? [""])[0];
+    caso(/ABORTADA/.test(r.stdout) && /muda/.test(fallidasDichas) && !/cortada/.test(fallidasDichas), "la salida dice ABORTADA y no cuenta la abortada entre las fallidas", `fallidas: «${fallidasDichas}» · ${r.stdout.trim().split("\n").slice(-3).join(" · ")}`);
+
+    limpiar();
+    const otra = gate("retry");
+    caso(otra.status === 1 && corrio("cortada") && corrio("muda") && !corrio("pasa"), "retry repite la abortada y la roja, no la verde", `exit ${otra.status} · cortada ${corrio("cortada")} · muda ${corrio("muda")} · pasa ${corrio("pasa")}`);
+  } catch (e) {
+    bad("gate abortada", e.stack?.split("\n").slice(0, 3).join(" · ") ?? String(e));
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+}
+
+// 6-sexies. CACHÉ por señal: una señal con `paths` cuyas entradas no cambiaron desde su último
+//     VERDE no se vuelve a correr (y el gate completo igual entrega); tocar una entrada la vuelve a
+//     correr; sin `paths` o con `cache: false` corre siempre; `--no-cache` mide en frío. El gate
+//     completo medía 16 min repitiendo entradas que nadie había tocado (2026-11-10).
+if (enParte("reglas") && fs.existsSync(abs("scripts/gate.mjs")) && fs.existsSync(abs(".claude/hooks/harness.mjs"))) {
+  const tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "harness-gate-cache-")));
+  const caso = (cond, nombre, falla) => (cond ? ok(`gate caché: ${nombre}`) : bad(`gate caché: ${nombre}`, falla));
+  try {
+    const sh = (...a) => spawnSync("git", ["-c", "user.name=selftest", "-c", "user.email=selftest@example.test", "-c", "core.hooksPath=/dev/null", ...a], { cwd: tmp, encoding: "utf8" });
+    sh("init", "-q");
+    for (const d of ["scripts", ".claude/hooks", "src"]) fs.mkdirSync(path.join(tmp, d), { recursive: true });
+    fs.copyFileSync(abs("scripts/gate.mjs"), path.join(tmp, "scripts", "gate.mjs"));
+    fs.copyFileSync(abs(".claude/hooks/harness.mjs"), path.join(tmp, ".claude", "hooks", "harness.mjs"));
+    const cuenta = (n) => ["node", "-e", `require('fs').appendFileSync('.git/${n}.n','x')`];
+    fs.writeFileSync(
+      path.join(tmp, ".claude", "harness.config.json"),
+      JSON.stringify({
+        gate: {
+          command: "npm run gate",
+          marker: ".git/gate-dirty",
+          lock: false,
+          signals: [
+            { name: "cacheable", paths: ["src/"], command: cuenta("cacheable"), why: "cebo" },
+            { name: "sin-paths", command: cuenta("sin-paths"), why: "cebo" },
+            { name: "de-afuera", paths: ["src/"], cache: false, command: cuenta("de-afuera"), why: "cebo" },
+          ],
+        },
+        panel: { enabled: false },
+        status: { file: "STATUS.md", events: { journal: ".git/journal.jsonl" } },
+      }),
+    );
+    fs.writeFileSync(path.join(tmp, "src", "a.js"), "1");
+    sh("add", "-A");
+    sh("commit", "-qm", "base");
+    const gate = (...a) => spawnSync(process.execPath, [path.join(tmp, "scripts", "gate.mjs"), ...a], { cwd: tmp, encoding: "utf8", timeout: 60000 });
+    const n = (s) => (fs.existsSync(path.join(tmp, ".git", `${s}.n`)) ? fs.readFileSync(path.join(tmp, ".git", `${s}.n`), "utf8").length : 0);
+
+    gate();
+    fs.writeFileSync(path.join(tmp, ".git", "gate-dirty"), "x");
+    const segundo = gate();
+    caso(
+      segundo.status === 0 && n("cacheable") === 1 && /CACHÉ/.test(segundo.stdout) && /GATE VERDE — entregable/.test(segundo.stdout) && !fs.existsSync(path.join(tmp, ".git", "gate-dirty")),
+      "sin cambios en sus entradas, la señal no vuelve a correr y el gate completo igual entrega",
+      `exit ${segundo.status} · cacheable corrió ${n("cacheable")} vez/veces · ${segundo.stdout.trim().split("\n").slice(-1)[0]}`,
+    );
+    caso(n("sin-paths") === 2 && n("de-afuera") === 2, "sin `paths` o con `cache: false` corre siempre", `sin-paths ${n("sin-paths")} · de-afuera ${n("de-afuera")}`);
+
+    fs.writeFileSync(path.join(tmp, "src", "a.js"), "2");
+    gate();
+    caso(n("cacheable") === 2, "tocar una entrada (un archivo sucio dentro de `paths`) la vuelve a correr", `cacheable corrió ${n("cacheable")} vez/veces`);
+
+    sh("add", "src/a.js");
+    sh("commit", "-qm", "lo ya medido");
+    gate();
+    caso(n("cacheable") === 2, "commitear lo ya medido sin cambiar su contenido NO la vuelve a correr (la firma es por contenido)", `cacheable corrió ${n("cacheable")} vez/veces`);
+
+    gate("--no-cache");
+    caso(n("cacheable") === 3, "`--no-cache` mide en frío aunque las entradas no cambien", `cacheable corrió ${n("cacheable")} vez/veces`);
+
+    // Un nombre con un byte no ASCII: git lo lista entrecomillado y escapado salvo que se le pida
+    // que no. Así escrito no casaba con ningún `paths`, su edición no entraba en la firma y el gate
+    // completo entregaba «CACHÉ … VERDE» con el archivo cambiado; `changed` decía «nada cambió».
+    const raro = path.join(tmp, "src", "año.js");
+    fs.writeFileSync(raro, "1");
+    sh("add", "-A");
+    sh("commit", "-qm", "nombre no ASCII");
+    gate();
+    const antes = n("cacheable");
+    fs.writeFileSync(raro, "2");
+    const cambiado = gate("changed", "--plan");
+    gate();
+    caso(
+      n("cacheable") === antes + 1 && /▶ cacheable/.test(cambiado.stdout),
+      "editar un archivo de nombre no ASCII dentro de `paths` vuelve a correr la señal (y `changed` lo ve)",
+      `cacheable corrió ${n("cacheable") - antes} vez/veces tras la edición · changed: ${cambiado.stdout.trim().split("\n").slice(0, 2).join(" · ")}`,
+    );
+  } catch (e) {
+    bad("gate caché", e.stack?.split("\n").slice(0, 3).join(" · ") ?? String(e));
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+}
+
+// 6-quinquies. Señal COLGADA: pasado su `timeoutMinutes` se corta CON su árbol (el nieto no
+//     llega a escribir), queda ROJA con «COLGADA» y la siguiente de su carril igual corre; un
+//     `timeoutMinutes` mal escrito es ROJO, no «sin límite». El karma del cotizador colgó el gate
+//     completo dos horas el 2026-11-10.
+if (enParte("reglas") && fs.existsSync(abs("scripts/gate.mjs")) && fs.existsSync(abs(".claude/hooks/harness.mjs"))) {
+  const tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "harness-gate-colgada-")));
+  const caso = (cond, nombre, falla) => (cond ? ok(`gate colgada: ${nombre}`) : bad(`gate colgada: ${nombre}`, falla));
+  try {
+    for (const d of ["scripts", ".claude/hooks", ".git"]) fs.mkdirSync(path.join(tmp, d), { recursive: true });
+    fs.copyFileSync(abs("scripts/gate.mjs"), path.join(tmp, "scripts", "gate.mjs"));
+    fs.copyFileSync(abs(".claude/hooks/harness.mjs"), path.join(tmp, ".claude", "hooks", "harness.mjs"));
+    // El nieto escribiría `.git/nieto.vivo` a los 4 s; el hijo no termina nunca. En Windows el nieto
+    // va `detached`: un nieto de `node` normal muere con su padre (job object de libuv), pero el de
+    // `cmd.exe` (npm) o el navegador de karma no, y sólo `taskkill /T` los alcanza. En POSIX va en el
+    // grupo del hijo, que es lo que corta `kill(-pid)`.
+    const nieto = "setTimeout(()=>require('fs').writeFileSync('.git/nieto.vivo','1'),4000)";
+    const colgada = `require('child_process').spawn(process.execPath,['-e',${JSON.stringify(nieto)}],{stdio:'ignore',detached:process.platform==='win32'}).unref();setInterval(()=>{},1000)`;
+    const configurar = (timeoutMinutes) =>
+      fs.writeFileSync(
+        path.join(tmp, ".claude", "harness.config.json"),
+        JSON.stringify({
+          gate: {
+            command: "npm run gate",
+            marker: ".git/gate-dirty",
+            lock: false,
+            signals: [
+              { name: "colgada", lane: "uno", timeoutMinutes, command: ["node", "-e", colgada], why: "cebo" },
+              // Tarda 6 s A PROPÓSITO: en Windows libuv mata el árbol entero cuando el GATE sale (job
+              // object), así que si el gate saliera enseguida el nieto moriría igual y el caso no
+              // distinguiría cortar el árbol de cortar sólo al hijo. El colgado real nunca sale.
+              { name: "despues", lane: "uno", command: ["node", "-e", "setTimeout(()=>require('fs').writeFileSync('.git/despues.corrio','1'),6000)"], why: "cebo" },
+            ],
+          },
+          panel: { enabled: false },
+          status: { file: "STATUS.md", events: { journal: ".git/journal.jsonl" } },
+        }),
+      );
+    const gate = () => spawnSync(process.execPath, [path.join(tmp, "scripts", "gate.mjs")], { cwd: tmp, encoding: "utf8", timeout: 60000 });
+    configurar(0.02); // 1,2 s
+    const t0 = Date.now();
+    const r = gate();
+    const tardo = Date.now() - t0;
+    const registro = JSON.parse(fs.readFileSync(path.join(tmp, ".git", "harness-gate.json"), "utf8"));
+    caso(
+      r.status === 1 && tardo < 30000 && registro.senales.colgada?.estado === "rojo" && /COLGADA/.test(registro.senales.colgada?.motivo ?? "") && fs.existsSync(path.join(tmp, ".git", "despues.corrio")),
+      "pasado su límite se corta, queda ROJA con «COLGADA» y la siguiente de su carril igual corre",
+      `exit ${r.status} · ${tardo} ms · estado ${registro.senales.colgada?.estado} · motivo ${registro.senales.colgada?.motivo} · después corrió: ${fs.existsSync(path.join(tmp, ".git", "despues.corrio"))}`,
+    );
+    const espera = Date.now() + 5000;
+    while (Date.now() < espera) spawnSync(process.execPath, ["-e", "setTimeout(()=>{},250)"]);
+    caso(!fs.existsSync(path.join(tmp, ".git", "nieto.vivo")), "el corte alcanza al árbol: el nieto no sobrevive al hijo colgado", "el nieto escribió `.git/nieto.vivo` después del corte");
+
+    configurar("diez");
+    const malo = gate();
+    caso(malo.status === 1 && /`timeoutMinutes` de «colgada»/.test(malo.stdout), "un `timeoutMinutes` que no es número es ROJO (no «sin límite»)", `exit ${malo.status}: ${malo.stdout.trim().split("\n").slice(-1)[0]}`);
+  } catch (e) {
+    bad("gate colgada", e.stack?.split("\n").slice(0, 3).join(" · ") ?? String(e));
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+}
+
 // Ninguna señal del gate puede necesitar un shell para arrancar. `["bash", "algo.sh"]` como
 // señal deja el entregable fuera de alcance en Windows, que es donde menos se prueba y donde
 // más caro sale descubrirlo.
@@ -4836,6 +5676,20 @@ if (corre("fuera")) {
       const r = spawnSync(process.execPath, ["--input-type=module", "-e", probe], { encoding: "utf8" });
       if (r.status === 0 && /resolved 0/.test(r.stdout)) ok("deterministic eval: a hook that exits without reading stdin does not crash the runner (EPIPE)");
       else bad("deterministic eval: a hook that closes stdin early", `exit ${r.status}: ${`${r.stderr}`.trim().split("\n").find((l) => /Error/.test(l)) ?? r.stdout.trim()}`);
+
+      // The report names the hook by the FILE it runs. Taking the last word of the command named
+      // `node …/tools/ado.mjs hook edit` as `edit` (found porting to a real repo); the hooks
+      // without arguments must keep the name they always had.
+      const nombres = `import { hookName } from ${JSON.stringify(pathToFileURL(runner).href)};\n` +
+        `console.log(JSON.stringify([` +
+        `'node "$CLAUDE_PROJECT_DIR"/tools/ado.mjs hook edit',` +
+        `'node "$CLAUDE_PROJECT_DIR"/.claude/hooks/bash-guard.mjs',` +
+        `'node .claude/hooks/gate-stop.mjs'` +
+        `].map((command) => hookName({ command }))));\n`;
+      const n = spawnSync(process.execPath, ["--input-type=module", "-e", nombres], { encoding: "utf8" });
+      const esperado = JSON.stringify(["ado.mjs", "bash-guard.mjs", "gate-stop.mjs"]);
+      if (n.status === 0 && n.stdout.trim() === esperado) ok("deterministic eval: a hook with arguments is named by its file (`ado.mjs`, not `edit`), and one without keeps its name");
+      else bad("deterministic eval: hookName names the file the hook runs", `expected ${esperado}, got ${n.stdout.trim() || n.stderr.trim().split("\n").pop()}`);
     }
   }
 }
@@ -5274,6 +6128,116 @@ if (corre("fuera")) {
     } finally {
       fs.rmSync(arbol, { recursive: true, force: true });
       fs.rmSync(principal, { recursive: true, force: true });
+    }
+
+    // 11l. El REPARTO de «Qué hacer» sale de `panel.triage` y de nada más. El resumen nació en un
+    //      repo concreto y traía su cliente, su gestor y sus comandos escritos adentro: portado así,
+    //      el panel de otro equipo le mandaba al agente a correr un script que no existe. Con el
+    //      mismo modelo: lo que casa `external` va a «esperando» con SU etiqueta, la decisión a
+    //      «decidir», el contenedor a «frentes», la deuda que casa `humanPattern` es del humano, y un
+    //      comando no declarado no aparece (ni en la bandeja ni en la página). Sin `triage`, nada es
+    //      externo y ningún comando se inventa.
+    {
+      const { construirBandeja, deudaAccionable } = await import(url("leer-resumen.mjs"));
+      const { specDelPanel } = await import(url("leer-fuentes.mjs"));
+      const { renderizarHtml } = await import(url("plantilla.mjs"));
+      const items = [
+        { id: 1, tipo: "Task", titulo: "[Proveedor · pagos] ¿cuál es el límite?", dueno: "humano" },
+        { id: 2, tipo: "Task", titulo: "Decidir si se migra", dueno: "humano" },
+        { id: 3, tipo: "Iniciativa", titulo: "Frente de pagos", dueno: "humano" },
+        { id: 4, tipo: "Task", titulo: "Implementar el cobro", dueno: "agente" },
+      ];
+      const modeloCon = (panel) => ({
+        reparto: specDelPanel({ panel }).triage,
+        estado: { deuda: { grupos: [{ titulo: "Deuda", items: [{ texto: "Falta el visto bueno de compras · #7" }, { texto: "Renombrar un helper · #8" }] }] }, bitacora: [] },
+        reglas: { gate: { signals: [], command: "npm run gate" } },
+        enVivo: { bandeja: { ok: true, leidoEn: null, items, prs: [] }, gate: { registro: null }, repos: [] },
+      });
+      const declarado = modeloCon({
+        triage: {
+          humanPattern: "visto bueno",
+          containerPattern: "^iniciativa$",
+          external: { pattern: "^\\[Proveedor", label: "el proveedor" },
+          commands: { take: "mi-gestor tomar {id}", owner: "mi-gestor dueno {id}" },
+        },
+      });
+      const b = construirBandeja(declarado);
+      const ids = (l) => l.map((x) => x.id).join(",");
+      const deuda = deudaAccionable(declarado);
+      const tomar = b.agente.ya.find((x) => x.id === 4);
+      const bien =
+        ids(b.humano.esperando) === "1" && /el proveedor/.test(b.humano.esperando[0]?.accion ?? "") && ids(b.humano.decidir) === "2" && ids(b.humano.frentes) === "3" &&
+        tomar?.tomar === "mi-gestor tomar 4" && tomar?.ver === null && b.comandoDueno === "mi-gestor dueno <id>" &&
+        deuda.find((d) => d.n === 7)?.dueno === "humano" && deuda.find((d) => d.n === 8)?.dueno === "agente";
+      if (bien) ok("panel: el reparto de «Qué hacer» sale de `panel.triage` (externo con su etiqueta, decisión, contenedor, dueño de la deuda, comandos del gestor)");
+      else bad("panel: reparto desde `panel.triage`", `esperando [${ids(b.humano.esperando)}] · decidir [${ids(b.humano.decidir)}] · frentes [${ids(b.humano.frentes)}] · tomar ${tomar?.tomar} · ver ${tomar?.ver} · dueño ${b.comandoDueno} · deuda ${deuda.map((d) => `#${d.n}=${d.dueno}`).join(" ")}`);
+
+      const pelado = construirBandeja(modeloCon({}));
+      const sinInventar = pelado.humano.esperando.length === 0 && pelado.comandoDueno === null && pelado.agente.ya.every((x) => !x.tomar && !x.ver);
+      if (sinInventar) ok("panel: sin `panel.triage` ningún ítem es «externo» y ningún comando del gestor se inventa");
+      else bad("panel: reparto sin `panel.triage`", `esperando ${pelado.humano.esperando.length} · dueño ${pelado.comandoDueno} · tomar ${pelado.agente.ya.map((x) => x.tomar).join(",")}`);
+
+      // Las piezas del Resumen que no dependen de ningún gestor, con datos fijos.
+      const R = await import(url("leer-resumen.mjs"));
+      const doc = R.parsearDoctor("1. Herramientas\n✔ node 22\n✘ falta el índice\n→ codegraph init\n2. Git\n⚠ hooks sin instalar\n");
+      const corrida = {
+        reglas: { gate: { signals: [{ name: "pruebas", command: ["node", "scripts/harness-selftest.mjs"], why: "x" }, { name: "costo", command: ["node", "scripts/hooks-timing.mjs"], why: "x" }, { name: "armado", command: ["make"], why: "x" }] } },
+        enVivo: { etapas: [{ name: "Arnés", match: "^(pruebas|costo)$" }], gate: { registro: { senales: { pruebas: { estado: "rojo", ms: 5 }, costo: { estado: "verde", ms: 1 }, armado: { estado: "verde", ms: 2 } } } } },
+      };
+      const etapas = R.etapasDelPipeline(corrida);
+      const salud = R.saludDelArnes(corrida);
+      const dimension = (c) => salud.dimensiones.find((d) => d.clave === c);
+      const historial = R.historialConRegistro([{ fecha: "2026-01-01T00:00:00Z", veredicto: "verde" }], { fecha: "2026-01-02T00:00:00Z", veredicto: "rojo", senales: { a: { estado: "rojo" } } });
+      const repetido = R.historialConRegistro(historial, { fecha: "2026-01-02T00:00:00Z", veredicto: "rojo", senales: {} });
+      const piezas =
+        doc.secciones.length === 2 && doc.ok === 1 && doc.bloqueantes === 1 && doc.avisos === 1 && doc.secciones[0].chequeos[1].arreglo === "codegraph init" &&
+        etapas.map((e) => `${e.nombre}:${e.estado}:${e.jobs.length}`).join("|") === "Arnés:rojo:2|Otras:verde:1" &&
+        // Rebautizadas («pruebas», «costo»), el panel las reconoce igual: por el script que corren.
+        dimension("selftest").total === 1 && dimension("selftest").tono === "rojo" && dimension("latencia").total === 1 && salud.estado.tono === "rojo" &&
+        historial.length === 2 && historial[1].rojas === 1 && repetido.length === 2;
+      // El registro acumula: una señal que ya no está en el config (renombrada) y la apagada a
+      // propósito no cuentan. Con el modelo real (`command` como texto, `argv` como lista).
+      const acumulado = R.construirResumen({
+        reglas: { gate: { signals: [{ name: "a", command: "node scripts/harness-selftest.mjs", argv: ["node", "scripts/harness-selftest.mjs"] }, { name: "tarea", command: "node x", argv: ["node", "x"] }] } },
+        enVivo: { gate: { pendiente: false, registro: { fecha: "2026-01-02T00:00:00Z", veredicto: "verde", modo: "full", senales: { a: { estado: "verde" }, "nombre viejo": { estado: "rojo" }, tarea: { estado: "omitida", motivo: "no existe .git/harness-task.json" } } } }, repos: [] },
+      });
+      const saludReal = R.saludDelArnes({
+        reglas: { gate: { signals: [{ name: "a", command: "node scripts/harness-selftest.mjs", argv: ["node", "scripts/harness-selftest.mjs"] }] } },
+        enVivo: { gate: { registro: { senales: { a: { estado: "verde" } } } } },
+      });
+      if (acumulado.gate.total === 1 && acumulado.gate.verdes === 1 && acumulado.gate.rojas === 0 && acumulado.estado.tono === "verde" && saludReal.dimensiones.find((d) => d.clave === "selftest").total === 1)
+        ok("panel: el Resumen cuenta sólo las señales declaradas hoy (ni la renombrada que quedó en el registro ni la apagada a propósito), y reconoce el self-test con el comando como texto");
+      else bad("panel: qué señales cuenta el Resumen", `total ${acumulado.gate.total} · verdes ${acumulado.gate.verdes} · rojas ${acumulado.gate.rojas} · estado ${acumulado.estado.tono} · self-test ${saludReal.dimensiones.find((d) => d.clave === "selftest").total}`);
+
+      if (piezas) ok("panel: el diagnóstico de la máquina, el pipeline por etapas, la salud (por el script de la señal, no por su nombre) y el historial salen de sus datos");
+      else bad("panel: piezas del Resumen", `doctor ${doc.secciones.length}/${doc.ok}/${doc.bloqueantes}/${doc.avisos} · etapas ${etapas.map((e) => `${e.nombre}:${e.estado}:${e.jobs.length}`).join("|")} · selftest ${dimension("selftest")?.total}/${dimension("selftest")?.tono} · latencia ${dimension("latencia")?.total} · historial ${historial.length}/${repetido.length}`);
+
+      // El panel en vivo sirve SÓLO su carpeta: ni un archivo de afuera, ni otra extensión, ni se
+      // cae con una URL mal escapada. Lleva el diff del repo y el nombre de la persona.
+      {
+        const { crearServidor } = await import(url("servir.mjs"));
+        const base = temporal("harness-panel-servir-");
+        escribir(base, "panel/index.html", "<p>panel</p>");
+        escribir(base, "secreto.json", "{}");
+        escribir(base, "panel/notas.txt", "x");
+        const servidor = crearServidor(path.join(base, "panel"));
+        try {
+          await new Promise((listo) => servidor.listen(0, "127.0.0.1", listo));
+          const pedir = async (ruta) => (await fetch(`http://127.0.0.1:${servidor.address().port}${ruta}`)).status;
+          const codigos = [await pedir("/"), await pedir("/..%2Fsecreto.json"), await pedir("/notas.txt"), await pedir("/%E0")];
+          if (codigos.join(",") === "200,404,404,400") ok("panel en vivo: sirve su carpeta y nada más (ni un archivo de afuera, ni otra extensión), y una URL mal escapada no lo tira");
+          else bad("panel en vivo: qué sirve", `/ · fuera de la carpeta · otra extensión · URL inválida → ${codigos.join(",")} (esperaba 200,404,404,400)`);
+        } finally {
+          await new Promise((listo) => servidor.close(listo));
+          fs.rmSync(base, { recursive: true, force: true });
+        }
+      }
+
+      // …y la página entera de ESTE repo, que no declara gestor, no nombra ninguno.
+      const html = renderizarHtml(construirModelo(REPO_ROOT, { config, settings }));
+      const fuga = /mi-gestor|tools\/planning|Esperando respuesta de (?!un tercero)/.exec(html);
+      if (!fuga) ok("panel: la página no nombra un gestor ni un tercero que el config no declaró");
+      else bad("panel: vocabulario ajeno en la página", `aparece «${fuga[0]}»`);
     }
 
     // 11i. El burn-down sale de los DATOS y de nada más. Un repo git temporal con commits de fecha

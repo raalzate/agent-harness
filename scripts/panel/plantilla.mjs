@@ -9,6 +9,23 @@
  * Genérica: no nombra ningún archivo del repo. Las rutas que muestra vienen en el modelo
  * (`modelo.rutas`), y la invocación de tareas (`npm run`, `make`…) también.
  */
+import {
+  accionesPorPestana,
+  construirBandeja,
+  construirResumen,
+  deudaAccionable,
+  etapasDelPipeline,
+  promptDeAccion,
+  promptDeDeuda,
+  promptDePendientes,
+  promptDeSenal,
+  saludDelArnes,
+  senalesRojas,
+} from "./leer-resumen.mjs";
+
+/** El botón que copia la instrucción para el agente. El texto viaja en el atributo, escapado. */
+const botonPrompt = (texto, etiqueta = "Prompt") =>
+  texto ? `<button type="button" class="prompt" data-prompt="${escapar(texto)}" title="Copia una instrucción lista para pegarle al agente del arnés">🤖 ${escapar(etiqueta)}</button>` : "";
 
 // ── Markdown inline → HTML ──────────────────────────────────────────────────
 
@@ -197,11 +214,52 @@ function seccionMapa(mapa) {
     </div>
     ${tabla(["Etapa", "Piezas"], filas, "mapa")}
     <p class="nota">Sale de <code>taxonomy</code> en el config, con la misma función que <code>node scripts/harness-map.mjs</code>. Una etapa vacía es un hueco que decide un humano; una pieza sin clasificar es rojo.</p>`,
-    { abierta: true, extra: `<small>${t.piezas}</small>`, resumen: `${t.guia} guías · ${t.freno} frenos · ${t.sensor} sensores` },
+    // Plegado: 68 piezas en texto eran la portada de la pestaña y tapaban lo accionable.
+    { abierta: false, extra: `<small>${t.piezas}</small>`, resumen: `${t.guia} guías · ${t.freno} frenos · ${t.sensor} sensores${mapa.huecos.length ? ` · ${mapa.huecos.length} etapa(s) sin control` : ""}` },
   );
 }
 
 const TONO_ACTIVADOR = { activo: "verde", "instalado y muerto": "rojo", "no instalado": "neutro" };
+
+/**
+ * El indicador de la salud: estado en una frase, puntaje (piezas sanas / piezas medidas) y una
+ * tarjeta por dimensión con su barra, qué mide, qué está mal y cómo se remedia (con su prompt).
+ */
+function tableroDeSalud(m) {
+  const s = saludDelArnes(m);
+  const e = s.estado;
+  const tarjeta = (d) => {
+    const malos = d.malos.length ? `<ul class="dim__malos">${d.malos.slice(0, 6).map((x) => `<li>${inline(x)}</li>`).join("")}${d.malos.length > 6 ? `<li class="tenue">y ${d.malos.length - 6} más</li>` : ""}</ul>` : "";
+    const remedio =
+      d.tono === "rojo" || d.tono === "advertencia"
+        ? `<div class="dim__remedio"><strong>Cómo se remedia:</strong> ${inline(d.remedio)}${d.comando ? ` <code>${escapar(d.comando)}</code>` : ""}<div class="dim__acciones">${chip(d.dueno === "humano" ? "👤 humano" : "🤖 agente", d.dueno === "humano" ? "chip--atencion" : "chip--info")}${botonPrompt(promptDeAccion({ dueno: d.dueno, texto: `${d.nombre} está en ${d.ok}/${d.total}. Falta: ${d.malos.join("; ")}. ${d.remedio}`, comando: d.comando }, "Salud"))}</div></div>`
+        : "";
+    return `<article class="dim dim--${d.tono}" id="dim-${d.clave}">
+      <div class="dim__cabecera"><span class="pendiente__marca pendiente__marca--${d.tono}" aria-label="${escapar(NOMBRE_TONO[d.tono] ?? d.tono)}">${ICONO_TONO[d.tono] ?? "·"}</span><strong data-buscar>${escapar(d.nombre)}</strong><span class="dim__cifra">${d.total ? `${d.ok}/${d.total}` : "sin dato"}</span></div>
+      <span class="kpi__barra" aria-hidden="true"><span class="kpi__lleno kpi__lleno--${d.tono}" style="width:${d.total ? d.pct : 0}%"></span></span>
+      <p class="dim__mide">${inline(d.mide)}</p>${d.tono === "omitido" ? '<p class="tenue">Sin dato todavía: aparece después de correr el gate en esta máquina.</p>' : ""}${malos}${remedio}
+    </article>`;
+  };
+  // Primero lo que falla, después lo incompleto, al final lo sano: se lee de arriba hacia abajo.
+  const orden = { rojo: 0, advertencia: 1, omitido: 2, verde: 3 };
+  const dims = [...s.dimensiones].sort((x, y) => orden[x.tono] - orden[y.tono]);
+  return {
+    // El estado va ANTES del «Qué hacer»: primero cómo está, después qué hacer.
+    previo: `<section class="hero hero--${e.tono}">
+      <span class="hero__icono" aria-hidden="true">${ICONO_TONO[e.tono]}</span>
+      <div class="hero__texto"><p class="hero__rotulo">Salud del arnés</p><h2>${escapar(e.titular)}</h2><p>${escapar(e.detalle)}</p></div>
+      <div class="salud__puntaje">${dona(
+        [
+          { nombre: "sanas", valor: s.sanas, tono: "verde" },
+          { nombre: "con huecos", valor: s.medidas - s.sanas, tono: e.tono === "rojo" ? "rojo" : "advertencia" },
+        ],
+        { centro: `${s.sanas}/${s.medidas}`, sub: "dimensiones", etiqueta: `${s.sanas} de ${s.medidas} dimensiones sanas` },
+      )}<p class="tenue">${s.puntaje} % de las piezas medidas están bien</p></div>
+    </section>`,
+    cuerpo: `<div class="dims">${dims.map(tarjeta).join("")}</div>
+    <p class="nota">Las dimensiones con huecos ponen la salud en atención; si fallan los hooks, los frenos o el self-test, en rojo: con eso roto, el arnés deja de frenar sin avisar. El detalle de cada pieza está en las secciones de abajo.</p>`,
+  };
+}
 
 function pestanaSalud(m, rutaRaiz) {
   const a = m.arnes;
@@ -239,8 +297,8 @@ function pestanaSalud(m, rutaRaiz) {
 
   const muertos = a.activadores.filter((x) => x.estado === "instalado y muerto").length;
   return [
-    tarjetaProyecto(m, rutaRaiz),
-    seccion("salud", "Salud del arnés", cabecera, { abierta: true, resumen: alarmas.length ? `${alarmas.length} alarma(s)` : "sin alarmas" }),
+    tableroDeSalud(m).cuerpo,
+    seccion("salud-alarmas", "Alarmas del arnés", cabecera, { abierta: alarmas.length > 0, extra: `<small>${alarmas.length}</small>`, resumen: alarmas.length ? `${alarmas.length} alarma(s)` : "sin alarmas" }),
     seccionMapa(a.mapa),
     seccion("activadores", "Frenos instalados y su clave", `${activadores}<p class="nota">Un freno copiado sin la clave del config que lo enciende queda «instalado y muerto»: el archivo está, no frena nada y ninguna señal se pone roja. La tabla sale de <code>install.activators</code>.</p>`, {
       extra: `<small>${a.activadores.length}</small>`,
@@ -252,6 +310,84 @@ function pestanaSalud(m, rutaRaiz) {
       resumen: `${a.agentes.length} subagentes · ${a.comandos.length} comandos · ${a.skills.length} skills`,
     }),
   ].join("");
+}
+
+// ── «Qué hacer»: lo accionable de cada pestaña, arriba de todo ──────────────
+
+/**
+ * La primera cosa de cada pestaña: qué hay que hacer para mejorar lo que la pestaña muestra, con
+ * dueño y comando. Si no hay nada, lo dice en verde: también es información.
+ */
+function bloqueQueHacer(acciones, { vacio = "Nada que hacer en esta vista.", vista = "" } = {}) {
+  if (!acciones?.length) return `<section class="que-hacer que-hacer--ok"><h3><span class="pendiente__marca pendiente__marca--verde" aria-hidden="true">✓</span> Qué hacer</h3><p>${escapar(vacio)}</p></section>`;
+  const humano = acciones.filter((a) => a.dueno === "humano").length;
+  return `<section class="que-hacer"><h3>Qué hacer para mejorar <small>${acciones.length} · 👤 ${humano} · 🤖 ${acciones.length - humano}</small></h3>
+    <ol class="acciones">${acciones
+      .map(
+        (a) => `<li class="accion accion--${a.tono}"><span class="pendiente__marca pendiente__marca--${a.tono === "info" ? "info" : a.tono}" aria-label="${escapar(NOMBRE_TONO[a.tono] ?? a.tono)}">${ICONO_TONO[a.tono] ?? "·"}</span>
+          <div>${a.seccion ? `${chip(escapar(a.seccion), "chip--gris")}` : ""}<span data-buscar>${inline(a.texto)}</span>${a.comando ? ` <code>${escapar(a.comando)}</code>` : ""}</div>
+          <span class="accion__lado">${chip(a.dueno === "humano" ? "👤 humano" : "🤖 agente", a.dueno === "humano" ? "chip--atencion" : "chip--info")}${botonPrompt(promptDeAccion(a, vista))}</span></li>`,
+      )
+      .join("")}</ol></section>`;
+}
+
+function tarjetaDeuda(d) {
+  return `<article class="deuda deuda--${d.dueno}" data-buscar>
+    <div class="deuda__cabecera"><strong>${escapar(d.titulo)}</strong>${d.n ? ` <span class="tenue">#${d.n}</span>` : ""} ${chip(d.dueno === "humano" ? "👤 humano" : "🤖 agente", d.dueno === "humano" ? "chip--atencion" : "chip--info")}${d.senales.map((s) => chip(`deja roja «${escapar(s)}»`, "chip--mal")).join("")}<span class="empuje"></span>${botonPrompt(promptDeDeuda(d))}</div>
+    ${d.detalle ? `<p class="deuda__detalle">${inline(d.detalle)}</p>` : ""}
+    <p class="deuda__remedio ${d.remedio ? "" : "deuda__remedio--falta"}"><strong>Cómo se cierra:</strong> ${d.remedio ? inline(d.remedio) : "no está escrito: hay que definirlo (y registrarlo con <code>node scripts/status.mjs record</code>)."}</p>
+    <p class="tenue deuda__pie">${d.fecha ? `abierta el ${escapar(d.fecha)}` : ""}${d.evidencia ? ` · se verifica con <code>${escapar(d.evidencia)}</code>` : ""}</p>
+  </article>`;
+}
+
+const idDeSenal = (nombre) => `roja-${String(nombre).toLowerCase().normalize("NFD").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}`;
+const NOMBRE_ESTADO = { verde: "pasó", rojo: "falló", omitido: "omitida (no es verde)" };
+
+/**
+ * La última corrida como un pipeline: etapas en columnas (como en una forja), cada señal un job
+ * con su caja de estado. El tooltip dice qué verifica, cuánto tardó y cuándo fue su último verde:
+ * lo que está bien se entiende sin abrir nada. Un job rojo enlaza a su detalle de abajo.
+ */
+function pipelineDelGate(m) {
+  const etapas = etapasDelPipeline(m);
+  if (!etapas.length) return "";
+  const job = (j) => {
+    const tip = `<span class="tip" role="tooltip"><strong>${escapar(j.nombre)}</strong><span>${ICONO_TONO[j.estado]} ${escapar(NOMBRE_ESTADO[j.estado])}${j.ms != null ? ` · ${segundos(j.ms)}` : ""}${j.motivo ? ` · ${escapar(j.motivo)}` : ""}</span>${j.porque ? `<span class="tip__porque">Verifica: ${escapar(j.porque)}</span>` : ""}<span class="tip__pie">${j.ultimoVerde ? `último verde ${fecha(j.ultimoVerde)}` : "sin verde registrado"}${j.comando ? ` · ${escapar(j.comando)}` : ""}</span></span>`;
+    const cuerpo = `<span class="job__caja job__caja--${j.estado}" aria-hidden="true">${ICONO_TONO[j.estado]}</span><span class="job__nombre">${escapar(j.nombre)}</span><span class="job__ms">${j.ms != null ? segundos(j.ms) : "—"}</span>${tip}`;
+    return j.estado === "rojo"
+      ? `<li><a class="job job--${j.estado}" href="#${idDeSenal(j.nombre)}" aria-label="${escapar(j.nombre)}: ${NOMBRE_ESTADO[j.estado]}">${cuerpo}</a></li>`
+      : `<li><span class="job job--${j.estado}" tabindex="0" aria-label="${escapar(j.nombre)}: ${NOMBRE_ESTADO[j.estado]}">${cuerpo}</span></li>`;
+  };
+  return `<ol class="pipeline">${etapas
+    .map(
+      (e) => `<li class="etapa etapa--${e.estado}"><div class="etapa__cabecera"><span class="job__caja job__caja--${e.estado}" aria-hidden="true">${ICONO_TONO[e.estado]}</span><strong>${escapar(e.nombre)}</strong><small>${e.verdes}/${e.jobs.length} · ${segundos(e.ms)}</small></div><ul class="etapa__jobs">${e.jobs.map(job).join("")}</ul></li>`,
+    )
+    .join("")}</ol>`;
+}
+
+function seccionRojas(m) {
+  const rojas = senalesRojas(m);
+  const cuerpo = rojas.length
+    ? rojas
+        .map(
+          (r) => `<article class="roja" id="${idDeSenal(r.nombre)}">
+          <div class="problema__cabecera"><span class="pendiente__marca pendiente__marca--rojo" aria-label="rojo">✕</span> <strong data-buscar>${escapar(r.nombre)}</strong> <span class="tenue">${escapar(r.motivo)}${r.ultimoVerde ? ` · verde por última vez ${cuando(r.ultimoVerde)}` : " · sin verde registrado en esta máquina"}</span><span class="empuje"></span>${botonPrompt(promptDeSenal(r), "Prompt para arreglarla")}</div>
+          <div class="roja__cuerpo">
+            <div><h4>Qué falló</h4>${
+              r.error.length
+                ? `<pre class="error">${r.error.map(escapar).join("\n")}</pre>`
+                : `<p class="tenue">El registro sólo guardó «${escapar(r.motivo)}»: la próxima corrida del gate guarda las líneas del error. Para verlo ya: <code>${escapar(r.reproducir ?? "")}</code></p>`
+            }</div>
+            <div><h4>Cómo se arregla</h4>${
+              r.deudas.length
+                ? r.deudas.map((d) => `<p>${chip(d.dueno === "humano" ? "👤 humano" : "🤖 agente", d.dueno === "humano" ? "chip--atencion" : "chip--info")} <strong>#${d.n} ${escapar(d.titulo)}</strong></p><p>${inline(d.remedio ?? d.detalle)}</p>`).join("")
+                : `<p>Ninguna deuda registrada la explica: leer el error, arreglarlo y volver a correr <code>${escapar(r.reproducir ?? "")}</code>. Si no es nuestra, registrarla como deuda con su remedio.</p>`
+            }${r.porque ? `<p class="tenue"><strong>Por qué importa:</strong> ${inline(r.porque)}</p>` : ""}</div>
+          </div></article>`,
+        )
+        .join("")
+    : '<p class="ok">✓ Ninguna señal en rojo en la última corrida.</p>';
+  return seccion("rojas", "Lo que está en rojo, y cómo se arregla", cuerpo, { abierta: true, extra: `<small>${rojas.length}</small>`, resumen: rojas.length ? rojas.map((r) => r.nombre).join(" · ") : "nada en rojo" });
 }
 
 // ── Estado (la prosa verificada) ────────────────────────────────────────────
@@ -291,20 +427,29 @@ function pestanaEstado(m, rutaRaiz) {
          .join("")}</tbody></table>${e.senalesNota ? detalles("Notas", `<div class="nota">${parrafos(e.senalesNota, rutaRaiz)}</div>`) : ""}`
     : '<p class="vacio">Sin tabla de señales.</p>';
 
-  const deuda = e.deuda.grupos
-    .map((g) => detalles(`${punto(g.tono)} ${inline(g.titulo, rutaRaiz)} <small>${g.items.length}</small>`, listaVinetas(g.items, rutaRaiz), g.tono === "advertencia", 'class="grupo"'))
-    .join("");
+  // La deuda, accionable: cada ítem con su detalle y cómo se cierra (de la bitácora), separada por
+  // dueño. Antes eran veinte títulos plegados y ninguna acción.
+  const accionable = deudaAccionable(m);
+  const humanas = accionable.filter((d) => d.dueno === "humano");
+  const agente = accionable.filter((d) => d.dueno === "agente");
+  const sinRemedio = accionable.filter((d) => !d.remedio).length;
+  const columnaDeuda = (titulo, icono, lista) => `<div><h3>${icono} ${titulo} <small>${lista.length}</small></h3>${lista.length ? lista.map(tarjetaDeuda).join("") : '<p class="vacio">Nada.</p>'}</div>`;
+  const deuda = accionable.length
+    ? `<div class="kpis kpis--compactos">
+        ${tarjetaKpi(String(accionable.length), "deudas abiertas", { tono: "advertencia", detalle: "en la bitácora" })}
+        ${tarjetaKpi(String(humanas.length), "las destraba el humano", { tono: humanas.length ? "advertencia" : "verde", detalle: "decisión, cliente o autorización" })}
+        ${tarjetaKpi(String(agente.length), "las cierra el agente", { tono: agente.length ? "info" : "verde", detalle: "código o arnés" })}
+        ${tarjetaKpi(String(sinRemedio), "sin remedio escrito", { tono: sinRemedio ? "rojo" : "verde", detalle: sinRemedio ? "nadie sabe cómo cerrarlas" : "todas dicen cómo" })}
+      </div><div class="dos-columnas dos-columnas--plano">${columnaDeuda("Las destraba el humano", "👤", humanas)}${columnaDeuda("Las cierra el agente", "🤖", agente)}</div>`
+    : '<p class="vacio">— nada declarado —</p>';
 
   const verdes = e.senales.filter((s) => s.tono === "verde").length;
   return [
-    `<p class="nota">Esta pestaña es PROSA verificada: lo que <a href="${escapar(`${rutaRaiz}/${archivo}`)}"><code>${escapar(archivo)}</code></a> afirma, con su fecha. Lo que corrió en esta máquina está en «Ahora».</p>`,
-    seccion("veredicto", "Estado verificado", veredicto, { abierta: true }),
+    seccion("veredicto", "Estado verificado (bitácora)", `${veredicto}<p class="nota">Es lo que <a href="${escapar(`${rutaRaiz}/${archivo}`)}"><code>${escapar(archivo)}</code></a> afirma, con su fecha. Lo que corrió en esta máquina está en «Ahora».</p>`, { abierta: true }),
+    seccion("deuda", "Deuda técnica: qué es y cómo se cierra", deuda, { abierta: true, extra: `<small>${accionable.length}</small>`, resumen: `${humanas.length} del humano · ${agente.length} del agente` }),
     e.abiertos.items.length ? seccion("abierto", inline(e.abiertos.titulo, rutaRaiz), listaVinetas(e.abiertos.items, rutaRaiz), { extra: `<small>${e.abiertos.items.length}</small>`, abierta: true }) : "",
-    seccion("senales", "Señales (según la prosa)", senales, { extra: `<small>${e.senales.length}</small>`, resumen: `${verdes} verdes de ${e.senales.length}` }),
     e.bloqueos.length ? seccion("bloqueos", "Bloqueos", listaVinetas(e.bloqueos, rutaRaiz), { extra: `<small>${e.bloqueos.length}</small>`, abierta: true }) : "",
-    seccion("deuda", "Deuda conocida", `${e.deuda.intro ? `<div class="nota">${parrafos(e.deuda.intro, rutaRaiz)}</div>` : ""}${deuda || '<p class="vacio">— nada declarado —</p>'}`, {
-      resumen: e.deuda.grupos.map((g) => `${g.items.length} ${g.titulo.toLowerCase()}`).join(" · "),
-    }),
+    seccion("senales", "Señales (según la prosa)", senales, { extra: `<small>${e.senales.length}</small>`, resumen: `${verdes} verdes de ${e.senales.length}` }),
   ].join("");
 }
 
@@ -323,16 +468,16 @@ function tarjetaGotcha(g, rutaRaiz, invocacion) {
 
 function pestanaGotchas(m, rutaRaiz) {
   const gotchas = m.gotchas;
-  if (!m.rutas.incidents) return seccion("gotchas", "Gotchas", '<p class="vacio">El config no declara <code>incidents.file</code>: el repo no tiene registro de incidentes que leer.</p>', { abierta: true });
+  if (!m.rutas.incidents) return seccion("gotchas-lista", "Gotchas", '<p class="vacio">El config no declara <code>incidents.file</code>: el repo no tiene registro de incidentes que leer.</p>', { abierta: true });
   const ejecutables = gotchas.filter((g) => g.ejecutable).length;
   const filtros = `<div class="filtros" data-filtros="gotchas">
     <button class="filtro activo" data-filtro-grupo="gotchas" data-filtro="">todos <small>${gotchas.length}</small></button>
     <button class="filtro" data-filtro-grupo="gotchas" data-filtro="ejecutable">con freno ejecutable <small>${ejecutables}</small></button>
     <button class="filtro" data-filtro-grupo="gotchas" data-filtro="sin-freno">sin freno ejecutable <small>${gotchas.length - ejecutables}</small></button>
-    <button class="filtro filtro--accion" data-plegar="#pestana-gotchas">plegar / desplegar todo</button>
+    <button class="filtro filtro--accion" data-plegar="#gotchas">plegar / desplegar todo</button>
   </div>`;
   return seccion(
-    "gotchas",
+    "gotchas-lista",
     "Gotchas — lo que ya costó horas",
     `<p class="nota">Leído de <a href="${escapar(`${rutaRaiz}/${m.rutas.incidents}`)}"><code>${escapar(m.rutas.incidents)}</code></a>, en el orden en que se pagaron. Un puntero en rojo es un mecanismo que apunta a un archivo que ya no existe. Las <em>etiquetas</em> no se escriben: se derivan del mecanismo (dónde vive el freno y qué forma tiene), y al pulsarlas se acumulan como filtro.</p>${filtros}${barraDeEtiquetas(gotchas)}${
       gotchas.map((g) => tarjetaGotcha(g, rutaRaiz, m.invocacion)).join("") || '<p class="vacio">— ningún incidente registrado —</p>'
@@ -441,17 +586,29 @@ function tarjetaRepo(r) {
   );
   const commits = tabla(["Sha", "Fecha", "Asunto"], r.ultimosCommits.map((c) => [`<code>${escapar(c.sha)}</code>`, escapar(c.fecha), escapar(c.asunto)]));
   const diff = r.diff.trim()
-    ? detalles(
-        `Diff contra HEAD ${r.diffTruncado ? chip(`recortado: faltan ${r.diffTruncado} líneas`, "chip--gris") : ""}`,
-        `<pre class="diff">${r.diff
-          .split("\n")
-          .map((l) => `<span class="${l.startsWith("+") ? "d-mas" : l.startsWith("-") ? "d-menos" : l.startsWith("@@") ? "d-hunk" : /^(diff|index) /.test(l) ? "d-meta" : ""}">${escapar(l)}</span>`)
-          .join("\n")}</pre>`,
-      )
-    : "";
+    ? `${r.diffTruncado ? `<p>${chip(`recortado: faltan ${r.diffTruncado} líneas`, "chip--gris")}</p>` : ""}<pre class="diff">${r.diff
+        .split("\n")
+        .map((l) => `<span class="${l.startsWith("+") ? "d-mas" : l.startsWith("-") ? "d-menos" : l.startsWith("@@") ? "d-hunk" : /^(diff|index) /.test(l) ? "d-meta" : ""}">${escapar(l)}</span>`)
+        .join("\n")}</pre>`
+    : '<p class="vacio">Sin diff contra HEAD.</p>';
+  // Pestañas internas: archivos, diff, commits y carpetas eran cuatro bloques apilados que había
+  // que recorrer para encontrar uno. Ahora se elige el concepto.
+  const id = `repo-${String(r.nombre).replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "") || "raiz"}`;
+  const sub = [
+    { clave: "archivos", nombre: `Archivos <small>${r.cambios.length}</small>`, html: r.cambios.length ? cambios : '<p class="ok">✓ Árbol limpio: nada sin commitear.</p>' },
+    { clave: "diff", nombre: "Diff", html: diff },
+    { clave: "commits", nombre: `Commits <small>${r.ultimosCommits.length}</small>`, html: commits },
+    { clave: "carpetas", nombre: "Por carpeta", html: grupos ? `<p>${grupos}</p>` : '<p class="vacio">Sin cambios.</p>' },
+  ];
+  const pestanasInternas = `<div class="subpestanas" data-subpestanas>
+    <div class="subpestanas__tira" role="tablist" aria-label="Código de ${escapar(r.nombre)}">${sub
+      .map((s, i) => `<button type="button" role="tab" class="${i === 0 ? "activo" : ""}" aria-selected="${i === 0}" data-subpestana="${id}-${s.clave}">${s.nombre}</button>`)
+      .join("")}</div>
+    ${sub.map((s, i) => `<div class="subpestana" role="tabpanel" id="${id}-${s.clave}"${i === 0 ? "" : " hidden"}>${s.html}</div>`).join("")}
+  </div>`;
   return `<article class="tarjeta repo" data-buscar>${detalles(
-    `${punto(r.limpio ? "verde" : "advertencia")} <code>${escapar(r.nombre)}</code> <code>${escapar(r.rama ?? "?")}</code> ${r.limpio ? chip("árbol limpio", "chip--ok") : chip(`${r.cambios.length} archivo(s) cambiados`, "chip--mal")} ${r.rol ? chip(escapar(r.rol), "chip--gris") : ""}`,
-    `<p>${posicion}</p>${grupos ? `<p><span class="tenue">Cambios por carpeta:</span> ${grupos}</p>` : ""}${r.cambios.length ? cambios : ""}${diff}${detalles(`Últimos commits <small>${r.ultimosCommits.length}</small>`, commits)}`,
+    `${punto(r.limpio ? "verde" : "advertencia")} <code>${escapar(r.nombre)}</code> <code>${escapar(r.rama ?? "?")}</code> ${r.limpio ? chip("árbol limpio", "chip--ok") : chip(`${r.cambios.length} archivo(s) cambiados`, "chip--mal")} ${r.rol ? chip(escapar(r.rol), "chip--gris") : ""} ${posicion}`,
+    pestanasInternas,
     !r.limpio,
   )}</article>`;
 }
@@ -491,13 +648,17 @@ function seccionRegistro(v, m, rutaRaiz) {
   const cab = reg
     ? `<p>${chip(`gate ${escapar(reg.veredicto)}`, reg.veredicto === "verde" ? "chip--ok" : reg.veredicto === "rojo" ? "chip--mal" : "chip--info")} modo <code>${escapar(reg.modo)}</code> · ${fecha(reg.fecha)} · ${segundos(reg.ms)}${reg.head ? ` · HEAD <code>${escapar(reg.head)}</code>` : ""}${reg.rama ? ` · rama <code>${escapar(reg.rama)}</code>` : ""}</p>`
     : `<p>${chip("el gate no corrió en esta máquina", "chip--mal")} Corré <code>${escapar(m.reglas.gate.command ?? "node scripts/gate.mjs")}</code>.</p>`;
-  const verdes = nombres.filter((n) => reg?.senales?.[n]?.estado === "verde").length;
+  // La cuenta es de las señales DECLARADAS: la tabla muestra también las que ya no lo están (con
+  // su etiqueta), pero sumarlas al total decía «12/13» de un gate con todo verde.
+  const declaradas = m.reglas.gate.signals.map((s) => s.name);
+  const verdes = declaradas.filter((n) => reg?.senales?.[n]?.estado === "verde").length;
+  // El pipeline es la vista; la tabla queda plegada para quien quiera el script o el HEAD exacto.
   return seccion(
     "registro",
-    "Última corrida del gate (esta máquina)",
-    `${cab}${tabla(["Señal", "Última corrida", "Último verde", "Script"], filas, "verificacion")}
-     <p class="nota">Sale de <code>${escapar(v.gate.rutaRegistro)}</code>, que el gate escribe en cada corrida: es de ESTA máquina y no se versiona. El veredicto en prosa, con su fecha, está en «Estado»: las dos cosas son distintas a propósito.</p>`,
-    { abierta: true, extra: `<small>${verdes}/${nombres.length}</small>`, resumen: reg ? `${reg.veredicto} · ${fecha(reg.fecha)}` : "sin registro" },
+    "Última corrida del gate (pipeline)",
+    `${cab}${pipelineDelGate(m)}${detalles(`Ver como tabla <small>${nombres.length} señales</small>`, tabla(["Señal", "Última corrida", "Último verde", "Script"], filas, "verificacion"))}
+     <p class="nota">Pasá el mouse (o el foco) por cada caja para ver qué verifica, cuánto tardó y su último verde; un job rojo lleva a su detalle. Sale de <code>${escapar(v.gate.rutaRegistro)}</code>, que el gate escribe en cada corrida: es de ESTA máquina y no se versiona.</p>`,
+    { abierta: true, extra: `<small>${verdes}/${declaradas.length}</small>`, resumen: reg ? `${reg.veredicto} · ${fecha(reg.fecha)} · ${verdes} de ${declaradas.length} en verde` : "sin registro" },
   );
 }
 
@@ -562,8 +723,9 @@ function pestanaAhora(v, m, rutaRaiz) {
   const sucios = v.repos.filter((r) => !r.ausente && !r.limpio);
   return [
     `<p class="nota">Estado de <strong>esta máquina</strong> (${escapar(v.maquina)}) al ${fecha(v.generadoEn)}. Caduca: se regenera en cada corrida del gate o con <code>${escapar(m.comando)}</code>.</p>`,
-    seccion("gate-vivo", "Gate de esta sesión", gate, { abierta: v.gate.pendiente, resumen: v.gate.pendiente ? "pendiente" : "al día" }),
     seccionRegistro(v, m, rutaRaiz),
+    seccionRojas(m),
+    seccion("gate-vivo", "Gate de esta sesión", gate, { abierta: v.gate.pendiente, resumen: v.gate.pendiente ? "pendiente" : "al día" }),
     v.repos.length
       ? seccion("repos", "Código", v.repos.map(tarjetaRepo).join(""), { abierta: true, extra: `<small>${v.repos.length}</small>`, resumen: sucios.length ? `${sucios.length} con cambios: ${sucios.map((r) => r.nombre).join(", ")}` : "todo limpio" })
       : "",
@@ -623,7 +785,7 @@ const NOMBRE_FUENTE = { repo: "casillas del plan en el repo (historia de git)", 
 function pestanaPlan(plan) {
   if (!plan || plan.estado !== "ok") {
     return seccion(
-      "plan",
+      "plan-burndown",
       "Plan — burn-down",
       `<p>${chip("OMITIDO", "chip--gris")} ${inline(plan?.motivo ?? "sin datos del plan")}</p>
        <p class="nota">Omitido no es 0 %: no hay de dónde leer el plan, y un plan vacío y uno que no existe no se pueden ver igual. Dónde vive el plan lo dice <code>tracker.artifactsIn</code> (o <code>panel.plan.source</code>): en el repo, se cuentan las casillas de <code>panel.plan.files</code> por la historia de git; en el gestor, se usan las fechas de alta y cierre que devuelve <code>panel.tracker.command</code>.</p>`,
@@ -639,7 +801,7 @@ function pestanaPlan(plan) {
   const crecio = r.total - r.alcanceInicial;
   const actual = plan.serie[plan.serie.length - 1];
   return seccion(
-    "plan",
+    "plan-burndown",
     "Plan — burn-down",
     `<div class="indicadores indicadores--compactos">
       ${indicador(`${r.pct}%`, "hecho", { tono: r.pct === 100 ? "verde" : "info", detalle: `${r.hechas} de ${r.total} · conteo, no esfuerzo` })}
@@ -807,8 +969,9 @@ const tokensDe = (chars) => Math.ceil(chars / 4);
 // ── Fuentes ─────────────────────────────────────────────────────────────────
 
 function pestanaFuentes(m, rutaRaiz) {
-  return seccion(
-    "fuentes",
+  // La ficha del proyecto vive acá: en Salud tapaba el estado del arnés con una descripción.
+  return tarjetaProyecto(m, rutaRaiz) + seccion(
+    "fuentes-lista",
     "Fuentes y regeneración",
     `<p class="nota">La memoria del panel se DERIVA de los archivos de abajo, sin ningún modelo de lenguaje ni red: leerlo es leerlos. Se regenera con <code>${escapar(m.comando)}</code> y en cada corrida del gate. Su versión es el hash del modelo: si cambia algo que el panel muestra, cambia la versión. La pestaña «Ahora» es aparte: lee git, el registro del gate, las sondas y el gestor, y por eso lleva hora.</p>
      ${tabla(["Archivo", "Hash", "Líneas"], m.fuentes.map((f) => [`<a href="${escapar(`${rutaRaiz}/${f.ruta}`)}"><code>${escapar(f.ruta)}</code></a>`, `<code>${escapar(f.hash)}</code>`, String(f.lineas)]))}
@@ -818,39 +981,328 @@ function pestanaFuentes(m, rutaRaiz) {
   );
 }
 
-// ── Indicadores de cabecera ─────────────────────────────────────────────────
+// ── Resumen (la portada ejecutiva) ──────────────────────────────────────────
+//
+// Contesta en orden: ¿cómo estamos?, ¿qué falla y por qué?, ¿qué hace cada uno?, ¿cómo vamos? y
+// ¿la máquina está bien configurada? El diagnóstico lo arma `leer-resumen.mjs`; acá sólo se dibuja.
 
+const ICONO_TONO = { verde: "✓", rojo: "✕", advertencia: "!", omitido: "–", info: "i", neutro: "·" };
+const NOMBRE_TONO = { verde: "verde", rojo: "rojo", advertencia: "atención", omitido: "omitida", info: "info", neutro: "sin dato" };
+
+/** Fecha absoluta en el HTML (determinista); el JS la reescribe como «hace X min» en vivo. */
+const cuando = (iso) => (iso ? `<time datetime="${escapar(iso)}" data-relativo>${fecha(iso)}</time>` : "—");
+
+/**
+ * Dona de estados. Una sola serie partida en estados: cada arco lleva su `<title>` (tooltip) y la
+ * leyenda repite conteo y nombre, así que el color nunca es lo único que dice el estado.
+ */
+function dona(partes, { centro = "", sub = "", etiqueta = "" } = {}) {
+  const total = partes.reduce((n, p) => n + p.valor, 0);
+  const R = 52;
+  const C = 2 * Math.PI * R;
+  let acumulado = 0;
+  const arcos = total
+    ? partes
+        .filter((p) => p.valor > 0)
+        .map((p) => {
+          const largo = (p.valor / total) * C;
+          // 2px de separación entre segmentos (el «espaciador» de superficie) salvo con un solo segmento.
+          const hueco = partes.filter((x) => x.valor > 0).length > 1 ? 2 : 0;
+          const arco = `<circle class="dona__arco dona__arco--${p.tono}" r="${R}" cx="70" cy="70" stroke-dasharray="${Math.max(0, largo - hueco).toFixed(2)} ${(C - Math.max(0, largo - hueco)).toFixed(2)}" stroke-dashoffset="${(-acumulado).toFixed(2)}"><title>${escapar(p.nombre)}: ${p.valor} de ${total}</title></circle>`;
+          acumulado += largo;
+          return arco;
+        })
+        .join("")
+    : `<circle class="dona__fondo" r="${R}" cx="70" cy="70"></circle>`;
+  return `<div class="dona"><svg viewBox="0 0 140 140" role="img" aria-label="${escapar(etiqueta)}"><circle class="dona__fondo" r="${R}" cx="70" cy="70"></circle><g transform="rotate(-90 70 70)">${arcos}</g><text x="70" y="68" text-anchor="middle" class="dona__centro">${escapar(centro)}</text><text x="70" y="88" text-anchor="middle" class="dona__sub">${escapar(sub)}</text></svg>
+    <ul class="dona__leyenda">${partes.map((p) => `<li>${punto(p.tono)} <strong>${p.valor}</strong> ${escapar(p.nombre)}</li>`).join("")}</ul></div>`;
+}
+
+/** Historial del gate: una columna por corrida, apilada verde/rojo/omitida. */
+function tendenciaDelGate(historial) {
+  if (!historial.length) return '<p class="vacio">Se arma sola con cada corrida del gate en esta máquina.</p>';
+  const max = Math.max(1, ...historial.map((h) => h.verdes + h.rojas + h.omitidas));
+  const cols = historial
+    .map((h) => {
+      const total = h.verdes + h.rojas + h.omitidas;
+      const alto = (n) => `${((n / max) * 100).toFixed(1)}%`;
+      const tip = `${fecha(h.fecha)} · ${h.veredicto}${h.modo ? ` (${h.modo})` : ""} · ${h.verdes} verdes, ${h.rojas} rojas, ${h.omitidas} omitidas${h.head ? ` · ${h.head}` : ""}`;
+      return `<div class="pila" title="${escapar(tip)}" tabindex="0" aria-label="${escapar(tip)}"><div class="pila__col" style="height:${alto(total)}">${h.rojas ? `<i class="pila__rojo" style="flex:${h.rojas}"></i>` : ""}${h.omitidas ? `<i class="pila__omitido" style="flex:${h.omitidas}"></i>` : ""}${h.verdes ? `<i class="pila__verde" style="flex:${h.verdes}"></i>` : ""}</div><span class="pila__marca pila__marca--${h.veredicto === "verde" ? "verde" : h.veredicto === "rojo" ? "rojo" : "info"}">${ICONO_TONO[h.veredicto === "verde" ? "verde" : h.veredicto === "rojo" ? "rojo" : "info"]}</span><span>${escapar(String(h.fecha).slice(5, 10))}</span></div>`;
+    })
+    .join("");
+  const extra = historial.length < 3 ? `<p class="nota">${historial.length} corrida(s) registrada(s): la tendencia se completa con las próximas.</p>` : "";
+  return `<div class="pilas">${cols}</div><p class="leyenda leyenda--cuadros"><span class="c-verde">verdes</span><span class="c-rojo">rojas</span><span class="c-omitido">omitidas</span><span>✓/✕ = veredicto de la corrida</span></p>${extra}`;
+}
+
+/** Actividad del agente por día (mensajes): una sola serie, sin leyenda; el título la nombra. */
+function actividad(dias) {
+  if (!dias.length) return '<p class="vacio">Sin transcripciones de Claude Code en esta máquina.</p>';
+  const max = Math.max(1, ...dias.map((d) => d.mensajes));
+  return `<div class="barras barras--actividad">${dias
+    .map((d) => `<div class="barra" title="${escapar(d.dia)} · ${d.mensajes} mensajes · ${abreviar(d.salida)} tokens de salida" tabindex="0"><div class="barra__col barra__col--llena" style="height:${Math.round((d.mensajes / max) * 100)}%"></div><span>${escapar(d.dia.slice(8))}</span></div>`)
+    .join("")}</div>`;
+}
+
+function tarjetaKpi(valor, etiqueta, { tono = "neutro", detalle = "", href = "", progreso = null } = {}) {
+  const barra = progreso == null ? "" : `<span class="kpi__barra" aria-hidden="true"><span class="kpi__lleno kpi__lleno--${tono}" style="width:${Math.max(0, Math.min(100, progreso))}%"></span></span>`;
+  return `<a class="kpi kpi--${tono}"${href ? ` href="${href}"` : ""}><span class="kpi__etiqueta">${etiqueta}</span><span class="kpi__valor"><span class="kpi__icono" aria-hidden="true">${ICONO_TONO[tono] ?? ""}</span>${valor}</span>${barra}<span class="kpi__detalle">${detalle}</span></a>`;
+}
+
+
+// ── «Qué hacer»: la bandeja de cada uno ─────────────────────────────────────
+//
+// La portada del panel. Contesta dos preguntas y nada más: «¿qué me toca?» y «¿qué hace el
+// agente?». El Resumen mezclaba estado, pendientes, gráficos y configuración, repetía ítems en las
+// dos columnas y no mostraba los PR a votar (2026-11-10: «me pierdo en ese panel»).
+
+// Los comandos del gestor salen de `panel.triage.commands` (`take`, `show`); el que el repo no
+// declaró no se nombra: un prompt con un comando inventado manda al agente a correr algo que no existe.
+const promptDeTarea = (it) =>
+  [
+    `Tomá #${it.id} «${it.titulo}»${it.url ? ` (${it.url})` : ""}.`,
+    it.tomar ? `Corré \`${it.tomar}\`.` : null,
+    it.ver ? `Leé su descripción y criterios con \`${it.ver}\`.` : "Leé su descripción y criterios en el gestor.",
+    "Ejecutalo con el gate y cerralo cuando el gate esté verde. Si algo depende de una decisión mía, preguntame en vez de adivinar.",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+function tarjetaQueHacer(it, quien) {
+  const titulo = it.url ? `<a href="${escapar(it.url)}" target="_blank" rel="noopener">${inline(it.titulo)}</a>` : inline(it.titulo);
+  const espera = (it.esperaA ?? []).length
+    ? `<p class="qh-espera">Espera a ${it.esperaA.map((p) => `<a href="${escapar(p.url ?? "")}" target="_blank" rel="noopener">#${p.id}</a> <span class="tenue">${escapar(breveTitulo(p.titulo))} · ${escapar(DE_QUIEN[p.dueno]?.(p) ?? "sin dueño")}</span>`).join(" · ")}</p>`
+    : "";
+  const prompt = quien === "agente" ? botonPrompt(Number.isFinite(Number(it.id)) ? promptDeTarea(it) : promptDeAccion({ texto: `${it.titulo}${it.porque ? ` — ${it.porque}` : ""}`, comando: it.comando, dueno: "agente", tono: "advertencia" }, "Qué hacer"), "Hacelo") : "";
+  return `<li class="qh-tarjeta">
+    <div class="qh-tarjeta__titulo" data-buscar>${titulo}</div>
+    ${it.porque ? `<p class="qh-tarjeta__porque">${inline(it.porque)}</p>` : ""}
+    ${espera}
+    ${it.accion ? `<p class="qh-tarjeta__accion"><strong>Qué hacer:</strong> ${inline(it.accion)}</p>` : ""}
+    <div class="qh-tarjeta__pie">${chip(escapar(it.origen ?? ""), "chip--gris")}${it.comando ? `<code>${escapar(it.comando)}</code>` : ""}${prompt}</div>
+  </li>`;
+}
+
+const DE_QUIEN = { agente: () => "del agente", humano: () => "tuya", otro: (p) => `de ${p.asignado ?? "otra persona"}`, "sin-dueno": () => "sin dueño declarado" };
+
+/** Arriba lo del foco y lo que no es del gestor (gate, PR, máquina); abajo, un plegable por frente (el contenedor). */
+function porFrente(lista, quien) {
+  const sueltos = lista.filter((it) => !it.frente || it.delFoco);
+  const frentes = new Map();
+  for (const it of lista.filter((x) => x.frente && !x.delFoco)) {
+    if (!frentes.has(it.frente.id)) frentes.set(it.frente.id, { ...it.frente, items: [] });
+    frentes.get(it.frente.id).items.push(it);
+  }
+  const ordenados = [...frentes.values()].sort((a, b) => b.items.length - a.items.length);
+  const items = (l) => `<ul class="qh-lista">${l.map((it) => tarjetaQueHacer(it, quien)).join("")}</ul>`;
+  return `${sueltos.length ? items(sueltos) : ""}${ordenados
+    .map((fr) => `<details class="qh-frente"><summary><span class="qh-frente__nombre">${escapar(fr.titulo)}</span> <span class="qh-cuenta">${fr.items.length}</span></summary>${items(fr.items)}</details>`)
+    .join("")}`;
+}
+
+const breveTitulo = (t) => {
+  const s = String(t ?? "").replace(/\s+/g, " ").trim();
+  return s.length > 70 ? `${s.slice(0, 69)}…` : s;
+};
+
+/** Un grupo de la bandeja. `plegado` para lo que se consulta, no se actúa; vacío y sin `vacio`, no se muestra. */
+function grupoQueHacer({ titulo, ayuda, lista, quien, plegado = false, vacio = null, max = Infinity }) {
+  if (!lista.length) return vacio ? `<section class="qh-grupo qh-grupo--vacio"><h3>${titulo}</h3><p class="ok">✓ ${vacio}</p></section>` : "";
+  const visibles = lista.slice(0, max);
+  const resto = lista.slice(max);
+  const items = (l) => `<ul class="qh-lista">${l.map((it) => tarjetaQueHacer(it, quien)).join("")}</ul>`;
+  const cuerpo = `${items(visibles)}${resto.length ? `<details class="qh-mas"><summary>Ver ${resto.length} más</summary>${items(resto)}</details>` : ""}`;
+  const cabecera = `${titulo} <span class="qh-cuenta">${lista.length}</span>`;
+  return plegado
+    ? `<section class="qh-grupo"><details><summary><h3>${cabecera}</h3></summary>${ayuda ? `<p class="qh-ayuda">${ayuda}</p>` : ""}${cuerpo}</details></section>`
+    : `<section class="qh-grupo"><h3>${cabecera}</h3>${ayuda ? `<p class="qh-ayuda">${ayuda}</p>` : ""}${cuerpo}</section>`;
+}
+
+function pestanaQueHacer(modelo) {
+  const b = construirBandeja(modelo);
+  const { humano: h, agente: a } = b;
+  const g = b.gate;
+  const tono = b.estado.tono;
+  const estado = `<section class="qh-estado qh-estado--${tono}" aria-live="polite">
+      <span class="qh-estado__icono" aria-hidden="true">${ICONO_TONO[tono] ?? "·"}</span>
+      <div><strong>${escapar(b.estado.titular)}</strong><span class="tenue"> · ${escapar(b.estado.detalle)}</span></div>
+      <span class="qh-estado__meta tenue">${g ? `último gate ${cuando(g.fecha)}` : "el gate no corrió acá"}${b.leidoEn ? ` · gestor leído ${cuando(b.leidoEn)}` : ""}</span>
+    </section>`;
+  const aviso = b.error ? `<p class="qh-aviso">⚠ Sin datos del gestor:${escapar(b.error)}. Lo de abajo muestra sólo el gate y la máquina.</p>` : "";
+  const paraVos = h.decidir.length + h.hacer.length;
+  const tuyo = `<section class="qh-col qh-col--humano" aria-labelledby="qh-humano">
+      <h2 id="qh-humano"><span aria-hidden="true">👤</span> Lo tuyo <small>${paraVos ? `${paraVos} para hacer` : "nada urgente"}</small></h2>
+      ${grupoQueHacer({ titulo: "Decidir", ayuda: "Elegí una opción: el agente espera tu respuesta para seguir.", lista: h.decidir, quien: "humano", vacio: "Nada para decidir." })}
+      <section class="qh-grupo"><h3>Hacer <span class="qh-cuenta">${h.hacer.length}</span></h3>
+        <p class="qh-ayuda">Acciones que sólo vos podés hacer (votar, confirmar, configurar). Arriba lo urgente y lo del foco; abajo, por frente.</p>
+        ${h.hacer.length ? porFrente(h.hacer, "humano") : '<p class="ok">✓ Nada para hacer.</p>'}</section>
+      ${grupoQueHacer({ titulo: `Esperando respuesta de ${escapar(b.etiquetaExterna)}`, ayuda: "No se resuelven acá, se siguen. Cuando llegue la respuesta, anotala en el ítem y el agente sigue.", lista: h.esperando, quien: "humano", plegado: true })}
+      ${grupoQueHacer({ titulo: "Frentes a tu nombre", ayuda: "Los contenedores del gestor: el contexto de las tareas, no acciones.", lista: h.frentes, quien: "humano", plegado: true })}
+    </section>`;
+  const listos = a.ya;
+  const delAgente = `<section class="qh-col qh-col--agente" aria-labelledby="qh-agente">
+      <h2 id="qh-agente"><span aria-hidden="true">🤖</span> Lo del agente <small>${listos.length ? `${listos.length} listas para hacer` : "nada listo"}</small><span class="empuje"></span>${listos.length ? botonPrompt(promptDePendientes(listos.map((it) => ({ tono: "info", texto: Number.isFinite(Number(it.id)) ? `#${it.id} ${it.titulo}` : it.titulo, comando: it.comando ?? it.tomar ?? null }))), "Hacé lo listo") : ""}</h2>
+      <section class="qh-grupo"><h3>Puede hacer ya <span class="qh-cuenta">${listos.length}</span></h3>
+        <p class="qh-ayuda">Nada que esperar. Arriba lo del foco y del gate; abajo, por frente. Pedí un frente entero o una tarea con «Hacelo».</p>
+        ${listos.length ? porFrente(listos, "agente") : '<p class="ok">✓ Nada listo: todo espera algo.</p>'}</section>
+      ${grupoQueHacer({ titulo: "Espera algo tuyo", ayuda: "Se destraban cuando cerrás lo que dice «espera a».", lista: a.esperaTuyo, quien: "agente" })}
+      ${grupoQueHacer({ titulo: "Espera a otra persona", ayuda: "El predecesor es de alguien más o no tiene dueño: se sigue con esa persona (o se le declara dueño en el gestor).", lista: a.esperaOtros, quien: "agente", plegado: true })}
+      ${grupoQueHacer({ titulo: "Después", ayuda: "Esperan otra tarea del agente: es el orden de trabajo, no un bloqueo.", lista: a.despues, quien: "agente", plegado: true })}
+    </section>`;
+  return `${estado}${aviso}<div class="qh-columnas">${tuyo}${delAgente}</div>
+    <p class="nota">Sale del gestor (<code>panel.inbox</code>: el dueño y los predecesores de cada ítem, y los PR activos), del gate y de la máquina.${b.comandoDueno ? ` Para cambiar de quién es algo: <code>${escapar(b.comandoDueno)}</code>.` : ""}</p>`;
+}
+
+
+/**
+ * Las secciones del diagnóstico que el repo quiere PRIMERO (`panel.doctor.highlight`, un regex sobre
+ * el título): lo que, si falta, deja sin sentido al resto. Sin declarar, el orden del doctor.
+ */
+const destacadorDe = (fuente) => {
+  if (!fuente) return () => false;
+  try {
+    const re = new RegExp(fuente, "i");
+    return (titulo) => re.test(titulo);
+  } catch {
+    return () => false;
+  }
+};
+
+function configuracion(doc) {
+  const esArquitectura = destacadorDe(doc?.destacar);
+  if (!doc) return '<p class="vacio">El repo no declara un diagnóstico de la máquina (<code>panel.doctor.command</code>).</p>';
+  if (!doc.ok) return `<p>${chip("no se pudo leer el diagnóstico", "chip--mal")} <code>${escapar(doc.comando ?? "")}</code> ${escapar(doc.error ?? "")}</p>`;
+  const secciones = [...doc.secciones].sort((a, b) => Number(esArquitectura(b.titulo)) - Number(esArquitectura(a.titulo)));
+  const tonoDe = (s) => (s.chequeos.some((c) => c.tono === "rojo") ? "rojo" : s.chequeos.some((c) => c.tono === "advertencia") ? "advertencia" : "verde");
+  return `<ul class="config">${secciones
+    .map((s) => {
+      const tono = tonoDe(s);
+      const malos = s.chequeos.filter((c) => c.tono !== "verde");
+      return `<li class="config__item config__item--${tono}${esArquitectura(s.titulo) ? " config__item--destacado" : ""}">
+        <details${malos.length ? " open" : ""}><summary><span class="pendiente__marca pendiente__marca--${tono}" aria-label="${NOMBRE_TONO[tono]}">${ICONO_TONO[tono]}</span> <span data-buscar>${escapar(s.titulo)}</span> <small>${s.chequeos.length - malos.length}/${s.chequeos.length}</small></summary>
+        <ul class="config__chequeos">${s.chequeos.map((c) => `<li>${punto(c.tono)} ${escapar(c.texto)}${c.arreglo ? `<br><span class="tenue">→ <code>${escapar(c.arreglo)}</code></span>` : ""}</li>`).join("")}</ul></details></li>`;
+    })
+    .join("")}</ul><p class="nota">Sale de <code>${escapar(doc.comando)}</code> al generar el panel.</p>`;
+}
+
+function tarjetaFoco(f) {
+  if (!f) return '<p class="vacio">Sin foco fijado.</p>';
+  if (f.error) return `<p>${chip("foco ilegible", "chip--mal")} ${escapar(f.error)}</p>`;
+  const r = f.resumen;
+  const humano = f.tareas.filter((t) => t.dueno === "humano");
+  const agente = f.tareas.filter((t) => t.dueno === "agente");
+  return `<p class="foco__titulo">${f.url ? `<a href="${escapar(f.url)}">#${escapar(String(f.id))}</a>` : `#${escapar(String(f.id))}`} <span data-buscar>${escapar(f.titulo)}</span></p>
+    <p>${chip(escapar(f.estado || "?"), "chip--info")}${f.asignado ? ` asignado a <strong>${escapar(f.asignado)}</strong>` : ""}${f.leidoEn ? ` · leído del gestor ${cuando(f.leidoEn)}` : ""}</p>
+    ${
+      r && r.total
+        ? `<div class="foco__avance"><span class="kpi__barra"><span class="kpi__lleno kpi__lleno--verde" style="width:${r.pct}%"></span></span> <strong>${r.pct}%</strong> <span class="tenue">${r.cerradas}/${r.total} tareas · humano ${humano.filter((t) => !t.cerrada).length} abiertas · agente ${agente.filter((t) => !t.cerrada).length} abiertas</span></div>`
+        : `<p>${chip("sin desglose en el gestor", "chip--atencion")} El objetivo todavía no tiene tareas hijas: ver los pendientes de arriba.</p>`
+    }`;
+}
+
+function pestanaResumen(m) {
+  const r = construirResumen(m);
+  const e = r.estado;
+  const g = r.gate;
+  // Los pendientes viven en UN solo lugar, «Qué hacer»: el Resumen sólo los cuenta y enlaza allá.
+  // Tenía su propia lista en dos columnas, y eran dos listas distintas de lo mismo (2026-11-10).
+  const b = construirBandeja(m);
+  const h = [...b.humano.decidir, ...b.humano.hacer];
+  const a = b.agente.ya;
+  const doc = r.configuracion?.ok ? r.configuracion : null;
+  const tonoConfig = !doc ? "neutro" : doc.bloqueantes ? "rojo" : doc.avisos ? "advertencia" : "verde";
+
+  const hero = `<section class="hero hero--${e.tono}" aria-live="polite">
+      <span class="hero__icono" aria-hidden="true">${ICONO_TONO[e.tono] ?? "·"}</span>
+      <div class="hero__texto"><p class="hero__rotulo">Estado actual</p><h2>${escapar(e.titular)}</h2><p>${escapar(e.detalle)}</p></div>
+      <dl class="hero__meta">
+        ${g ? `<div><dt>Último gate</dt><dd>${cuando(g.fecha)} · ${escapar(g.modo ?? "")}${g.head ? ` · <code>${escapar(g.head)}</code>` : ""}</dd></div>` : ""}
+        ${r.foco && !r.foco.error ? `<div><dt>Foco</dt><dd>${r.foco.url ? `<a href="${escapar(r.foco.url)}">#${escapar(String(r.foco.id))}</a>` : `#${escapar(String(r.foco.id))}`} · ${escapar(r.foco.estado)}</dd></div>` : ""}
+      </dl>
+    </section>`;
+
+  const kpis = `<div class="kpis">
+      ${g ? tarjetaKpi(`${g.verdes}/${g.total}`, "señales del gate en verde", { tono: g.rojas ? "rojo" : g.omitidas ? "advertencia" : "verde", progreso: g.total ? (g.verdes / g.total) * 100 : 0, detalle: g.rojas ? `${g.rojas} roja(s)${g.omitidas ? ` · ${g.omitidas} omitida(s)` : ""}` : g.omitidas ? `${g.omitidas} omitida(s)` : "todas pasaron", href: "#r-problemas" }) : tarjetaKpi("—", "señales del gate", { tono: "advertencia", detalle: "el gate no corrió acá" })}
+      ${tarjetaKpi(String(h.length), "te toca a vos", { tono: b.humano.decidir.length ? "rojo" : h.length ? "advertencia" : "verde", detalle: h.length ? `${b.humano.decidir.length} para decidir · ${b.humano.hacer.length} para hacer` : "nada que hacer", href: "#que-hacer" })}
+      ${tarjetaKpi(String(a.length), "el agente puede hacer ya", { tono: a.length ? "advertencia" : "verde", detalle: a.length ? "sin nada que esperar" : "nada listo", href: "#que-hacer" })}
+      ${tarjetaKpi(doc ? `${doc.ok}/${doc.ok + doc.avisos + doc.bloqueantes}` : "—", "configuración de la máquina", { tono: tonoConfig, progreso: doc ? (doc.ok / Math.max(1, doc.ok + doc.avisos + doc.bloqueantes)) * 100 : null, detalle: !doc ? "sin diagnóstico" : doc.bloqueantes ? `${doc.bloqueantes} bloqueante(s)` : doc.avisos ? `${doc.avisos} aviso(s)` : "todo en orden", href: "#r-config" })}
+    </div>`;
+
+  const problemas = r.problemas.length
+    ? `<section class="panel-bloque" id="r-problemas"><h3>Qué está fallando y por qué <small>${r.problemas.length}</small></h3>
+        <div class="problemas">${r.problemas
+          .map(
+            (p) => `<article class="problema problema--${p.tono}">
+              <div class="problema__cabecera"><span class="pendiente__marca pendiente__marca--${p.tono}" aria-label="${NOMBRE_TONO[p.tono]}">${ICONO_TONO[p.tono]}</span> <strong data-buscar>${escapar(p.titulo)}</strong> ${chip(p.dueno === "humano" ? "👤 humano" : "🤖 agente", p.dueno === "humano" ? "chip--atencion" : "chip--info")}</div>
+              <p class="problema__que">${escapar(p.que)}</p>
+              ${p.remedio ? `<p class="problema__remedio"><strong>Cómo se arregla:</strong> ${inline(p.remedio)}</p>` : ""}
+              ${p.porque ? `<p class="problema__porque"><span class="tenue">Por qué importa:</span> ${inline(p.porque)}</p>` : ""}
+              <p class="tenue problema__pie">${p.desde ? `verde por última vez ${cuando(p.desde)}` : p.dueno === "agente" ? "sin verde registrado en esta máquina" : ""}${p.reproducir ? `${p.desde || p.dueno === "agente" ? " · " : ""}<code>${escapar(p.reproducir)}</code>` : ""}</p>
+            </article>`,
+          )
+          .join("")}</div></section>`
+    : `<section class="panel-bloque" id="r-problemas"><h3>Qué está fallando</h3><p class="ok">✓ Nada: no hay señales rojas, alarmas ni configuración bloqueante.</p></section>`;
+
+
+  const graficas = `<section class="panel-bloque"><h3>Cómo vamos</h3><div class="graficas">
+      <figure><figcaption>Señales del gate (última corrida)</figcaption>${
+        g
+          ? dona(
+              [
+                { nombre: "verdes", valor: g.verdes, tono: "verde" },
+                { nombre: "rojas", valor: g.rojas, tono: "rojo" },
+                { nombre: "omitidas", valor: g.omitidas, tono: "omitido" },
+              ],
+              { centro: `${g.total ? Math.round((g.verdes / g.total) * 100) : 0}%`, sub: "en verde", etiqueta: `${g.verdes} de ${g.total} señales en verde` },
+            )
+          : '<p class="vacio">El gate no corrió en esta máquina.</p>'
+      }</figure>
+      <figure><figcaption>Tendencia del gate (corridas en esta máquina)</figcaption>${tendenciaDelGate(r.historial)}</figure>
+      <figure><figcaption>Actividad del agente · mensajes por día</figcaption>${actividad(r.actividad)}</figure>
+    </div></section>`;
+
+  const abajo = `<div class="dos-columnas">
+      <section class="panel-bloque" id="r-foco"><h3>Foco de la sesión</h3>${tarjetaFoco(r.foco)}</section>
+      <section class="panel-bloque" id="r-config"><h3>Configuración de esta máquina <small>${doc ? `${doc.ok} ok · ${doc.avisos} aviso(s) · ${doc.bloqueantes} bloqueante(s)` : ""}</small></h3>${configuracion(r.configuracion)}</section>
+    </div>`;
+
+  return [hero, kpis, problemas, graficas, abajo, `<p class="nota">El detalle está en las otras pestañas: <a href="#registro">pipeline del gate → Ahora</a>, <a href="#repos">código → Ahora</a>, <a href="#mapa">mapa del arnés → Salud</a>.</p>`].join("");
+}
+
+// ── Indicadores por pestaña ─────────────────────────────────────────────────
+
+/**
+ * Cada pestaña muestra SÓLO sus indicadores. Antes eran once cajas idénticas arriba de todas las
+ * pestañas —piezas del mapa y principios junto al estado del gate—: ruido que tapaba lo que
+ * importaba en cada vista. El Resumen trae los suyos (ejecutivos) dentro de la pestaña.
+ */
 function indicadores(m) {
-  const e = m.estado;
   const v = m.enVivo ?? null;
-  const alarmas = alarmasDe(m);
   const principios = m.reglas.constituciones.flatMap((c) => c.principios);
   const sinFreno = m.gotchas.filter((g) => !g.ejecutable).length;
   const reg = v?.gate.registro ?? null;
-  const salida = [
-    indicador(String(alarmas.length), "alarmas del arnés", { tono: alarmas.length ? "rojo" : "verde", href: "#salud", detalle: alarmas.length ? "ver Salud" : "todo vivo" }),
-    v
-      ? indicador(reg ? escapar(reg.veredicto) : "sin dato", "último gate (esta máquina)", { tono: reg ? (reg.veredicto === "verde" ? "verde" : reg.veredicto === "rojo" ? "rojo" : "info") : "advertencia", href: "#registro", detalle: reg ? fecha(reg.fecha) : "nunca corrió acá" })
-      : "",
-    indicador(TONO_ETIQUETA[e.veredicto?.tono] ?? "?", "veredicto en prosa", { tono: e.veredicto?.tono ?? "neutro", href: "#veredicto", detalle: escapar(e.fechaGate ?? m.rutas.status) }),
-    v ? indicador(v.gate.pendiente ? "pendiente" : "al día", "gate de la sesión", { tono: v.gate.pendiente ? "advertencia" : "verde", href: "#gate-vivo", detalle: v.gate.pendiente ? "código editado sin gate" : "nada sin verificar" }) : "",
-    m.arnes?.mapa ? indicador(String(m.arnes.mapa.totales.piezas), "piezas del arnés", { href: "#mapa", detalle: `${m.arnes.mapa.huecos.length} etapa(s) sin control` }) : "",
-    (() => {
-      const plan = v?.plan ?? m.plan;
-      return plan?.estado === "ok"
-        ? indicador(`${plan.resumen.pct}%`, "plan hecho", { tono: plan.resumen.pct === 100 ? "verde" : "info", href: "#plan", detalle: `${plan.resumen.hechas}/${plan.resumen.total} · ${plan.resumen.pendientes} pendientes` })
-        : indicador("omitido", "plan", { tono: "omitido", href: "#plan", detalle: "sin fuente del plan" });
-    })(),
-    indicador(String(m.reglas.gate.signals.length), "señales del gate", { href: "#gate", detalle: `${m.reglas.hooks.length} hooks` }),
-    indicador(String(m.gotchas.length), "gotchas pagados", { tono: sinFreno ? "advertencia" : "verde", href: "#gotchas", detalle: `${sinFreno} sin freno ejecutable` }),
-    indicador(String(principios.length), "principios", { href: "#constituciones", detalle: `${principios.filter((p) => p.fuerza === "BLOCKING").length} BLOCKING · ${principios.filter((p) => p.fuerza === "REVIEW").length} REVIEW` }),
-  ];
-  if (v) {
-    const raiz = v.repos.find((r) => !r.ausente);
-    if (raiz) salida.push(indicador(String(raiz.cambios.length), "archivos cambiados", { tono: raiz.limpio ? "verde" : "advertencia", href: "#repos", detalle: `rama ${escapar(raiz.rama ?? "?")}` }));
-    if (v.tokens) salida.push(indicador(abreviar(v.tokens.hoy.salida), "tokens de salida hoy", { tono: "info", href: "#tokens", detalle: `${abreviar(v.tokens.total.salida)} en ${v.tokens.dias} días` }));
-  }
-  return salida.join("");
+  const raiz = v?.repos.find((r) => !r.ausente) ?? null;
+  const plan = v?.plan ?? m.plan;
+  return {
+    // Salud trae su propio tablero (dimensiones con puntaje). Las cajas sueltas de antes enlazaban
+    // a otras pestañas —«señales del gate» saltaba a Reglas— y no decían nada del estado.
+    salud: [],
+    ahora: v
+      ? [
+          indicador(reg ? escapar(reg.veredicto) : "sin dato", "último gate (esta máquina)", { tono: reg ? (reg.veredicto === "verde" ? "verde" : reg.veredicto === "rojo" ? "rojo" : "info") : "advertencia", href: "#registro", detalle: reg ? fecha(reg.fecha) : "nunca corrió acá" }),
+          indicador(v.gate.pendiente ? "pendiente" : "al día", "gate de la sesión", { tono: v.gate.pendiente ? "advertencia" : "verde", href: "#gate-vivo", detalle: v.gate.pendiente ? "código editado sin gate" : "nada sin verificar" }),
+          raiz ? indicador(String(raiz.cambios.length), "archivos cambiados", { tono: raiz.limpio ? "verde" : "advertencia", href: "#repos", detalle: `rama ${escapar(raiz.rama ?? "?")}` }) : "",
+          v.tokens ? indicador(abreviar(v.tokens.hoy.salida), "tokens de salida hoy", { tono: "info", href: "#tokens", detalle: `${abreviar(v.tokens.total.salida)} en ${v.tokens.dias} días` }) : "",
+        ]
+      : [],
+    plan: [
+      plan?.estado === "ok"
+        ? indicador(`${plan.resumen.pct}%`, "plan hecho", { tono: plan.resumen.pct === 100 ? "verde" : "info", detalle: `${plan.resumen.hechas}/${plan.resumen.total} · ${plan.resumen.pendientes} pendientes` })
+        : "",
+    ],
+    estado: [],
+    gotchas: [indicador(String(m.gotchas.length), "gotchas pagados", { tono: sinFreno ? "advertencia" : "verde", detalle: `${sinFreno} sin freno ejecutable` })],
+    reglas: [indicador(String(principios.length), "principios", { href: "#constituciones", detalle: `${principios.filter((p) => p.fuerza === "BLOCKING").length} BLOCKING · ${principios.filter((p) => p.fuerza === "REVIEW").length} REVIEW` })],
+  };
 }
 
 // ── Página ──────────────────────────────────────────────────────────────────
@@ -978,16 +1430,293 @@ table.mapa td:first-child{white-space:nowrap;width:160px}
 .avance--ancho{width:160px;max-width:100%}
 table.memoria code{word-break:break-all}.avance__lleno--info{background:var(--info)}
 [hidden]{display:none!important}
+/* ── Cabecera: proyecto, estado en una frase, responsable y latido en vivo ── */
+.titulo{align-items:center}.titulo h1{display:flex;align-items:baseline;gap:10px}.titulo__proyecto{font-size:13px;font-weight:400;color:var(--tenue)}
+.titulo__derecha{margin-left:auto;display:flex;align-items:center;gap:14px;flex-wrap:wrap;font-size:13px}
+.pastilla{display:inline-flex;align-items:center;gap:8px;padding:4px 12px;border-radius:999px;font-size:13px;font-weight:600;text-decoration:none;border:1px solid var(--borde);color:var(--tinta);background:var(--fondo)}
+.pastilla>span{display:inline-grid;place-items:center;width:18px;height:18px;border-radius:50%;color:#fff;background:var(--gris);font-size:11px}
+.pastilla--verde>span{background:var(--verde)}.pastilla--rojo>span{background:var(--rojo)}.pastilla--advertencia>span{background:var(--ambar)}
+.pastilla--rojo{border-color:var(--rojo)}.pastilla--advertencia{border-color:var(--ambar)}.pastilla--verde{border-color:var(--verde)}
+.vivo{display:inline-flex;align-items:center;gap:6px;color:var(--tenue)}
+.vivo__punto{width:8px;height:8px;border-radius:50%;background:var(--gris)}
+.vivo--on .vivo__punto{background:var(--verde);box-shadow:0 0 0 0 var(--verde);animation:latido 2s infinite}
+.vivo--caido .vivo__punto{background:var(--ambar);animation:none}
+@keyframes latido{0%{box-shadow:0 0 0 0 rgba(26,127,55,.5)}70%{box-shadow:0 0 0 7px rgba(26,127,55,0)}100%{box-shadow:0 0 0 0 rgba(26,127,55,0)}}
+@media (prefers-reduced-motion:reduce){.vivo--on .vivo__punto{animation:none}}
+.pie{margin-top:28px;color:var(--tenue);font-size:12px;text-align:center}
+/* ── Resumen ── */
+.hero{display:grid;grid-template-columns:auto 1fr auto;gap:18px;align-items:center;background:var(--papel);border:1px solid var(--borde);border-left:6px solid var(--gris);border-radius:12px;padding:18px 22px;margin:0 0 16px;box-shadow:var(--sombra)}
+.hero--verde{border-left-color:var(--verde)}.hero--rojo{border-left-color:var(--rojo)}.hero--advertencia{border-left-color:var(--ambar)}
+.hero__icono{display:grid;place-items:center;width:56px;height:56px;border-radius:50%;font-size:28px;font-weight:700;color:#fff;background:var(--gris)}
+.hero--verde .hero__icono{background:var(--verde)}.hero--rojo .hero__icono{background:var(--rojo)}.hero--advertencia .hero__icono{background:var(--ambar)}
+.hero__rotulo{margin:0;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--tenue)}
+.hero h2{margin:2px 0 4px;font-size:22px;line-height:1.25}.hero__texto p{margin:0;color:var(--tenue)}
+.hero__meta{display:grid;gap:6px;font-size:13px;min-width:200px}.hero__meta div{display:grid;grid-template-columns:96px 1fr;gap:8px;align-items:baseline}.hero__meta dt{padding:0;white-space:nowrap}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin:0 0 18px}
+.kpi{display:flex;flex-direction:column;gap:4px;background:var(--papel);border:1px solid var(--borde);border-radius:12px;padding:14px 16px;text-decoration:none;color:inherit;box-shadow:var(--sombra)}
+a.kpi[href]:hover{border-color:var(--acento)}
+.kpi__etiqueta{font-size:12px;color:var(--tenue);text-transform:uppercase;letter-spacing:.04em}
+.kpi__valor{font-size:30px;font-weight:700;line-height:1.1;display:flex;align-items:center;gap:10px}
+.kpi__icono{display:inline-grid;place-items:center;width:24px;height:24px;border-radius:50%;font-size:13px;color:#fff;background:var(--gris)}
+.kpi--verde .kpi__icono{background:var(--verde)}.kpi--rojo .kpi__icono{background:var(--rojo)}.kpi--advertencia .kpi__icono{background:var(--ambar)}.kpi--info .kpi__icono{background:var(--info)}
+.kpi__detalle{font-size:13px;color:var(--tenue)}
+.kpi__barra{display:block;height:6px;background:var(--codigo);border-radius:3px;overflow:hidden}
+.kpi__lleno{display:block;height:100%;border-radius:3px;background:var(--gris)}.kpi__lleno--verde{background:var(--verde)}.kpi__lleno--rojo{background:var(--rojo)}.kpi__lleno--advertencia{background:var(--ambar)}
+.panel-bloque{background:var(--papel);border:1px solid var(--borde);border-radius:12px;padding:6px 20px 16px;margin:0 0 16px;box-shadow:var(--sombra)}
+.problemas{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px}
+.problema{border:1px solid var(--borde);border-top:4px solid var(--gris);border-radius:10px;padding:10px 14px;background:var(--fondo)}
+.problema--rojo{border-top-color:var(--rojo)}.problema--advertencia{border-top-color:var(--ambar)}
+.problema__cabecera{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.problema p{margin:6px 0}
+.problema__que{font-weight:600}.problema__porque{font-size:14px}.problema__pie{font-size:12px}
+.dos-columnas{display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:16px;margin:0 0 16px}
+.dos-columnas>.panel-bloque{margin:0}
+.tablero-columna{background:var(--papel);border:1px solid var(--borde);border-radius:12px;padding:6px 20px 14px;box-shadow:var(--sombra)}
+.quien{font-size:18px}
+ul.pendientes{list-style:none;margin:0;padding:0}
+.pendiente{display:grid;grid-template-columns:24px 1fr;gap:10px;padding:10px 0;border-top:1px solid var(--borde)}
+.pendiente:first-child{border-top:0}
+.pendiente__marca{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:50%;font-size:12px;font-weight:700;color:#fff;background:var(--gris);flex:none}
+.pendiente--rojo .pendiente__marca,.pendiente__marca--rojo{background:var(--rojo)}.pendiente--advertencia .pendiente__marca,.pendiente__marca--advertencia{background:var(--ambar)}.pendiente--info .pendiente__marca{background:var(--info)}.pendiente__marca--verde{background:var(--verde)}
+.pendiente__comando{display:inline-block;margin-top:4px;font-size:12px}
+.graficas{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:20px}
+.graficas figure{margin:0}.graficas figcaption{font-size:13px;font-weight:600;margin:0 0 10px}
+.dona{display:flex;align-items:center;gap:16px;flex-wrap:wrap}.dona svg{width:140px;height:140px;flex:none}
+.dona__fondo{fill:none;stroke:var(--codigo);stroke-width:18}.dona__arco{fill:none;stroke-width:18}
+.dona__arco--verde{stroke:var(--verde)}.dona__arco--rojo{stroke:var(--rojo)}.dona__arco--omitido{stroke:var(--gris)}.dona__arco--advertencia{stroke:var(--ambar)}
+.dona__centro{font-size:24px;font-weight:700;fill:var(--tinta)}.dona__sub{font-size:11px;fill:var(--tenue)}
+.dona__leyenda{list-style:none;margin:0;padding:0;font-size:14px;display:grid;gap:6px}
+.pilas{display:flex;gap:4px;align-items:flex-end;height:150px;border-bottom:1px solid var(--borde);padding:0 2px}
+.pila{flex:1;max-width:40px;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;font-size:10px;color:var(--tenue);outline-offset:2px}
+.pila__col{width:100%;display:flex;flex-direction:column;gap:2px;min-height:2px}
+.pila__col i{display:block;min-height:2px}.pila__col i:first-child{border-radius:4px 4px 0 0}
+.pila__verde{background:var(--verde)}.pila__rojo{background:var(--rojo)}.pila__omitido{background:var(--gris)}
+.pila__marca{font-weight:700;margin-top:3px}.pila__marca--verde{color:var(--verde)}.pila__marca--rojo{color:var(--rojo)}
+.leyenda--cuadros span::before{width:10px;height:10px;border-radius:2px}.c-verde::before{background:var(--verde)}.c-rojo::before{background:var(--rojo)}.c-omitido::before{background:var(--gris)}
+.barras--actividad{height:150px}.barra__col--llena{opacity:1;border-radius:4px 4px 0 0}
+.config{list-style:none;margin:0;padding:0}
+.config__item{border-top:1px solid var(--borde)}.config__item:first-child{border-top:0}
+.config__item summary{cursor:pointer;list-style:none;display:flex;align-items:center;gap:8px;padding:8px 0}
+.config__item summary::-webkit-details-marker{display:none}
+.config__item--destacado{background:var(--fondo);border-radius:8px;padding:0 10px;margin:0 -10px 4px;border-top:0}
+.config__chequeos{list-style:none;margin:0 0 8px;padding:0 0 0 30px;font-size:14px;display:grid;gap:4px}
+.foco__titulo{font-weight:600;margin:.6em 0 .3em}.foco__avance{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.foco__avance .kpi__barra{flex:0 0 160px}
+/* ── Pestañas sin desplazamiento horizontal: se acomodan en varias filas antes que mostrar una barra ── */
+nav.pestanas{flex-wrap:wrap;overflow:visible;row-gap:2px}
+nav.pestanas button{padding:8px 11px}
+.titulo .barra-de-busqueda{margin:0}.barra-de-busqueda input{flex:0 1 180px;min-width:110px;padding:4px 12px}
+.insignia{display:inline-grid;place-items:center;min-width:20px;height:20px;padding:0 6px;border-radius:999px;font-size:11px;font-weight:700;margin-left:4px}
+.insignia--hay{background:var(--ambar);color:#fff}.insignia--cero{background:transparent;color:var(--verde)}.insignia--cero::before{content:"✓";font-size:12px}.insignia--cero{font-size:0}
+nav.pestanas button.activo small.insignia--hay{color:#fff}
+/* ── «Qué hacer» ── */
+.que-hacer{background:var(--papel);border:1px solid var(--borde);border-left:6px solid var(--ambar);border-radius:12px;padding:6px 20px 12px;margin:0 0 16px;box-shadow:var(--sombra)}
+.que-hacer--ok{border-left-color:var(--verde)}.que-hacer--ok p{margin:.2em 0 .5em}
+.que-hacer h3{display:flex;align-items:center;gap:8px}
+ol.acciones{list-style:none;margin:0;padding:0;counter-reset:accion}
+.accion{display:grid;grid-template-columns:24px 1fr auto;gap:10px;align-items:start;padding:8px 0;border-top:1px solid var(--borde)}
+.accion:first-child{border-top:0}.accion code{font-size:12px}
+.pendiente__marca--info{background:var(--info)}.pendiente__marca--omitido{background:var(--gris)}
+/* ── Deuda accionable ── */
+.kpis--compactos{margin:6px 0 14px}.kpis--compactos .kpi__valor{font-size:24px}
+.dos-columnas--plano{margin:0}
+.deuda{border:1px solid var(--borde);border-left:4px solid var(--info);border-radius:10px;padding:10px 14px;margin:0 0 10px;background:var(--fondo)}
+.deuda--humano{border-left-color:var(--ambar)}
+.deuda__cabecera{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.deuda p{margin:6px 0}.deuda__detalle{font-size:14px}
+.deuda__remedio{font-size:14px;padding:6px 10px;border-radius:6px;background:var(--papel)}
+.deuda__remedio--falta{color:var(--rojo)}.deuda__pie{font-size:12px}
+/* ── Lo que está en rojo ── */
+.tira{display:flex;flex-wrap:wrap;gap:3px;margin:8px 0 4px}
+.tira__celda{display:inline-grid;place-items:center;width:26px;height:26px;border-radius:5px;color:#fff;font-size:12px;font-weight:700;background:var(--gris)}
+.tira__celda--verde{background:var(--verde)}.tira__celda--rojo{background:var(--rojo)}
+.roja{border:1px solid var(--borde);border-top:4px solid var(--rojo);border-radius:10px;padding:10px 14px;margin:12px 0;background:var(--fondo)}
+.roja__cuerpo{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(320px,100%),1fr));gap:16px}
+.roja h4{margin:10px 0 6px;font-size:13px;text-transform:uppercase;letter-spacing:.04em;color:var(--tenue)}
+pre.error{font:12px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace;background:var(--codigo);border-left:3px solid var(--rojo);border-radius:6px;padding:8px 10px;margin:0;white-space:pre-wrap;word-break:break-word;max-height:260px;overflow:auto}
+.problema__remedio{font-size:14px;padding:6px 10px;border-radius:6px;background:var(--papel)}
+.empuje{flex:1 1 auto}
+/* Los destinos de un enlace interno no quedan debajo de la cabecera fija. */
+main [id]{scroll-margin-top:150px}
+/* ── Salud: tablero por dimensiones ── */
+.salud__puntaje{display:flex;flex-direction:column;align-items:center;gap:4px;font-size:12px}
+.salud__puntaje .dona svg{width:110px;height:110px}.salud__puntaje .dona__leyenda{display:none}
+.dims{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(280px,100%),1fr));gap:12px;margin:0 0 16px}
+.dim{background:var(--papel);border:1px solid var(--borde);border-top:4px solid var(--gris);border-radius:12px;padding:12px 14px;box-shadow:var(--sombra);display:flex;flex-direction:column;gap:6px}
+.dim--verde{border-top-color:var(--verde)}.dim--rojo{border-top-color:var(--rojo)}.dim--advertencia{border-top-color:var(--ambar)}
+.dim__cabecera{display:flex;align-items:center;gap:8px}.dim__cifra{margin-left:auto;font-size:20px;font-weight:700}
+.dim--rojo .dim__cifra{color:var(--rojo)}.dim--advertencia .dim__cifra{color:var(--ambar)}.dim--verde .dim__cifra{color:var(--verde)}
+.dim__mide{margin:0;font-size:13px;color:var(--tenue)}
+ul.dim__malos{margin:0;padding-left:18px;font-size:13px}
+.dim__remedio{font-size:13px;padding:8px 10px;border-radius:8px;background:var(--fondo)}
+.dim__acciones{display:flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap}
+/* ── Pipeline del gate (como el de una forja): etapas en columnas, jobs con su caja de estado ── */
+ol.pipeline{list-style:none;margin:12px 0;padding:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(min(190px,100%),1fr));gap:22px}
+.etapa{position:relative;background:var(--fondo);border:1px solid var(--borde);border-top:4px solid var(--gris);border-radius:10px;padding:8px 10px}
+.etapa--verde{border-top-color:var(--verde)}.etapa--rojo{border-top-color:var(--rojo)}.etapa--omitido{border-top-color:var(--gris)}
+.etapa:not(:last-child)::after{content:"";position:absolute;top:20px;right:-22px;width:22px;height:2px;background:var(--borde)}
+.etapa__cabecera{display:flex;align-items:center;gap:8px;padding:2px 0 8px;border-bottom:1px solid var(--borde);margin-bottom:6px}
+.etapa__cabecera small{margin-left:auto;color:var(--tenue);font-size:11px;white-space:nowrap}
+ul.etapa__jobs{list-style:none;margin:0;padding:0;display:grid;gap:2px}
+.job{position:relative;display:grid;grid-template-columns:22px 1fr auto;gap:8px;align-items:center;padding:4px 6px;border-radius:6px;color:inherit;text-decoration:none;font-size:13px;outline-offset:1px}
+.job:hover,.job:focus-visible{background:var(--papel)}
+.job--rojo{background:color-mix(in srgb,var(--rojo) 10%,transparent)}
+.job__caja{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:5px;color:#fff;font-size:11px;font-weight:700;background:var(--gris);flex:none}
+.job__caja--verde{background:var(--verde)}.job__caja--rojo{background:var(--rojo)}
+.job__nombre{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.job__ms{color:var(--tenue);font-size:11px}
+/* Tooltip propio (no el title nativo): aparece con hover Y con foco, y trae varias líneas. */
+.tip{display:none;position:absolute;left:0;top:calc(100% + 6px);z-index:5;width:max-content;max-width:300px;background:var(--tinta);color:var(--papel);border-radius:8px;padding:8px 10px;font-size:12px;line-height:1.45;box-shadow:0 6px 18px rgba(0,0,0,.25);white-space:normal}
+.tip>*{display:block}.tip strong{margin-bottom:2px}.tip__porque{opacity:.85;margin-top:4px}.tip__pie{opacity:.7;margin-top:4px;font-family:ui-monospace,Consolas,monospace;font-size:11px}
+.job:hover>.tip,.job:focus-visible>.tip,.job:focus>.tip{display:block}
+.etapa:nth-last-child(-n+2) .tip{left:auto;right:0}.tip{max-width:min(300px,80vw)}
+/* ── Botón de prompt ── */
+button.prompt{font:inherit;font-size:12px;line-height:1.4;padding:2px 10px;border-radius:999px;border:1px solid var(--acento);background:transparent;color:var(--acento);cursor:pointer;white-space:nowrap}
+button.prompt:hover,button.prompt:focus-visible{background:var(--acento);color:#fff}
+button.prompt.prompt--copiado{background:var(--verde);border-color:var(--verde);color:#fff}
+.accion__lado{display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+.aviso-flotante{position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(20px);opacity:0;background:var(--tinta);color:var(--papel);padding:8px 16px;border-radius:999px;font-size:13px;transition:opacity .2s,transform .2s;z-index:20;pointer-events:none}
+.aviso-flotante.visible{opacity:1;transform:translateX(-50%) translateY(0)}
+.dialogo-prompt{border:1px solid var(--borde);border-radius:12px;background:var(--papel);color:var(--tinta);width:min(640px,92vw);padding:16px 20px}
+.dialogo-prompt textarea{width:100%;font:13px/1.5 ui-monospace,Consolas,monospace;background:var(--fondo);color:var(--tinta);border:1px solid var(--borde);border-radius:8px;padding:8px}
+.dialogo-prompt__botones{display:flex;gap:8px;justify-content:flex-end;margin-top:10px}
+.dialogo-prompt__botones button{font:inherit;padding:6px 14px;border-radius:8px;border:1px solid var(--borde);background:var(--fondo);color:var(--tinta);cursor:pointer}
+.dialogo-prompt__botones [data-copiar]{background:var(--acento);border-color:var(--acento);color:#fff}
+/* ── Pestañas internas (Código) ── */
+.subpestanas__tira{display:flex;flex-wrap:wrap;gap:4px;border-bottom:1px solid var(--borde);margin:6px 0 10px}
+.subpestanas__tira button{font:inherit;font-size:14px;border:0;border-bottom:2px solid transparent;background:transparent;color:var(--tenue);padding:6px 12px;cursor:pointer}
+.subpestanas__tira button.activo{color:var(--tinta);border-bottom-color:var(--acento);font-weight:600}
+.tablero-columna h3,.deuda__cabecera,.problema__cabecera{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
 /* En angosto la tira NO envuelve: seis carpetas en dos filas se ven rotas. Se desplaza a lo largo. */
-@media (max-width:720px){:root{--margen:14px}.campo{grid-template-columns:1fr}
+@media (max-width:720px){:root{--margen:16px}.campo{grid-template-columns:1fr}
+.hero{grid-template-columns:auto 1fr;padding:14px 16px;gap:12px}.hero__icono{width:40px;height:40px;font-size:20px}.hero__meta{grid-column:1/-1;min-width:0}.hero h2{font-size:18px}.titulo__derecha{margin-left:0}
+.dos-columnas,.problemas,.graficas{grid-template-columns:1fr}.kpis{grid-template-columns:1fr 1fr}.kpi__valor{font-size:24px}
+/* En el teléfono la cabecera NO es fija: con las pestañas en varias filas tapaba media pantalla. */
+header{position:static}nav.pestanas button{padding:6px 9px;font-size:14px}.accion{grid-template-columns:24px 1fr}.accion__lado{grid-column:2;justify-content:flex-start}
+.etapa:not(:last-child)::after{display:none}
+.titulo .barra-de-busqueda{flex:1 1 100%}
 header>.barra-superior{flex-wrap:wrap}.barra-de-busqueda{flex:1 1 100%;margin:0 0 8px}.barra-de-busqueda input{flex:1 1 auto}.columnas{grid-template-columns:1fr}.barra-de-busqueda input{min-width:0}.proyecto{flex-direction:column}nav.pestanas button{padding:8px 12px}
 /* Una tabla no se achica por debajo de su contenido: sin esto desbordaba la PÁGINA entera
    (medido a 360: documento de 580 px) y el panel se desplazaba a lo ancho. Que se desplace ella. */
 .bloque__cuerpo table{display:block;overflow-x:auto}}
+/* «Qué hacer»: una frase de estado, dos columnas (tuyo | agente), grupos por lo que piden. */
+.qh-estado{display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:var(--papel);border:1px solid var(--borde);border-left:4px solid var(--gris);border-radius:10px;padding:12px 16px;margin:16px 0}
+.qh-estado--verde{border-left-color:var(--verde)}.qh-estado--rojo{border-left-color:var(--rojo)}.qh-estado--advertencia{border-left-color:var(--ambar)}
+.qh-estado__icono{font-size:20px}.qh-estado__meta{margin-left:auto;font-size:13px}
+.qh-aviso{background:var(--papel);border:1px dashed var(--ambar);border-radius:8px;padding:8px 12px}
+.qh-columnas{display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start}
+.qh-col{background:var(--papel);border:1px solid var(--borde);border-radius:12px;padding:16px 18px;box-shadow:var(--sombra)}
+.qh-col--humano{border-top:4px solid var(--acento)}.qh-col--agente{border-top:4px solid var(--info)}
+.qh-col h2{display:flex;align-items:center;gap:8px;margin:0 0 4px;font-size:19px}
+.qh-col h2 small{font-weight:400;color:var(--tenue);font-size:14px}
+.qh-col h2 .empuje{flex:1}
+.qh-grupo{margin-top:18px}
+.qh-grupo h3{margin:0;font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--tenue);display:inline-flex;align-items:center;gap:8px}
+.qh-grupo details>summary{cursor:pointer;list-style-position:inside}
+.qh-grupo details>summary h3{display:inline-flex}
+.qh-grupo--vacio .ok{margin:6px 0 0;font-size:14px}
+.qh-cuenta{background:var(--fondo);border:1px solid var(--borde);border-radius:999px;padding:0 8px;font-size:12px;color:var(--tinta);letter-spacing:0}
+.qh-ayuda{margin:4px 0 8px;color:var(--tenue);font-size:13px}
+.qh-lista{list-style:none;margin:8px 0 0;padding:0;display:grid;gap:8px}
+.qh-tarjeta{border:1px solid var(--borde);border-radius:8px;padding:10px 12px;background:var(--papel)}
+.qh-tarjeta:hover{border-color:var(--acento)}
+.qh-tarjeta__titulo{font-weight:600;line-height:1.35}
+.qh-tarjeta__titulo a{text-decoration:none}.qh-tarjeta__titulo a:hover{text-decoration:underline}
+.qh-tarjeta__porque,.qh-espera{margin:4px 0 0;color:var(--tenue);font-size:13.5px}
+.qh-tarjeta__accion{margin:6px 0 0;font-size:14px}
+.qh-tarjeta__pie{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:8px;font-size:12.5px}
+.qh-mas{margin-top:8px}.qh-mas>summary{cursor:pointer;color:var(--acento);font-size:14px}
+/* Una pestaña que junta secciones: cada sección de abajo arranca con un corte claro y su título. */
+.fusion{margin-top:40px;padding-top:20px;border-top:2px solid var(--borde)}
+.fusion__titulo{margin:0 0 12px;font-size:22px}
+.qh-frente{margin-top:8px;border:1px solid var(--borde);border-radius:8px;padding:8px 12px;background:var(--fondo)}
+.qh-frente>summary{cursor:pointer;display:flex;align-items:center;gap:8px;font-weight:600}
+.qh-frente__nombre{flex:1;min-width:0}
+.qh-frente[open]>summary{margin-bottom:4px}
+@media (max-width:900px){.qh-columnas{grid-template-columns:1fr}.qh-estado__meta{margin-left:0;width:100%}}
 `;
 
 
 const JS = `
+/* EN VIVO. Las fechas salen absolutas del generador (determinista) y acá se leen como «hace X».
+   Servido por http (node scripts/panel/servir.mjs), la página mira latido.json y se recarga sola
+   cuando el panel se regenera, conservando la pestaña (el hash) y la posición. Abierto como
+   archivo no hay a quién preguntar: lo dice, en vez de fingir que está al día. */
+(function(){
+  function hace(iso){
+    var s = Math.round((Date.now() - new Date(iso).getTime())/1000);
+    if(!isFinite(s)) return null;
+    if(s < 45) return 'hace un momento';
+    if(s < 3600) return 'hace ' + Math.round(s/60) + ' min';
+    if(s < 172800) return 'hace ' + Math.round(s/3600) + ' h';
+    return 'hace ' + Math.round(s/86400) + ' días';
+  }
+  function refrescar(){
+    Array.prototype.forEach.call(document.querySelectorAll('time[data-relativo]'), function(t){
+      var r = hace(t.getAttribute('datetime')); if(r){ t.textContent = r; t.title = t.getAttribute('datetime').replace('T',' ').slice(0,16); }
+    });
+  }
+  refrescar(); setInterval(refrescar, 15000);
+  var vivo = document.getElementById('vivo'); if(!vivo) return;
+  var texto = vivo.querySelector('.vivo__texto');
+  var generado = document.body.getAttribute('data-generado');
+  var firma = document.body.getAttribute('data-version') + '|' + generado;
+  try { var y = sessionStorage.getItem('panel-scroll'); if(y){ sessionStorage.removeItem('panel-scroll'); window.scrollTo(0, Number(y)); } } catch(e){}
+  if(location.protocol.indexOf('http') !== 0){
+    if(texto && generado) texto.textContent = 'foto ' + (hace(generado) || '') + ' · sin sincronizar';
+    vivo.title = 'Abierto como archivo: no se actualiza solo. Para verlo en vivo: node scripts/panel/servir.mjs';
+    return;
+  }
+  vivo.classList.add('vivo--on');
+  function pintar(){ if(texto) texto.textContent = 'en vivo · ' + (generado ? hace(generado) : 'sin capa en vivo'); }
+  pintar(); setInterval(pintar, 15000);
+  setInterval(function(){
+    fetch('latido.json', {cache:'no-store'}).then(function(r){ return r.json(); }).then(function(l){
+      vivo.classList.remove('vivo--caido');
+      if(l.version + '|' + (l.generadoEn || '') !== firma){
+        try { sessionStorage.setItem('panel-scroll', String(window.scrollY)); } catch(e){}
+        location.reload();
+      }
+    }).catch(function(){ vivo.classList.add('vivo--caido'); if(texto) texto.textContent = 'sin conexión con el servidor del panel'; });
+  }, 4000);
+})();
+/* El botón «Prompt»: copia la instrucción para el agente. Sin portapapeles (abierto como archivo,
+   o el navegador lo niega) abre una ventana con el texto ya seleccionado: nunca falla en silencio. */
+(function(){
+  var aviso = null;
+  function avisar(texto){
+    if(!aviso){ aviso = document.createElement('div'); aviso.className = 'aviso-flotante'; aviso.setAttribute('role','status'); document.body.appendChild(aviso); }
+    aviso.textContent = texto; aviso.classList.add('visible');
+    clearTimeout(avisar.t); avisar.t = setTimeout(function(){ aviso.classList.remove('visible'); }, 2200);
+  }
+  function mostrar(texto){
+    var d = document.getElementById('dialogo-prompt');
+    if(!d){
+      d = document.createElement('dialog'); d.id = 'dialogo-prompt'; d.className = 'dialogo-prompt';
+      d.innerHTML = '<h3>Prompt para el agente</h3><p class="tenue">Copialo y pegalo en la sesión del agente del arnés.</p><textarea rows="12" aria-label="Prompt para el agente"></textarea><div class="dialogo-prompt__botones"><button type="button" data-copiar>Copiar</button><button type="button" data-cerrar>Cerrar</button></div>';
+      document.body.appendChild(d);
+      d.querySelector('[data-cerrar]').addEventListener('click', function(){ d.close(); });
+      d.querySelector('[data-copiar]').addEventListener('click', function(){ var t = d.querySelector('textarea'); t.select(); try { document.execCommand('copy'); avisar('Prompt copiado'); } catch(e){} });
+    }
+    var area = d.querySelector('textarea'); area.value = texto;
+    if(d.showModal) d.showModal(); else d.setAttribute('open','');
+    area.focus(); area.select();
+  }
+  document.addEventListener('click', function(ev){
+    var b = ev.target.closest && ev.target.closest('button.prompt[data-prompt]');
+    if(!b) return;
+    ev.preventDefault(); ev.stopPropagation();
+    var texto = b.getAttribute('data-prompt');
+    if(navigator.clipboard && window.isSecureContext){
+      navigator.clipboard.writeText(texto).then(function(){ avisar('Prompt copiado: pegalo en la sesión del agente'); b.classList.add('prompt--copiado'); setTimeout(function(){ b.classList.remove('prompt--copiado'); }, 1500); }, function(){ mostrar(texto); });
+    } else mostrar(texto);
+  });
+  /* Pestañas internas (Código): cada grupo maneja las suyas. */
+  document.addEventListener('click', function(ev){
+    var b = ev.target.closest && ev.target.closest('[data-subpestana]');
+    if(!b) return;
+    var grupo = b.closest('[data-subpestanas]');
+    Array.prototype.forEach.call(grupo.querySelectorAll('[data-subpestana]'), function(o){ var suya = o===b; o.classList.toggle('activo', suya); o.setAttribute('aria-selected', suya ? 'true' : 'false'); });
+    Array.prototype.forEach.call(grupo.querySelectorAll('.subpestana'), function(p){ p.hidden = p.id !== b.getAttribute('data-subpestana'); });
+  });
+})();
 (function(){
   var pestanas = Array.prototype.slice.call(document.querySelectorAll('nav.pestanas button[data-pestana]'));
   var paneles = Array.prototype.slice.call(document.querySelectorAll('.pestana'));
@@ -1017,6 +1746,9 @@ const JS = `
     });
   });
   function irA(id){
+    // El nombre de una pestaña abre la pestaña ARRIBA, no la sección que se llame igual: «#salud»
+    // bajaba hasta la sección «salud» y se salteaba el «Qué hacer» (el salto que se veía al entrar).
+    if(id && document.getElementById('pestana-'+id)){ activar(id); window.scrollTo(0,0); return true; }
     var destino = document.getElementById(id);
     if(!destino) return false;
     var panel = destino.closest('.pestana');
@@ -1126,27 +1858,51 @@ const JS = `
 /** Página completa. `rutaRaiz` es la ruta relativa desde el HTML hasta la raíz del repo (para los enlaces). */
 export function renderizarHtml(modelo, opciones = {}) {
   const rutaRaiz = (opciones.rutaRaiz ?? ".").replace(/\/+$/, "");
-  const e = modelo.estado;
   const v = modelo.enVivo ?? null;
   const alarmas = alarmasDe(modelo);
-  const totalPrincipios = modelo.reglas.constituciones.reduce((n, c) => n + c.principios.length, 0);
   // El plan del repo es memoria; el del gestor, capa en vivo. Se muestra el que haya.
   const planVisible = v?.plan ?? modelo.plan;
 
-  // La SALUD va primero: el panel es del arnés, y lo primero que tiene que decir es si está vivo.
+  // El RESUMEN va primero: lo primero que el panel tiene que decir es cómo estamos y qué hace cada
+  // uno. La salud del arnés (si los frenos muerden) sigue segunda: es para quien mantiene el arnés.
+  const resumen = construirResumen(modelo);
+  const kpisPorPestana = indicadores(modelo);
+  // El número de cada pestaña es lo que hay PARA HACER en ella (su «Qué hacer»), no cuántas piezas
+  // muestra: «Gotchas 82» o «Reglas 39» se leían como alarmas y no pedían nada.
+  const acciones = accionesPorPestana(modelo);
+  // «Qué hacer» abre el panel: lo primero que alguien busca es qué le toca. Su número es lo que
+  // espera a la PERSONA (decidir + hacer), no todo lo que hay.
+  const bandeja = construirBandeja(modelo);
+  const secciones = [
+    { id: "que-hacer", nombre: "Qué hacer", total: bandeja.total.humano, html: pestanaQueHacer(modelo) },
+    { id: "resumen", nombre: "Resumen", html: pestanaResumen(modelo) },
+    { id: "ahora", nombre: "Ahora", acciones: acciones.ahora, vacio: "Nada en rojo y nada pendiente en esta máquina.", html: v ? pestanaAhora(v, modelo, rutaRaiz) : '<p class="vacio">Sin capa en vivo: generar el panel sin <code>--sin-vivo</code>.</p>' },
+    { id: "estado", nombre: "Estado", acciones: acciones.estado, vacio: "Sin deuda abierta.", html: pestanaEstado(modelo, rutaRaiz) },
+    { id: "salud", nombre: "Salud", previo: tableroDeSalud(modelo).previo, acciones: acciones.salud, vacio: "Cada freno y sensor del arnés está vivo.", html: pestanaSalud(modelo, rutaRaiz) },
+    { id: "gotchas", nombre: "Gotchas", acciones: acciones.gotchas, vacio: "Cada incidente tiene su freno ejecutable.", html: pestanaGotchas(modelo, rutaRaiz) },
+    { id: "plan", nombre: "Plan", acciones: acciones.plan, vacio: "El plan no tiene pendientes.", html: pestanaPlan(planVisible) },
+    { id: "memoria", nombre: "Memoria", acciones: acciones.memoria, vacio: "La memoria apunta a cosas que existen y entra en el presupuesto.", html: pestanaMemoria(modelo, rutaRaiz) },
+    { id: "reglas", nombre: "Reglas", acciones: acciones.reglas, vacio: "Cada principio BLOCKING declara su mecanismo.", html: pestanaReglas(modelo, rutaRaiz) },
+    { id: "fuentes", nombre: "Fuentes", acciones: acciones.fuentes, vacio: "Todas las fuentes se leyeron.", html: pestanaFuentes(modelo, rutaRaiz) },
+  ];
+  // CINCO pestañas, no diez (2026-11-10: «combiná esto», tras «me pierdo en ese panel»). Cada una
+  // junta secciones que contestan lo mismo; la primera abre sin título y las demás debajo, cada
+  // una con el `id` de su pestaña vieja, así `#ahora` o `#gotchas` siguen abriendo donde están.
+  // El número de la pestaña: en «Qué hacer», lo que espera a la PERSONA; en las demás, la suma de
+  // las acciones de sus secciones.
+  const porId = new Map(secciones.map((s) => [s.id, s]));
   const pestanas = [
-    { id: "salud", nombre: "Salud", total: alarmas.length, html: pestanaSalud(modelo, rutaRaiz) },
-    // El número de la pestaña son COSAS PARA MIRAR (como en Salud), no piezas: leerlo como alarma es lo que hace cualquiera.
-    { id: "memoria", nombre: "Memoria", total: v?.memoria?.alArrancar ? (v.memoria.personal?.conRutasRotas ?? 0) + (v.memoria.personal?.fueraDelIndice?.length ?? 0) + (v.memoria.alArrancar.excede ? 1 : 0) : 0, html: pestanaMemoria(modelo, rutaRaiz) },
-    v ? { id: "ahora", nombre: "Ahora", total: v.repos.length + v.sondas.length, html: pestanaAhora(v, modelo, rutaRaiz) } : null,
-    { id: "plan", nombre: "Plan", total: planVisible?.resumen?.pendientes ?? 0, html: pestanaPlan(planVisible) },
-    { id: "estado", nombre: "Estado", total: e.senales.length + e.abiertos.items.length + e.bloqueos.length, html: pestanaEstado(modelo, rutaRaiz) },
-    { id: "gotchas", nombre: "Gotchas", total: modelo.gotchas.length, html: pestanaGotchas(modelo, rutaRaiz) },
-    { id: "reglas", nombre: "Reglas", total: totalPrincipios + modelo.reglas.gate.signals.length, html: pestanaReglas(modelo, rutaRaiz) },
-    { id: "fuentes", nombre: "Fuentes", total: modelo.fuentes.length, html: pestanaFuentes(modelo, rutaRaiz) },
-  ].filter(Boolean);
+    { id: "que-hacer", nombre: "Qué hacer", partes: ["que-hacer", "plan"] },
+    { id: "resumen", nombre: "Resumen", partes: ["resumen", "ahora"] },
+    { id: "salud", nombre: "Salud", partes: ["salud", "estado", "gotchas"] },
+    { id: "memoria", nombre: "Memoria", partes: ["memoria", "fuentes"] },
+    { id: "reglas", nombre: "Reglas", partes: ["reglas"] },
+  ].map((p) => {
+    const partes = p.partes.map((id) => porId.get(id));
+    const total = partes[0].total ?? partes.reduce((n, s) => n + (s.acciones?.length ?? 0), 0);
+    return { ...p, partes, total };
+  });
 
-  const reg = v?.gate.registro ?? null;
   const aviso = alarmas.length
     ? `<div class="veredicto veredicto--rojo" style="margin-top:10px">${punto("rojo")} <strong>${alarmas.length}</strong> alarma(s) del arnés — ver <a href="#salud">Salud</a>.</div>`
     : "";
@@ -1156,17 +1912,30 @@ export function renderizarHtml(modelo, opciones = {}) {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="icon" href="data:,">
 <title>Panel del arnés · ${escapar(modelo.proyecto?.nombre || "")}</title>
 <style>${CSS}</style>
 </head>
-<body>
+<body data-version="${escapar(modelo.version)}" data-generado="${escapar(v?.generadoEn ?? "")}">
 <header>
   <div class="titulo">
-    <h1>Panel del arnés</h1>
-    <span>${punto(alarmas.length ? "rojo" : "verde")} salud <strong>${alarmas.length ? `${alarmas.length} alarma(s)` : "sin alarmas"}</strong></span>
-    ${reg ? `<span>${punto(TONO_CORRIDA[reg.veredicto] ?? (reg.veredicto === "fast-verde" ? "info" : "neutro"))} gate <strong>${escapar(reg.veredicto)}</strong> · ${fecha(reg.fecha)}</span>` : e.veredicto ? `<span>${punto(e.veredicto.tono)} gate (prosa) <strong>${escapar(TONO_ETIQUETA[e.veredicto.tono] ?? e.veredicto.tono)}</strong> · ${escapar(e.fechaGate ?? "")}</span>` : ""}
-    ${v ? `<span>${punto(v.gate.pendiente ? "advertencia" : "verde")} sesión <strong>${v.gate.pendiente ? "gate pendiente" : "al día"}</strong></span>` : ""}
-    <span class="meta">${escapar(modelo.proyecto?.nombre || "")} · versión <code>${escapar(modelo.version)}</code> · memoria de ${modelo.fuentes.length} archivos${v ? ` · en vivo al ${fecha(v.generadoEn)}` : " · sólo memoria"}</span>
+    <h1>Panel del arnés <span class="titulo__proyecto">${escapar(modelo.proyecto?.nombre || "")}</span></h1>
+    <a class="pastilla pastilla--${resumen.estado.tono}" href="#resumen" title="${escapar(resumen.estado.detalle)}"><span aria-hidden="true">${ICONO_TONO[resumen.estado.tono] ?? "·"}</span> ${escapar(resumen.estado.titular)}</a>
+    <span class="titulo__derecha">
+      <span class="responsable">${
+        resumen.responsable
+          ? `Informe de <strong title="${escapar(resumen.responsable.identidad)} · ${escapar(resumen.responsable.fuente)}">${escapar(resumen.responsable.nombre)}</strong>`
+          : v
+            ? `<span class="chip chip--atencion">sin responsable declarado</span>`
+            : "Informe de la memoria del repo"
+      }${v ? ` <span class="tenue">· ${escapar(v.maquina)}</span>` : ""}</span>
+      <span id="vivo" class="vivo" title="${v ? "Generado al " + fecha(v.generadoEn) : "sin capa en vivo"}"><span class="vivo__punto" aria-hidden="true"></span><span class="vivo__texto">${v ? `foto del ${fecha(v.generadoEn)}` : "sólo memoria"}</span></span>
+      <span class="barra-de-busqueda">
+        <span id="coincidencias" class="coincidencias"></span>
+        <input id="buscar" type="search" placeholder="Buscar…" aria-label="Buscar en el panel">
+        <button id="plegar-todo" class="filtro filtro--accion" title="plegar o desplegar todas las secciones de la pestaña">⇕</button>
+      </span>
+    </span>
   </div>
   <div class="barra-superior">
   <nav class="pestanas" role="tablist" aria-label="Secciones del panel">
@@ -1175,23 +1944,40 @@ export function renderizarHtml(modelo, opciones = {}) {
         (p, i) =>
           `<button role="tab" id="tab-${p.id}" data-pestana="${p.id}" aria-controls="pestana-${p.id}" aria-selected="${i === 0}" tabindex="${i === 0 ? 0 : -1}" class="${
             i === 0 ? "activo" : ""
-          }">${p.nombre} <small data-total="${p.total}">${p.total}</small></button>`,
+          }">${p.nombre} <small class="insignia ${p.total ? "insignia--hay" : "insignia--cero"}" data-total="${p.total}" title="${p.total ? `${p.total} cosa(s) por hacer` : "nada por hacer"}">${p.total}</small></button>`,
       )
       .join("")}
   </nav>
-    <div class="barra-de-busqueda">
-      <span id="coincidencias" class="coincidencias"></span>
-      <input id="buscar" type="search" placeholder="Buscar en salud, estado, gotchas y reglas…" aria-label="Buscar">
-      <button id="plegar-todo" class="filtro filtro--accion" title="plegar o desplegar todas las secciones de la pestaña">⇕ todo</button>
-    </div>
   </div>
   ${aviso}
 </header>
 <main>
-  <div class="indicadores">${indicadores(modelo)}</div>
   ${pestanas
-    .map((p, i) => `<div class="pestana ${i === 0 ? "activa" : ""}" id="pestana-${p.id}" role="tabpanel" aria-labelledby="tab-${p.id}" tabindex="0">${p.html}</div>`)
+    .map((p, i) => {
+      // UN solo «Qué hacer» por pestaña, ARRIBA, con los ítems de todas sus secciones a la vista:
+      // el número de la pestaña es su largo, y lo que se ve tiene que coincidir con el número. Cada
+      // sección tenía su propio bloque, así que la pestaña decía «2» y los dos ítems estaban al
+      // fondo, dentro de «Ahora» (2026-11-10). Con varias secciones, cada ítem dice de cuál viene.
+      // Una pestaña cuya primera sección trae su PROPIO número («Qué hacer»: la bandeja) no junta
+      // bloques: su número no es la suma de acciones, y el Plan iría a parar encima de la bandeja.
+      const propio = p.partes[0].total !== undefined;
+      const conAcciones = propio ? [] : p.partes.filter((s) => s.acciones);
+      const varias = conAcciones.length > 1 || (conAcciones.length === 1 && conAcciones[0] !== p.partes[0]);
+      const acciones = conAcciones.flatMap((s) => s.acciones.map((a) => (varias ? { ...a, seccion: s.nombre } : a)));
+      const queHacer = conAcciones.length ? bloqueQueHacer(acciones, { vacio: conAcciones.map((s) => s.vacio).filter(Boolean).join(" "), vista: p.nombre }) : "";
+      const cuerpo = p.partes
+        .map((s, j) => {
+          const kpis = (kpisPorPestana[s.id] ?? []).filter(Boolean).join("");
+          // La primera sección puede abrir con su estado (`previo`, como Salud): el bloque va después.
+          const suyo = propio && s.acciones ? bloqueQueHacer(s.acciones, { vacio: s.vacio, vista: s.nombre }) : "";
+          const contenido = `${s.previo ?? ""}${j === 0 ? queHacer : ""}${suyo}${kpis ? `<div class="indicadores">${kpis}</div>` : ""}${s.html}`;
+          return j === 0 ? contenido : `<section class="fusion" id="${s.id}" aria-labelledby="fusion-${s.id}"><h2 class="fusion__titulo" id="fusion-${s.id}">${escapar(s.nombre)}</h2>${contenido}</section>`;
+        })
+        .join("");
+      return `<div class="pestana ${i === 0 ? "activa" : ""}" id="pestana-${p.id}" role="tabpanel" aria-labelledby="tab-${p.id}" tabindex="0">${cuerpo}</div>`;
+    })
     .join("\n")}
+  <footer class="pie">versión <code>${escapar(modelo.version)}</code> · memoria de ${modelo.fuentes.length} archivos · ${v ? `capa en vivo de ${escapar(v.maquina)}` : "sólo memoria"} · en vivo: <code>node scripts/panel/servir.mjs</code></footer>
 </main>
 <script>${JS}</script>
 </body>

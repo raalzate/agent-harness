@@ -11,9 +11,10 @@
  * marcador que `action-guard.mjs` lee antes de cualquier edición dentro del repo.
  * El marcador lo limpia el siguiente pedido del usuario: la fuga es humana, a propósito.
  *
- * Deliberadamente ANGOSTO: sólo caza interrogación explícita (empieza con «¿», termina
- * con «?», o arranca con una palabra interrogativa). Un clasificador ancho bloquearía
- * instrucciones legítimas, y un freno que muerde de más se desactiva a mano en una semana.
+ * Deliberadamente ANGOSTO: caza interrogación explícita (empieza con «¿», termina con «?»,
+ * o arranca con una palabra interrogativa) y el imperativo informativo al inicio («contame»,
+ * «explicame»). Un clasificador ancho bloquearía instrucciones legítimas, y un freno que
+ * muerde de más se desactiva a mano en una semana.
  *
  * Y es también el hook que repone el presupuesto de intentos (`loop`): cuando el gate agota el
  * presupuesto, la escalada la contesta el humano, y su próximo pedido —sea cual sea— es la
@@ -22,10 +23,12 @@
  */
 import fs from "node:fs";
 import path from "node:path";
-import { readInput, loadConfig, allow, rutaDeEstado } from "./harness.mjs";
+import { readInput, loadConfig, allow, rutaDeEstado, esSonda } from "./harness.mjs";
 
 const input = await readInput();
 const config = loadConfig();
+// Medido por `hooks-timing`: clasifica igual, pero no toca ningún marcador de la sesión.
+const SONDA = esSonda();
 
 // El humano habló: la escalada está contestada y el presupuesto vuelve a estar entero.
 let repuesto = false;
@@ -33,7 +36,7 @@ for (const rel of [config?.loop?.marker, config?.loop?.ledger].filter(Boolean)) 
   try {
     const abs = rutaDeEstado(rel);
     if (rel === config.loop.marker && fs.existsSync(abs)) repuesto = true;
-    fs.rmSync(abs, { force: true });
+    if (!SONDA) fs.rmSync(abs, { force: true });
   } catch {
     /* no poder borrarlo deja el freno puesto un turno más; el humano lo ve en el mensaje */
   }
@@ -53,6 +56,7 @@ const marker = rutaDeEstado(spec.marker);
 
 /** Borra el marcador: el pedido de este turno no es una pregunta. */
 const limpiar = () => {
+  if (SONDA) return;
   try {
     fs.rmSync(marker, { force: true });
   } catch {
@@ -78,7 +82,9 @@ const casa = (patrones) =>
 // educada, no una consulta. Pero el MISMO verbo en pasado pregunta por lo que ya pasó
 // —«¿aplicaste eso?», «¿lo cambiaste?»— y ahí la respuesta es contestar, no volver a
 // actuar. Ese caso es el que originó este hook, así que el pasado gana sobre la acción.
-const esPregunta = casa(spec.questionPatterns);
+// El imperativo informativo («contame qué falta») pide una respuesta igual que una pregunta,
+// pero NO es pregunta fuerte: si el mismo pedido trae un verbo de acción, gana la acción.
+const esPregunta = casa(spec.questionPatterns) || casa(spec.informativePatterns);
 
 // Una pregunta que ARRANCA con interrogativo («cómo se instala X», «qué hace Y») nombra el
 // verbo de acción como TEMA, no como orden. Lo que la vuelve orden es un pedido directo
@@ -94,8 +100,10 @@ if (!esPregunta || esAccion) {
 }
 
 try {
-  fs.mkdirSync(path.dirname(marker), { recursive: true });
-  fs.writeFileSync(marker, `${new Date().toISOString()}\n${prompt.slice(0, 500)}\n`);
+  if (!SONDA) {
+    fs.mkdirSync(path.dirname(marker), { recursive: true });
+    fs.writeFileSync(marker, `${new Date().toISOString()}\n${prompt.slice(0, 500)}\n`);
+  }
 } catch {
   /* si no se puede marcar, queda el aviso en el contexto y nada más */
 }

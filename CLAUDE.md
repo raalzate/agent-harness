@@ -101,6 +101,8 @@ señal `library index (docs)` del gate lo exige. Guía: `docs/biblioteca.md`.
 
 ```bash
 npm run gate           # EL entregable: self-test · link-check · lint · artefactos · banco
+npm run gate:changed   # mientras arreglás: sólo las señales que tocan lo cambiado (NO entregable)
+npm run gate:retry     # sólo las rojas de la última corrida (NO entregable)
 npm run selftest       # ¿los frenos muerden?
 npm run lint           # ¿el repo pasa con las reglas activas?
 npm run lint:rules     # ¿qué reglas están activas y de dónde salen?
@@ -111,6 +113,7 @@ npm run map            # ¿qué guía, freno o sensor actúa en cada etapa, y d�
 npm run status:check   # ¿la bitácora de STATUS.md y los gotchas están sanos? (/bitacora la depura)
 npm run drift          # ¿algo se degradó sin que nadie lo tocara? (lo corre drift.yml, semanal)
 npm run panel          # la salud del arnés en una página (el gate ya lo regenera en cada corrida)
+npm run panel:serve    # el panel en vivo, en 127.0.0.1: se regenera solo cuando algo cambia
 npm run eval           # ¿los frenos aguantan un rodeo y dejan pasar lo inocente? (determinista: en el gate)
 npm run eval:reviewer  # ¿el reviewer encuentra lo que dice encontrar? (caro: fuera del gate)
 npm run eval:ai        # ¿los subagentes aciertan siempre, o a veces? promptfoo, k/n por caso (a mano, al tocar un agente)

@@ -9,6 +9,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { spawn, spawnSync } from "node:child_process";
+import { parseHookCommand } from "../../.claude/hooks/harness.mjs";
 
 /** Writes {path: content} under `root`. Paths are relative to the temporary repo. */
 export function seed(root, files) {
@@ -105,7 +106,15 @@ export async function runEvent(root, event, payload, tool) {
   return Promise.all(hooksFor(root, event, tool).map((c) => runHook(root, c, input)));
 }
 
-export const hookName = (run) => path.basename(run.command.split(/\s+/).pop());
+/**
+ * The file a hook runs, as the report names it. The last word of the command was a guess that
+ * held only for hooks without arguments: `node …/tools/ado.mjs hook edit` came out as `edit`.
+ * The parser is the one in harness.mjs —the self-test and the timing read the same declaration—.
+ */
+export const hookName = (run) => {
+  const parsed = parseHookCommand(run.command);
+  return path.basename(parsed?.file ?? String(run.command ?? "").trim().split(/\s+/)[0] ?? "");
+};
 
 /**
  * The decision of ONE hook, under the Claude Code contract: exit 2 blocks (stderr is the

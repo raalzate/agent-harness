@@ -6,11 +6,14 @@
 |---|---|
 | `gate` (`command`, `marker`, `signals`) | `scripts/gate.mjs`, `gate-stop.mjs`, `session-start.mjs`, self-test |
 | `gate.codeGlobs`, `gate.codeExtensions` | `post-edit-check.mjs` (¿ensucia el gate y se lintea?), self-test |
+| `gate.retryCommand`, `gate.changedCommand` | `scripts/gate.mjs` (los sugiere al salir rojo), `gate-stop.mjs` (nombra `changedCommand`), `gate-runner` y `/gate`, self-test |
+| `gate.lanes`, `gate.lock`, `gate.signalTimeoutMinutes`, `gate.nestedRepos`, `gate.signals[].lane` · `exclusive` · `paths` · `cache` · `timeoutMinutes` · `skipExitCode` | `scripts/gate.mjs` (carriles, cerrojo, corte de colgadas, modo `changed` y caché), self-test (6-bis en adelante) |
 | `gate.installHooksCommand` | `session-start.mjs` (el aviso de pre-commit sin instalar), self-test |
 | `protectedPaths` | `protected-paths.mjs`, `.githooks/pre-commit`, self-test |
 | `writeTools` | `harness.mjs` (`escribe`, `targetPath`, `proposedContent`) → `protected-paths.mjs`, `action-guard.mjs`, `reuse-guard.mjs`, `post-edit-check.mjs`; self-test (3b-bis) |
 | `bash.deny` | `bash-guard.mjs`, self-test |
 | `bash.ask` | `bash-guard.mjs` (después de `deny`), self-test (3c-bis) |
+| `bash.*[].flags`, `deploy.{bash,mcp}.*[].flags` | `harness.mjs` (`firstMatch`: sin la clave rige `i`) → `bash-guard.mjs` (también para `exempt`), `deploy-guard.mjs`, `scripts/repo-lint.mjs` (COHERENCIA), `scripts/task.mjs` (evidencia vedada); self-test (compilan, el `sample` casa con ellos, y el caso a mano `-D`/`-d` de 3c-bis) |
 | `deploy` | `deploy-guard.mjs` (`bash`, `mcp`, `entry`, `targets.*.approval`), `scripts/deploy.mjs` (`targets`, `ledger`, `remote`, `reason`; y `gate.registry`/`gate.marker` para la precondición `gate`), self-test (3c-ter, 3c-quater) |
 | `reuse` | `reuse-guard.mjs`, self-test |
 | `lint` (incluye `sourceExtensions`) | `post-edit-check.mjs`, `scripts/repo-lint.mjs`, `.githooks/pre-commit`, self-test |
@@ -50,4 +53,8 @@
 | `subagentOutput` | `subagent-contract.mjs` (SubagentStop), `scripts/ai-eval.mjs` (el veredicto de cada suite), self-test (3e-sub, 10f) |
 | `taxonomy` (y `taxonomy.graphFile`, que escribe `harness-map.mjs --graph`) | `scripts/harness-map.mjs`, el panel (pestaña Salud, misma función `construirMapa`), self-test (10c) |
 | `panel` (y `status`, `incidents`, `tracker`, `tests`, `docs.proseRoots`, `install.activators`, toda clave con `runner`; `panel.memory.promptSources` apunta a otras, como `sdd.routes`) | `scripts/panel/` (lo invoca `scripts/gate.mjs` al final de cada corrida), self-test (11) |
+| `panel.owner`, `panel.doctor`, `panel.focus`, `panel.inbox`, `panel.triage`, `panel.pipeline` | `scripts/panel/leer-fuentes.mjs` (los resuelve), `leer-en-vivo.mjs` y `leer-resumen.mjs` (el Resumen, «Qué hacer», el pipeline), `plantilla.mjs` |
+| `panel.triage` (`humanPattern`, `decisionPattern`, `containerPattern`, `closurePattern`, `external`, `commands`, `remote`) | `scripts/panel/leer-resumen.mjs` (de quién es cada cosa y con qué comando), `plantilla.mjs` (los prompts), self-test (11l) |
+| `panel.serve` | `scripts/panel/servir.mjs` (el modo en vivo) |
+| `drift.out`, `drift.everyMinutes` | `scripts/panel/servir.mjs` (sólo si `drift.runner` lo nombra a él: corre el barrido y escribe el resultado), `scripts/panel/leer-en-vivo.mjs` (lo muestra en Salud) |
 | `gate.registry` | `scripts/gate.mjs` (lo escribe), `scripts/panel/leer-en-vivo.mjs` y `scripts/ci-investigate.mjs` (lo leen) |

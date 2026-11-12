@@ -11,7 +11,9 @@ arnés. En tu repo serían tipos, tests y build; el mecanismo es idéntico.
 
 ```bash
 npm run gate        # self-test · docs link-check · convention lint
-npm run gate:fast   # igual (este repo no tiene señales lentas todavía)
+npm run gate:fast     # omite el banco y la evaluación (señal de desarrollo)
+npm run gate:changed  # sólo las señales que tocan lo cambiado (señal de desarrollo)
+npm run gate:retry    # sólo las rojas de la última corrida (señal de desarrollo)
 ```
 
 `scripts/gate.mjs` es la única definición del gate, y **no sabe de stacks**: ejecuta la lista de
@@ -36,6 +38,60 @@ borra `.git/gate-dirty`, que es lo que mira el hook `Stop`.
 
 **Test verde ≠ compila ≠ entregable.** Reportar "listo" sin gate verde es una violación, no un
 descuido. Y una señal **omitida no es verde**: el gate imprime las omisiones aparte, siempre.
+
+### Qué gate corre cuándo
+
+Repetir el gate entero después de cada arreglo de un hook vuelve a correr el banco y la
+evaluación, que no cambiaron. Por eso **el gate se elige según el momento**:
+
+| Momento | Comando | Qué corre | ¿Entregable? |
+|---|---|---|---|
+| Arreglando o mejorando algo, en curso | `npm run gate:changed` | sólo las señales cuyo alcance toca lo cambiado desde el último gate completo | no |
+| Reintentar lo que quedó rojo, sin tocar otra cosa | `npm run gate:retry` | sólo las rojas y abortadas de la última corrida | no |
+| Iteración rápida | `npm run gate:fast` | todo menos lo marcado `fastSkip` | no |
+| **Entrega**: antes de commitear, de decir «listo» o de abrir un PR | `npm run gate` | todas las señales | **sí** |
+
+**Cómo decide `changed`:**
+
+- **Lo cambiado** es el diff de la raíz contra el HEAD del último gate **completo**, más lo no
+  versionado (y lo mismo dentro de cada repo anidado de `gate.nestedRepos`).
+- **Lo que ya estaba sucio no cuenta.** El gate completo guarda al **arrancar** la huella de cada
+  archivo sucio; uno que sigue igual byte a byte ya se midió. Una edición hecha mientras el gate
+  corría sí cuenta: la foto es de antes.
+- **El alcance de una señal** son sus `paths` más los archivos de su propio `command`.
+- **Sin `paths`, la señal corre siempre.** Es fail-safe: por eso las baratas no lo declaran.
+- **Lo que no corre conserva su resultado.** Una roja que el cambio no toca se informa al final
+  («siguen ROJAS, sin relación con este cambio») y no tiñe el veredicto.
+- `node scripts/gate.mjs changed --plan` dice qué correría, sin correrlo.
+
+«CHANGED VERDE», como `retry` y `fast`, es de **desarrollo**: no borra `gate-dirty`, no anota la
+bitácora y no habilita `deploy`. La base de `changed` sólo la mueve un gate completo.
+
+**Caché por señal.** Una señal con `paths` guarda en su último verde la huella de sus entradas:
+su definición, la versión de node y el contenido que git tiene de cada ruta de su alcance (más lo
+sucio adentro, por contenido: commitear lo ya medido no cambia la firma). Con las mismas entradas
+no vuelve a correr —sale «✓ … CACHÉ» y cuenta verde—, también en el gate de entrega. Nunca se
+cachea una señal sin `paths`, una con `cache: false`, ni nada con `npm run gate -- --no-cache`.
+**Declarar bien `paths` es una obligación:** una ruta que falta deja cacheada una señal que debió
+correr. Y la firma sólo ve lo que git ve: un archivo **ignorado** por `.gitignore` bajo `paths` no
+entra, así que una señal que depende de un derivado (un build, un `.env`) declara `cache: false`.
+Por qué se aceptó ese riesgo: [ADR 0019](decisions/0019-gate-incremental.md). En este repo sólo lo declaran el banco, la evaluación y la latencia; el self-test corre
+siempre.
+
+**Carriles.** Con `gate.lanes.max` > 1, las señales de un mismo `lane` corren en serie y los
+carriles a la vez, el más largo primero. `exclusive` corre sola al final: la medición de latencia
+con la máquina ocupada mide la máquina.
+
+**Cerrojo.** Dos gates a la vez sobre el mismo árbol (dos sesiones, o el agente y vos) se pisan los
+marcadores de sesión. El segundo espera y, si el primero corrió completo sobre el mismo HEAD con
+el árbol limpio, adopta su veredicto.
+
+**Una señal colgada no traba el gate.** Pasado `gate.signalTimeoutMinutes` (o su `timeoutMinutes`)
+se corta con todo su árbol de procesos y queda roja con ese motivo. Una que no llegó a medir
+—no arrancó, la cortaron desde afuera— queda `abortada`: tiñe el veredicto, pero no es un rojo de
+lo que mide ni gasta el presupuesto del ciclo acotado.
+
+La prueba de vida de todo esto es la sección 6-bis en adelante del self-test.
 
 ### Fuera del gate, con quien los corra
 

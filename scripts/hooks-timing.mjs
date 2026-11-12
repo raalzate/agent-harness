@@ -231,7 +231,11 @@ function medir(hook) {
   for (let i = 0; i < CORRIDAS; i += 1) {
     const t0 = process.hrtime.bigint();
     // Con sus argumentos: sin ellos se mide otro programa (ver parseHookCommand).
-    const r = spawnSync("node", [rutaDeHook(hook.file), ...(hook.args ?? [])], { input: entrada, encoding: "utf8" });
+    // `HARNESS_PROBE=1`: el hook corre de verdad pero NO deja estado de sesión (el marcador de
+    // `ask-first`, el `gate-dirty`). Tomar y restaurar `stateFiles` cubría el estado FINAL; durante
+    // la medición el marcador existía, y un guard que lo leyera en esa ventana frenaba una
+    // edición legítima con una pregunta que nadie hizo (2026-11-09).
+    const r = spawnSync("node", [rutaDeHook(hook.file), ...(hook.args ?? [])], { input: entrada, encoding: "utf8", env: { ...process.env, HARNESS_PROBE: "1" } });
     muestras.push(Number(process.hrtime.bigint() - t0) / 1e6);
     // Contrato de los hooks: 0 = seguir, 2 = bloquear. Cualquier otra cosa es un hook que
     // reventó al arrancar — y un hook roto mide rapidísimo, así que sin esta comprobación

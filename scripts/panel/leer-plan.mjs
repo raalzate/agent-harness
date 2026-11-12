@@ -184,7 +184,25 @@ export function leerPlanDelGestor(spec, gestor) {
   if (!gestor.ok) return omitido(spec, `no se pudo leer el gestor: ${gestor.error}`);
   const { serie, sinFecha } = serieDesdeEventos(gestor.items);
   if (!serie.length) return { ...omitido(spec, `el gestor devolvió ${gestor.items.length} ítem(s) y ninguno trae \`createdAt\``), sinFecha };
-  return { fuente: "tracker", estado: "ok", serie, sinFecha, resumen: resumirPlan(serie, spec.dueDate) };
+  return { fuente: "tracker", estado: "ok", serie, sinFecha, resumen: resumirPlan(serie, spec.dueDate), porDueno: abiertasPorDueno(gestor.items) };
+}
+
+/**
+ * Las abiertas del plan según quién las tiene que mover (el `owner` que trae el gestor). Una
+ * historia con hijas (`container`) no cuenta: se cierra cuando se cierran ellas. Sin `owner` en
+ * ningún ítem el gestor no lo informa y se devuelve `null`: no se adivina de quién es cada una.
+ */
+export function abiertasPorDueno(items) {
+  const delPlan = (items ?? []).filter((it) => it.inPlan !== false);
+  if (!delPlan.some((it) => "owner" in it)) return null;
+  const cuenta = { humano: 0, agente: 0, sinDueno: 0 };
+  for (const it of delPlan) {
+    if (it.closedAt || it.container) continue;
+    if (it.owner === "humano") cuenta.humano += 1;
+    else if (it.owner === "agente") cuenta.agente += 1;
+    else cuenta.sinDueno += 1;
+  }
+  return cuenta;
 }
 
 /** Qué decir cuando no hay fuente. */

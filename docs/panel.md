@@ -8,7 +8,16 @@ archivos que el arnés ya exige y del registro que el gate escribe.
 ```bash
 node scripts/panel/generar.mjs           # lo escribe en .git/harness-panel/index.html
 node scripts/panel/sincronizar.mjs       # lo mismo, pero sólo si algo cambió
+node scripts/panel/servir.mjs            # EN VIVO: http://127.0.0.1:4477, se actualiza solo
 ```
+
+**En vivo.** `servir.mjs` sirve el panel sólo en `127.0.0.1` (lleva el diff y el nombre de la
+persona: no se publica en la red) y llama a `sincronizar` cada `panel.serve.everyMs` (5 s).
+Regenera cuando cambia la firma: la memoria, el `git status` de cada repo con la fecha de cada
+archivo cambiado y la corrida del gate. Además fuerza una regeneración cada
+`panel.serve.forceEveryMs` (60 s) para recoger lo que la firma no ve, como el diagnóstico de la
+máquina. La página mira `latido.json` y se recarga sola sin perder la pestaña. Abierto como
+archivo, el panel dice que es una foto.
 
 **Se genera siempre.** `scripts/gate.mjs` lo regenera al final de **cada** corrida, verde o roja,
 así que el panel nunca es más viejo que el último gate. Un panel que hay que acordarse de
@@ -20,7 +29,47 @@ verifica que el panel genere es el self-test (sección 11).
 
 ## Qué muestra
 
-| Pestaña | De dónde sale | Qué contesta |
+Cinco pestañas; cada una junta las secciones que contestan lo mismo (diez eran demasiadas para
+encontrar algo):
+
+| Pestaña | Secciones (en orden) |
+|---|---|
+| **Qué hacer** | la bandeja · Plan |
+| **Resumen** | el resumen · Ahora |
+| **Salud** | la salud del arnés · Estado · Gotchas |
+| **Memoria** | la memoria · Fuentes |
+| **Reglas** | las reglas |
+
+Cada sección conserva su `id`, así que `#ahora`, `#estado`, `#gotchas`, `#plan` o `#fuentes`
+siguen abriendo donde están. Cada pestaña abre con **un** bloque «Qué hacer»: lo accionable de
+sus secciones, con dueño (👤 humano o 🤖 agente) y comando; el número de la pestaña es cuántas
+acciones tiene. Las reglas de reparto viven en `scripts/panel/leer-resumen.mjs` y cada una nombra
+el dato del que sale: el panel no opina.
+
+- **Qué hacer (portada).** Lo que le toca a la persona (decidir · hacer · esperando a un tercero ·
+  sus frentes) y lo que puede hacer el agente (ya · espera algo tuyo · espera a otro · después).
+  Sale de `panel.inbox` (el caché que deja el adaptador de tu gestor), del gate y de la máquina.
+  Sin `panel.inbox` lo dice, y muestra sólo el gate y la máquina.
+- **Resumen.** De quién es el informe (`panel.owner`), el estado en **una** frase, qué falla y por
+  qué importa (`gate.signals[].why`), la tendencia del gate en esta máquina y el diagnóstico de la
+  máquina (`panel.doctor`).
+- **Ahora · pipeline.** La última corrida dibujada como un pipeline: etapas en columnas
+  (`panel.pipeline.stages`), cada señal un job con qué verifica, cuánto tardó y su último verde.
+  Cada señal roja trae el **error real** —las líneas que el gate guardó en el registro—, cómo
+  reproducirla y, si una deuda de la bitácora la nombra, su remedio.
+- **Salud.** Un indicador por dimensión: hooks vivos, frenos encendidos, señales con `why`,
+  controles fuera del gate con corredor, etapas con control, incidentes con freno ejecutable y,
+  de la última corrida, self-test y latencia. Si fallan hooks, frenos o self-test la salud es
+  ROJA: ahí un freno deja de frenar en silencio.
+- **Estado.** La deuda accionable: cada ítem de «Deuda conocida» cruzado por su `#n` con el evento
+  de la bitácora —detalle, dueño y cómo se cierra—.
+- **Botón «🤖 Prompt».** En cada acción, señal roja y deuda: copia una instrucción lista para el
+  agente con la evidencia que el panel ya tiene. Si la acción es del humano, el prompt pide
+  **preparar** y no ejecutar nada hacia afuera sin autorización.
+
+De dónde sale cada sección:
+
+| Sección | De dónde sale | Qué contesta |
 |---|---|---|
 | **Salud** | `taxonomy`, `install.activators`, `.claude/settings.json`, `gate.signals`, toda clave con `runner`, `.claude/agents`, `.claude/commands`, `.claude/skills` | ¿cada pieza instalada está viva? El mapa guía/freno/sensor por etapa (la misma función que `node scripts/harness-map.mjs`), los frenos instalados sin la clave que los enciende («instalado y muerto»), los hooks que no existen, las señales sin `why`, los controles fuera del gate sin nadie que los corra |
 | **Memoria** | las guías (`CLAUDE.md` y sus `@imports`, la del usuario, las de arriba y la local), `.claude/skills` · `agents` · `commands` del repo y del usuario, la memoria automática de esta máquina, las transcripciones, `docs/decisions/` | la memoria del agente como LLEGA: qué lee al arrancar y cuánto pesa, qué entra sólo cuando algo lo dispara y cuánto se usó, qué recuerda esta máquina y si todavía apunta a algo que existe (ver abajo) |
@@ -55,6 +104,15 @@ No hay nada que portar: sin la clave `panel` sale igual, con defaults que se ded
 el arnés ya tiene (`status.file`, `incidents`, `tracker.issuePattern`, `tests.filePattern`,
 `docs.proseRoots`). Lo que conviene declarar (cada clave, en la referencia del config del arnés, sección `panel`):
 
+- **`panel.owner`** — de quién es el informe: una variable de entorno o de un `.env` ignorado.
+  Sin dato se usa `git config user.name`; nunca se inventa y nada personal queda versionado.
+- **`panel.doctor`** — el comando que diagnostica la máquina (una sección por línea `N. Título`,
+  un chequeo por línea `✔|⚠|✘ texto`, el arreglo en la siguiente `→ comando`).
+- **`panel.inbox`**, **`panel.focus`** y **`panel.triage`** — la bandeja y el foco que deja el
+  adaptador de tu gestor, y el vocabulario de tu equipo: qué cuenta como decisión del humano,
+  qué ítem espera a un tercero y cómo se llama, con qué comando se toma una tarea. El arnés no
+  conoce ningún gestor: un comando que no declaraste no aparece en ningún prompt.
+- **`panel.pipeline.stages`** — las etapas con que se agrupan tus señales del gate.
 - **`panel.tasks`** — cómo se invoca una tarea en tu stack. Con esto, el panel verifica que las
   tareas que cita la memoria existan en el manifiesto. Sin esto no extrae ninguna: adivinar el
   ejecutor de tareas de otro lenguaje es cablear un lenguaje.

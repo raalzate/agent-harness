@@ -246,7 +246,11 @@ const COPIAR = [
   "scripts/panel/leer-en-vivo.mjs",
   "scripts/panel/leer-plan.mjs",
   "scripts/panel/leer-memoria.mjs",
+  "scripts/panel/leer-resumen.mjs",
   "scripts/panel/plantilla.mjs",
+  // El modo en vivo (`node scripts/panel/servir.mjs`): opcional, pero sin el archivo el comando
+  // que cita `docs/panel.md` no existe en el repo destino.
+  "scripts/panel/servir.mjs",
   // Documentos AGNÓSTICOS que el arnés instalado cita: sin ellos, el propio arnés arranca
   // apuntando a la nada en el repo destino (P10 violado por el instalador). Lo destapó el
   // banco de perfiles: `docs-linkcheck` del repo portado salía rojo el primer día.

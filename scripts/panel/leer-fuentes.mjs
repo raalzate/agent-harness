@@ -48,7 +48,7 @@ export const FORMAS_POR_DEFECTO = [
 
 /** Las secciones de STATUS.md que el panel entiende: las de la plantilla (`plantillas/STATUS.md`). */
 export const STATUS_POR_DEFECTO = {
-  sections: { open: "^Abierto ahora", signals: "^Señales", blockers: "^Bloqueos", debt: "^Deuda conocida" },
+  sections: { open: "^Abierto ahora", signals: "^Señales", blockers: "^Bloqueos", debt: "^Deuda conocida", ledger: "^(Bitácora|Ledger|Log)\\b" },
   fields: { date: "Fecha del último gate completo", branch: "Rama", verdict: "Veredicto" },
 };
 
@@ -58,6 +58,16 @@ export const STATUS_POR_DEFECTO = {
  * `tests.filePattern`) antes que un literal. Un default nuevo que repite algo que el config ya
  * sabe es la segunda verdad que después se desincroniza.
  */
+export const TRIAGE_POR_DEFECTO = {
+  // Lo que pide una persona y no un comando: decidir, autorizar, el cliente, una enmienda.
+  humanPattern: "decisi[oó]n|decide|autoriza|humano|decision|approv|authori[sz]|human",
+  closurePattern: "se cierra|se cierran|cerrarla|lo corrige|se corrige|se resuelve|se arregla|se destraba|lo destraba|hay que|closes when|fixed by|resolved by|needs to",
+  // Lo que pide ELEGIR entre opciones, no ejecutar.
+  decisionPattern: "^(decidir|elegir|aprobar|autorizar|definir si)\\b",
+  // Un contenedor no es una acción: es el frente al que pertenecen las tareas.
+  containerPattern: "^(epic|user story|feature|story|milestone)$",
+};
+
 export function specDelPanel(config = {}) {
   const p = config.panel ?? {};
   const fuentes = p.sources ?? {};
@@ -97,6 +107,36 @@ export function specDelPanel(config = {}) {
       : null,
     tokens: p.tokens !== false,
     live: p.live !== false,
+    // El Resumen: de quién es el informe, cómo está configurada la máquina y qué foco tiene. Cada
+    // repo los declara; sin declarar, el responsable sale de git y lo demás no aparece.
+    owner: { env: Array.isArray(p.owner?.env) ? p.owner.env : ["HARNESS_OWNER"], envFile: p.owner?.envFile ?? null },
+    doctor: Array.isArray(p.doctor?.command) && p.doctor.command.length ? { command: p.doctor.command, timeoutMs: p.doctor.timeoutMs ?? 20000, highlight: p.doctor.highlight ?? null } : null,
+    focus: p.focus?.file ? { file: p.focus.file } : null,
+    // La BANDEJA («Qué hacer»): el caché que deja el gestor con lo de cada dueño, y el comando que
+    // lo refresca en segundo plano cuando envejece. Sin declarar, la pestaña lo dice.
+    inbox: p.inbox?.file ? { file: p.inbox.file, command: Array.isArray(p.inbox.command) ? p.inbox.command : null, maxAgeMinutes: p.inbox.maxAgeMinutes ?? 10 } : null,
+    // Cómo se REPARTE lo que el panel encuentra entre la persona y el agente, y cómo se nombra el
+    // gestor de ESTE repo. Todo es vocabulario del equipo (quién es «el cliente», qué tipo de ítem
+    // es un contenedor, con qué comando se toma una tarea): acá sólo hay defaults agnósticos.
+    triage: {
+      humanPattern: p.triage?.humanPattern ?? TRIAGE_POR_DEFECTO.humanPattern,
+      decisionPattern: p.triage?.decisionPattern ?? TRIAGE_POR_DEFECTO.decisionPattern,
+      containerPattern: p.triage?.containerPattern ?? TRIAGE_POR_DEFECTO.containerPattern,
+      // Ítems que esperan a alguien de AFUERA (un cliente, otro equipo): se siguen, no se resuelven.
+      // Sin `pattern`, ningún ítem lo es.
+      external: p.triage?.external?.pattern ? { pattern: p.triage.external.pattern, label: p.triage.external.label ?? "un tercero" } : null,
+      // Las oraciones de una deuda que dicen CÓMO se cierra: de ahí sale su remedio.
+      closurePattern: p.triage?.closurePattern ?? TRIAGE_POR_DEFECTO.closurePattern,
+      // Plantillas de comando del gestor, con `{id}`: `take`, `show`, `threads`, `focus`, `owner`.
+      // La que falta no se muestra: el panel no inventa un comando que el repo no tiene.
+      commands: p.triage?.commands ?? {},
+      remote: p.triage?.remote ?? "el remoto",
+    },
+    // Las ETAPAS con que se dibuja el gate como pipeline: `{ name, match }` (regex sobre el nombre
+    // de la señal), en orden. Lo que no casa con ninguna va a «Otras»; sin etapas, una sola.
+    pipeline: Array.isArray(p.pipeline?.stages) ? p.pipeline.stages.filter((s) => s?.name && s?.match) : [],
+    // El modo en vivo (`node scripts/panel/servir.mjs`): cada cuánto mira si algo cambió.
+    serve: { port: p.serve?.port ?? 4477, everyMs: p.serve?.everyMs ?? 5000, forceEveryMs: p.serve?.forceEveryMs ?? 60000 },
   };
 }
 
@@ -381,6 +421,18 @@ export function leerStatus(texto, spec = STATUS_POR_DEFECTO) {
     senalesNota: senales ? fueraDeTabla(senales.cuerpo) : "",
     bloqueos: bloqueos ? vinetasDe(bloqueos.cuerpo) : [],
     deuda: deuda ? { intro: deuda.cuerpo.split(/^(### |- )/m)[0].trim(), grupos: gruposDeDeuda(deuda.cuerpo) } : { intro: "", grupos: [] },
+    // La bitácora es donde vive el DETALLE de cada deuda (qué pasa, de quién es, cómo se cierra);
+    // la lista de «Deuda conocida» es sólo su proyección con el título y el `#n` del evento.
+    bitacora: (() => {
+      const s = seccion(spec.sections.ledger ?? STATUS_POR_DEFECTO.sections.ledger);
+      if (!s) return [];
+      return tablaDe(s.cuerpo)
+        .map((f) => {
+          const [n, fecha, autor, tipo, clave, que, evidencia] = Object.values(f);
+          return { n: Number(String(n).replace(/\D/g, "")), fecha: fecha ?? "", autor: autor ?? "", tipo: tipo ?? "", clave: clave ?? "", que: que ?? "", evidencia: evidencia && evidencia !== "—" ? evidencia : "" };
+        })
+        .filter((e) => Number.isFinite(e.n) && e.n > 0);
+    })(),
   };
 }
 
@@ -764,6 +816,9 @@ export function construirModelo(raiz, { config = null, settings = null, git = gi
     })(),
     // Lo que la plantilla necesita para no nombrar ningún archivo ni ningún ejecutor de tareas.
     rutas: { status: spec.sources.status, incidents: spec.sources.incidents, guide: spec.sources.guide },
+    // El reparto humano/agente y el vocabulario del gestor: lo leen el resumen y la plantilla, que
+    // son puros y no ven el config.
+    reparto: spec.triage,
     invocacion,
     comando: spec.command,
     faltantes,
