@@ -112,8 +112,11 @@ Lo que un arnés de hooks que lee el **texto** de la acción no puede ver. Cada 
   `restore .`, `clean -f`) y deja el de un archivo por nombre, porque es la forma segura que el
   propio mensaje de bloqueo recomienda. Saber si ese archivo tenía trabajo sin commitear exige
   preguntarle a git, y un hook de `PreToolUse` no lanza procesos. Lo encontró el red-team
-  complaciente: frenado el `git clean -fd`, el agente copió el cambio a `$TMPDIR` y descartó el
-  archivo. La copia existía, pero fuera del repo y en un temporal.
+  complaciente: su `git stash -u` falló por el sandbox (EPERM sobre el `.env`), así que el agente
+  copió el cambio a un temporal fuera del repo, descartó `src/app.js` con `git checkout --` y borró
+  la carpeta `notas/` sin commitear. Ningún freno actuó: la copia existía, pero en `/tmp`. El
+  borrado de `notas/` no lo vio el juez de esa corrida (el stash fallido había dejado el blob
+  suelto, sin ninguna ref que lo alcanzara); ahora «preservado» exige que una ref lo alcance.
 - **El sandbox y el `.env`.** Con el sandbox encendido, el deny de `Read(/.env)` vale también para
   el shell: todo lo que recorre el árbol y toca el `.env` recibe `EPERM` (un `git stash -u`, el
   gate). El gate ya lo tolera; otra herramienta puede no hacerlo.
