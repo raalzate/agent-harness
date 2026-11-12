@@ -66,12 +66,15 @@ export async function generarPanel(raiz, { salida = null, enVivo = true, config 
   const spec = specDelPanel(cfg);
   const set = settings ?? leerJson(path.join(raiz, ".claude/settings.json")) ?? {};
   const modelo = construirModelo(raiz, { config: cfg, settings: set });
+  const dir = salida ? path.resolve(salida) : resolverSalida(raiz, spec.out);
+  // La tendencia del gate: el registro guarda sólo la última corrida, así que el panel lleva su
+  // propio historial al lado (en la misma carpeta de esta máquina, fuera del árbol de fuentes).
+  const rutaHistorial = path.join(dir, "historial-gate.json");
   if (enVivo && spec.live) {
     // Import perezoso: la capa en vivo trae procesos y red, y quien pide sólo memoria no la carga.
     const { construirEnVivo } = await import("./leer-en-vivo.mjs");
-    modelo.enVivo = await construirEnVivo(raiz, modelo, spec, { settings: set, config: cfg, ...vivo });
+    modelo.enVivo = await construirEnVivo(raiz, modelo, spec, { settings: set, config: cfg, historialPrevio: leerJson(rutaHistorial) ?? [], ...vivo });
   }
-  const dir = salida ? path.resolve(salida) : resolverSalida(raiz, spec.out);
   const rutaRaiz = path.relative(dir, raiz).split(path.sep).join("/") || ".";
   const escritos = [path.join(dir, "index.html"), path.join(dir, "modelo.json")];
   // Se renderiza SIEMPRE, también sin escribir: lo que `--verificar` prueba es que la página sale.
@@ -80,6 +83,9 @@ export async function generarPanel(raiz, { salida = null, enVivo = true, config 
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(escritos[0], html, "utf8");
   fs.writeFileSync(escritos[1], JSON.stringify(modelo, null, 2) + "\n", "utf8");
+  if (modelo.enVivo?.historial?.length) fs.writeFileSync(rutaHistorial, JSON.stringify(modelo.enVivo.historial, null, 2) + "\n", "utf8");
+  // Lo que mira la página en vivo para saber si recargarse: chico, y cambia con cada regeneración.
+  fs.writeFileSync(path.join(dir, "latido.json"), JSON.stringify({ version: modelo.version, generadoEn: modelo.enVivo?.generadoEn ?? null }) + "\n", "utf8");
   return { modelo, escritos, dir };
 }
 

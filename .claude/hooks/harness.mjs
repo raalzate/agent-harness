@@ -397,12 +397,18 @@ export function proposedContent(input, config) {
   return campos.map((c) => ti[c]).find((v) => typeof v === "string") ?? "";
 }
 
-/** Primer patrón de `rules` que casa con `text` (cada regla es {pattern, ...}). */
+/**
+ * Primer patrón de `rules` que casa con `text` (cada regla es {pattern, flags?, ...}).
+ *
+ * `flags` de la REGLA gana sobre el default: sin él, todo se evaluaba sin distinguir
+ * mayúsculas y `git branch -D` (borrado forzado) no se podía separar de `git branch -d`
+ * (el seguro). El default sigue siendo `i` para no cambiar ningún repo ya portado (P3).
+ */
 export function firstMatch(rules, text, flags = "i") {
   for (const rule of rules ?? []) {
     let re;
     try {
-      re = new RegExp(rule.pattern, flags);
+      re = new RegExp(rule.pattern, typeof rule.flags === "string" ? rule.flags : flags);
     } catch {
       continue; // patrón inválido: lo caza el self-test, no el turno del usuario
     }
@@ -416,10 +422,18 @@ export function underAny(relPath, prefixes) {
   return (prefixes ?? []).some((p) => relPath === p || relPath.startsWith(p.endsWith("/") ? p : `${p}/`));
 }
 
+/**
+ * true cuando el hook lo corre una medición (`scripts/hooks-timing.mjs` pone `HARNESS_PROBE=1`),
+ * no un turno del agente. Un hook medido hace todo lo que hace siempre MENOS dejar estado de
+ * sesión: un marcador fabricado por la medición frenaba una edición legítima en la ventana en
+ * que existía, antes de que la medición lo restaurara (2026-11-09).
+ */
+export const esSonda = () => process.env.HARNESS_PROBE === "1";
+
 /** Marca que hay código editado sin gate verde (lo lee el hook Stop). */
 export function markGateDirty(config) {
   const marker = config?.gate?.marker;
-  if (!marker) return;
+  if (!marker || esSonda()) return;
   const abs = rutaDeEstado(marker);
   try {
     fs.mkdirSync(path.dirname(abs), { recursive: true });
@@ -448,11 +462,41 @@ export function parseHookCommand(comando) {
   if (!limpio) return null;
 
   const conNode = /(?:^|\s)node\s+(?:--\S+\s+)*(\S+)/.exec(limpio);
+  // Los ARGUMENTOS viajan: `node x.mjs hook edit` corrido como `node x.mjs` es otro programa
+  // (imprime su ayuda y sale 1), y la medición de latencia lo reportaba ROTO mientras el hook real
+  // andaba. Salen del comando ORIGINAL (`argumentosDeHook`), no de `limpio`: ahí ya no hay comillas.
+  // `etiqueta` sigue siendo el archivo: es la clave con la que el mapa y el panel lo ubican.
   // Con `node` el archivo es del repo y se le puede exigir que parsee.
-  if (conNode) return { file: conNode[1], tipo: "script", etiqueta: conNode[1] };
+  if (conNode) return { file: conNode[1], args: argumentosDeHook(comando, 1), tipo: "script", etiqueta: conNode[1] };
 
   // Sin `node`: un ejecutable. De un binario externo sólo se puede afirmar que EXISTE.
-  return { file: limpio.split(/\s+/)[0], tipo: "ejecutable", etiqueta: limpio.split(/\s+/)[0] };
+  const binario = limpio.split(/\s+/)[0];
+  return { file: binario, args: argumentosDeHook(comando, 0), tipo: "ejecutable", etiqueta: binario };
+}
+
+/**
+ * Los argumentos de un hook como los vería el proceso: respetando comillas, con
+ * `$CLAUDE_PROJECT_DIR` resuelto a la raíz (borrarlo dejaba `--root` sin valor) y cortando en el
+ * primer operador de shell (`|`, `||`, `&&`, `;`, `>`, `2>`…): una redirección no es argv, y
+ * pasársela al script lo hacía medir ROTO en falso si valida sus argumentos.
+ * `saltar` = cuántos tokens después de `node [--flags]` (o del binario) son el programa.
+ */
+function argumentosDeHook(comando, saltar) {
+  const texto = String(comando ?? "").replace(/\$\{?CLAUDE_PROJECT_DIR\}?/g, REPO_ROOT.split(path.sep).join("/"));
+  const tokens = [];
+  for (const m of texto.matchAll(/"([^"]*)"|'([^']*)'|(\d?>{1,2}|\|\|?|&&|;)|(\S+)/g)) {
+    if (m[3]) break; // operador de shell: lo que sigue no es del hook
+    // Un token puede mezclar comillas y texto (`"$CLAUDE_PROJECT_DIR"/x.mjs`): se juntan.
+    const pegado = m.index > 0 && !/\s/.test(texto[m.index - 1]) && tokens.length;
+    const valor = m[1] ?? m[2] ?? m[4];
+    if (pegado) tokens[tokens.length - 1] += valor;
+    else tokens.push(valor);
+  }
+  let i = tokens.findIndex((t) => t === "node");
+  if (i === -1) return tokens.slice(1);
+  i += 1;
+  while (tokens[i]?.startsWith("--")) i += 1;
+  return tokens.slice(i + saltar);
 }
 
 /**
@@ -473,6 +517,19 @@ export function resolverEjecutable(cmd) {
     }
   }
   return cmd; // que falle con su propio mensaje: adivinar acá sería peor
+}
+
+/**
+ * `[ejecutable, args, opciones]` listos para `spawn`/`spawnSync` sin `shell: true`. Resolver la ruta
+ * no alcanza para un lote (`npm.cmd`): desde CVE-2024-27980 Node no lo ejecuta sin shell (EINVAL).
+ * Se pasa por `cmd.exe` con cada argumento entrecomillado por nosotros, para que `&` o `|` del
+ * config sigan siendo texto. */
+export function prepararLanzamiento(argv, opciones = {}) {
+  const exe = resolverEjecutable(argv[0]);
+  if (process.platform !== "win32" || !/\.(cmd|bat)$/i.test(exe)) return [exe, argv.slice(1), opciones];
+  const citar = (a) => `"${String(a).replace(/(\\*)"/g, '$1$1\\"')}"`;
+  const linea = [exe, ...argv.slice(1)].map(citar).join(" ");
+  return [process.env.ComSpec || "cmd.exe", ["/d", "/s", "/c", `"${linea}"`], { ...opciones, windowsVerbatimArguments: true }];
 }
 
 /**
@@ -544,6 +601,12 @@ export function rutaDeEstado(rel) {
   const abs = path.join(REPO_ROOT, rel);
   const norm = String(rel).split("\\").join("/");
   if (!norm.startsWith(".git/")) return abs;
+  // `HARNESS_STATE_DIR`: el estado de sesión (`.git/…`) vive en otro directorio. Lo usa el
+  // self-test para fabricar y leer marcadores SIN tocar los de la sesión real: contra los reales,
+  // el hook `ask-first` de cualquier prompt concurrente —de esta sesión o de otra— los borraba en
+  // medio de un caso y el self-test salía rojo sin que nada estuviera roto (2026-11-09).
+  const aparte = process.env.HARNESS_STATE_DIR;
+  if (aparte) return path.join(aparte, norm.slice(".git/".length));
   try {
     const punto = path.join(REPO_ROOT, ".git");
     if (!fs.statSync(punto).isFile()) return abs;

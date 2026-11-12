@@ -30,7 +30,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { REPO_ROOT, CONFIG_PATH, resolverEjecutable, dentroDelAlcance, firstMatch, rutaDeEstado, rutaDeTodo } from "../.claude/hooks/harness.mjs";
+import { REPO_ROOT, CONFIG_PATH, prepararLanzamiento, dentroDelAlcance, firstMatch, rutaDeEstado, rutaDeTodo } from "../.claude/hooks/harness.mjs";
+const lanzarSync = (argv, opciones) => spawnSync(...prepararLanzamiento(argv, opciones));
 
 let config;
 try {
@@ -241,7 +242,7 @@ function verificar(tarea) {
       continue;
     }
     // Sin shell, como el gate: ningún dato de la tarea se interpola en una línea de comandos.
-    const r = spawnSync(resolverEjecutable(c.evidencia[0]), c.evidencia.slice(1), {
+    const r = lanzarSync(c.evidencia, {
       cwd: REPO_ROOT,
       encoding: "utf8",
       timeout: Number(spec.timeoutMs) > 0 ? Number(spec.timeoutMs) : 600000,
@@ -295,7 +296,7 @@ switch (orden) {
       const plantilla = spec.criteriaCommand ?? [];
       if (!plantilla.length) fallar("`--from-tracker` necesita `task.criteriaCommand` en el config.");
       const argv = plantilla.map((a) => String(a).split("{issue}").join(item));
-      const r = spawnSync(resolverEjecutable(argv[0]), argv.slice(1), { cwd: REPO_ROOT, encoding: "utf8", windowsHide: true });
+      const r = lanzarSync(argv, { cwd: REPO_ROOT, encoding: "utf8", windowsHide: true });
       if (r.status !== 0) fallar(`no pude leer el ítem ${item} del gestor (\`${comoTexto(argv)}\`): ${`${r.stderr ?? r.error?.message ?? ""}`.trim().split("\n")[0]}`);
       let re;
       try {

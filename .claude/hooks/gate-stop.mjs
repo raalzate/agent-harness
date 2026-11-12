@@ -28,5 +28,6 @@ if (!fs.existsSync(marker)) allow();
 deny(
   `GATE PENDIENTE: hay código editado en esta sesión y el gate no quedó verde.\n` +
     `Corré \`${config.gate?.command ?? "node scripts/gate.mjs"}\` (o el subagente \`gate-runner\`) y arreglá lo que salga rojo.\n` +
+    (config.gate?.changedCommand ? `Mientras arreglás, \`${config.gate.changedCommand}\` repite sólo las señales que tocan lo cambiado (de desarrollo: no cierra este aviso).\n` : "") +
     `Si el trabajo no es entregable todavía, decilo explícitamente en el mensaje final: reportar "listo" sin gate verde es una violación, no un descuido.`,
 );

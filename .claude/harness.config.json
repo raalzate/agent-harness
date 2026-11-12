@@ -4,6 +4,24 @@
     "$comment": "El gate es la única definición de «entregable». `signals` lo hace declarativo: scripts/gate.mjs no sabe de stacks, ejecuta esta lista en orden. Está en Node y no en bash para que el entregable exista también en Windows (docs/multiplataforma.md). `fastSkip: true` = la señal se omite en modo fast (típicamente el build). `skipIfMissing` = ruta que, si no existe, reporta OMITIDO en vez de fallar (herramienta local no instalada, CI sin índice).",
     "command": "npm run gate",
     "fastCommand": "npm run gate:fast",
+    "$retryCommand": "RETRY: corre SÓLO las señales que el registro de la última corrida dejó en rojo o abortadas, como un pipeline que se reanuda desde la etapa que falló; las demás conservan su resultado. Señal de DESARROLLO, no entregable: ese resultado es del árbol de ANTES del arreglo. El gate rojo lo sugiere al final.",
+    "retryCommand": "npm run gate:retry",
+    "$changedCommand": "CHANGED: corre SÓLO las señales cuyo alcance toca lo que cambió desde el último gate COMPLETO. El alcance de una señal es su `paths` (prefijos relativos a la raíz) más los archivos de su `command`; SIN `paths` es relevante siempre (fail-safe: por eso las baratas no lo declaran). Una roja que el cambio no toca se informa pero no tiñe el veredicto. Señal de DESARROLLO, no entregable. `-- --plan` dice qué correría sin correrlo.",
+    "changedCommand": "npm run gate:changed",
+    "$cache": "CACHÉ POR SEÑAL: una señal con `paths` cuyas ENTRADAS (su definición, node, el contenido que git tiene de cada ruta y lo sucio adentro) son las de su último verde no vuelve a correr, ni en el gate completo: sale «CACHÉ» y cuenta verde. Nunca se cachea una señal sin `paths` ni una con `cache: false` (lee estado de afuera: el reloj, la red, el gestor). `npm run gate -- --no-cache` mide en frío. Un `paths` incompleto deja cacheada una señal que debió correr: declararlo bien es obligación (docs/arnes.md).",
+    "$signalTimeoutMinutes": "Cuánto puede tardar UNA señal antes de darla por COLGADA: se corta con su árbol de procesos y queda ROJA con ese motivo, y las que esperaban en su carril siguen. Una señal puede declarar su propio `timeoutMinutes` (0 = sin límite). La más lenta de este repo (el banco de perfiles) tarda un par de minutos: 15 deja margen de sobra.",
+    "signalTimeoutMinutes": 15,
+    "$lanes": "CARRILES: las señales de un mismo `lane` corren en serie (comparten árbol o artefactos); carriles distintos corren a la vez, hasta `max`. `exclusive: true` corre sola al final (medir latencia con la máquina ocupada mide la máquina). `max: 1` o sin la clave = el gate de siempre, en serie.",
+    "lanes": {
+      "max": 4
+    },
+    "$lock": "CERROJO: dos gates a la vez sobre el mismo árbol se pisan los marcadores de sesión y los artefactos, y los dos salen rojos sin que nada esté roto (dos sesiones del agente, o el agente y el humano). El segundo espera hasta `waitMinutes` y, si el primero corrió completo sobre el mismo HEAD con el árbol limpio, adopta su veredicto. `false` lo apaga.",
+    "lock": {
+      "file": ".git/gate.lock",
+      "waitMinutes": 20,
+      "pollMs": 5000,
+      "adopt": true
+    },
     "marker": ".git/gate-dirty",
     "codeGlobs": [
       "scripts/",
@@ -23,6 +41,7 @@
           "node",
           "scripts/harness-selftest.mjs"
         ],
+        "lane": "selftest",
         "why": "un hook roto o un config que apunta a la nada fallan en silencio: ninguna otra señal los ve"
       },
       {
@@ -31,6 +50,7 @@
           "node",
           "scripts/docs-linkcheck.mjs"
         ],
+        "lane": "arnes",
         "why": "mover un archivo rompe punteros de la memoria del agente que nadie más mira"
       },
       {
@@ -39,6 +59,7 @@
           "node",
           "scripts/repo-lint.mjs"
         ],
+        "lane": "arnes",
         "why": "las reglas del repo que ningún compilador ve, con un comando que falla"
       },
       {
@@ -47,6 +68,7 @@
           "node",
           "scripts/artifacts-check.mjs"
         ],
+        "lane": "arnes",
         "why": "un plan suelto en el repo cuando el equipo decidió que el trabajo vive en el gestor deja el registro partido en dos, y ninguna otra señal lo mira"
       },
       {
@@ -55,6 +77,7 @@
           "node",
           "scripts/worktree-check.mjs"
         ],
+        "lane": "arnes",
         "why": "a worktree inside the repo root that git does not ignore is read by every scan as the repo's own files, and the gate goes red far from the cause (docs/gotchas.md). `/code` creates worktrees by design, so this is checked on every run, not remembered"
       },
       {
@@ -64,6 +87,7 @@
           "status"
         ],
         "skipIfMissing": ".codegraph",
+        "lane": "arnes",
         "why": "leer el código a mano es la fuente de error más cara del agente: abre archivos de más, se pierde relaciones (quién llama a quién) y contesta con la mitad del mapa. El índice es infraestructura de lectura, y un índice desincronizado miente peor que no tenerlo. OMITIDA mientras nadie corra `codegraph init`: omitido no es verde, y esa omisión es exactamente el recordatorio"
       },
       {
@@ -75,6 +99,7 @@
         ],
         "skipIfMissing": ".git/harness-task.json",
         "countsAttempts": false,
+        "lane": "arnes",
         "why": "el agente no puede ser la única fuente de evidencia de que terminó: esta señal re-ejecuta la evidencia de cada criterio de aceptación de la tarea declarada y cruza lo que cambió contra el alcance planificado. Ninguna otra señal sabe qué se pidió. OMITIDA sin tarea activa (CI): omitido no es verde"
       },
       {
@@ -84,6 +109,8 @@
           "scripts/harness-bench.mjs"
         ],
         "fastSkip": true,
+        "lane": "banco",
+        "paths": [".claude/", "scripts/", ".githooks/", "plantillas/", "examples/", "docs/", "package.json", "CLAUDE.md", "CONSTITUTION.md"],
         "why": "el self-test verifica la FORMA de un perfil; sólo un repo real de cada stack verifica el ENCAJE: que el matcher de DEPS case el XML de un .csproj, que PUREZA cace un `using`, y que el arnés recién instalado no apunte a la nada. Cazó dos bugs en su primera corrida"
       },
       {
@@ -93,16 +120,20 @@
           "scripts/harness-eval.mjs"
         ],
         "fastSkip": true,
+        "lane": "eval",
+        "paths": [".claude/", "scripts/", ".githooks/", "plantillas/", "examples/", "docs/", "package.json", "CLAUDE.md", "CONSTITUTION.md"],
         "why": "the self-test checks every rule against a sample derived from the same rule: tautological. Only a separate labelled set sees the EVASION (`git -C . reset --hard`, `git commit -nm`, `wget | sh`) and the false positive (`.env.example`). On its first run, 14 attacks got through the template and one innocent action was blocked"
       },
       {
         "name": "library index (docs)",
         "command": ["node", "scripts/library.mjs", "check"],
+        "lane": "arnes",
         "why": "el librarian contesta con lo que el índice dice, y un índice viejo miente sin que nadie lo vea: un documento retitulado o movido sigue apareciendo como era. Ninguna otra señal mira además que cada documento esté en UNA sola base (dos bases que lo reclaman son un concepto sin delimitar), que una tabla sea sólo tabla ni que un grafo no tenga aristas a nodos inexistentes"
       },
       {
         "name": "status ledger",
         "command": ["node", "scripts/status.mjs", "check"],
+        "lane": "arnes",
         "why": "STATUS.md is what the session hook tells the agent is true. As a ledger its top is a projection of the log: a hand edit there, a seq gap, an event closing something never opened or a gotcha with no `incident.recorded` event is a history that lies, and no other signal reads the log"
       },
       {
@@ -111,6 +142,8 @@
           "node",
           "scripts/hooks-timing.mjs"
         ],
+        "exclusive": true,
+        "paths": [".claude/hooks/", ".claude/settings.json", ".claude/harness.config.json", "scripts/hooks-timing.mjs", "scripts/repo-lint.mjs"],
         "why": "todo freno se paga en latencia en CADA prompt y en CADA edición, y hasta acá ese costo era una creencia: la regla PUREZA se defendía con una intuición y las dos excepciones no tenían precio escrito. Ninguna otra señal mira lo que el arnés le cuesta al que lo usa, y un arnés caro se desactiva entero"
       }
     ]
@@ -250,6 +283,8 @@
       },
       {
         "pattern": "git\\s+branch\\s+(-D|--delete\\s+--force)\\b",
+        "flags": "",
+        "$flags": "Distingue mayúsculas: sin esto, `git branch -d` (el borrado seguro, que git rechaza si la rama no está mergeada) también le preguntaba al humano.",
         "reason": "borra la rama aunque no esté mergeada: los commits que sólo viven ahí quedan huérfanos."
       },
       {
@@ -596,7 +631,7 @@
         "route": "clarify",
         "patterns": [
           "\\bno s[ée] si\\b",
-          "\\balgo as[íi]\\b",
+          "\\balgo as[íi](?![\\wáéíóúüñ])",
           "\\bcomo veas\\b",
           "\\bmejorar (todo|esto)\\b",
           "\\bhacelo mejor\\b"
@@ -682,7 +717,7 @@
           "\\bbiblioteca\\b",
           "\\bbases? de conocimiento\\b",
           "\\b(re-?)?index[a-záé]*\\s.*\\bdoc",
-          "\\bqu[ée] (se )?decidi[óo]\\b",
+          "\\bqu[ée] (se )?decidi[óo](?![\\wáéíóúüñ])",
           "\\bwhat do(es)? the docs?\\b",
           "\\bin the docs?\\b",
           "\\bknowledge base\\b",
@@ -784,6 +819,10 @@
       "\\?\\s*$",
       "^\\s*(qu[eé]|por\\s?qu[eé]|c[oó]mo|cu[aá]l(es)?|cu[aá]ndo|d[oó]nde|qui[eé]n|para\\s?qu[eé])(?=\\s|$|[,:])",
       "^\\s*(hay|existe|sirve|conviene|se puede|pod[eé]s|sab[eé]s|vale la pena)(?=\\s|$|[,:])"
+    ],
+    "$informativePatterns": "El IMPERATIVO INFORMATIVO al inicio del pedido («contame», «explicame», «mostrame»): pide una respuesta igual que una pregunta, sin signo de interrogación. No es pregunta fuerte: si el mismo pedido trae un verbo de acción (`actionPatterns`), gana la acción. Opcional; sin la clave, sólo cuenta `questionPatterns`.",
+    "informativePatterns": [
+      "^\\s*(cont[aá]me|cu[eé]ntame|dec[ií]me|dime|expl[ií]ca(me)?|expl[ií]came|mostr[aá]me|mu[eé]strame|resum[ií]me|res[uú]meme|list[aá]me|l[ií]stame|describ[ií]me|descr[ií]beme|detall[aá]me|det[aá]llame)(?=\\s|$|[,:.])"
     ],
     "actionPatterns": [
       "\\b(arregl|corrig|implement|agreg|a[ñn]ad|cambi|escrib|cre[aá]|aplic|instal|port|actualiz|borr|elimin|quit|refactor|migr|public|commit|push|generá|genera|hacelo|haz|dale|proced)"

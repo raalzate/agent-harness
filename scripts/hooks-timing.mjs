@@ -106,8 +106,11 @@ if (!probe.filePath) {
  * en una semana y se lleva puestos a los que servían (P3). Sin presupuesto no hay veredicto:
  * el hook se mide y se reporta OMITIDO.
  */
-const presupuestoDe = (archivo) => {
-  if (PRESUPUESTOS[archivo] !== undefined) return Number(PRESUPUESTOS[archivo]);
+const presupuestoDe = (hook) => {
+  // Primero el del COMANDO (`archivo args`): un mismo script enganchado con dos argumentos distintos
+  // son dos hooks con dos costos. Después el del archivo, después el base.
+  if (PRESUPUESTOS[hook.comando] !== undefined) return Number(PRESUPUESTOS[hook.comando]);
+  if (PRESUPUESTOS[hook.file] !== undefined) return Number(PRESUPUESTOS[hook.file]);
   return PRESUPUESTO_BASE;
 };
 
@@ -129,6 +132,8 @@ function hooksDeclarados() {
       for (const h of grupo.hooks ?? []) {
         const parsed = parseHookCommand(h.command);
         if (!parsed) continue;
+        // El nombre con el que se reporta y se presupuesta: el archivo y, si los lleva, sus argumentos.
+        parsed.comando = [parsed.file, ...(parsed.args ?? [])].join(" ");
         const matcher = grupo.matcher ?? "";
         // Con grupos (`(Write|Edit)`) partir por `|` corta el regex por la mitad: se toma entero.
         const alternativas = /[()]/.test(matcher) ? [matcher] : matcher.split("|");
@@ -225,7 +230,12 @@ function medir(hook) {
   let roto = null;
   for (let i = 0; i < CORRIDAS; i += 1) {
     const t0 = process.hrtime.bigint();
-    const r = spawnSync("node", [rutaDeHook(hook.file)], { input: entrada, encoding: "utf8" });
+    // Con sus argumentos: sin ellos se mide otro programa (ver parseHookCommand).
+    // `HARNESS_PROBE=1`: el hook corre de verdad pero NO deja estado de sesión (el marcador de
+    // `ask-first`, el `gate-dirty`). Tomar y restaurar `stateFiles` cubría el estado FINAL; durante
+    // la medición el marcador existía, y un guard que lo leyera en esa ventana frenaba una
+    // edición legítima con una pregunta que nadie hizo (2026-11-09).
+    const r = spawnSync("node", [rutaDeHook(hook.file), ...(hook.args ?? [])], { input: entrada, encoding: "utf8", env: { ...process.env, HARNESS_PROBE: "1" } });
     muestras.push(Number(process.hrtime.bigint() - t0) / 1e6);
     // Contrato de los hooks: 0 = seguir, 2 = bloquear. Cualquier otra cosa es un hook que
     // reventó al arrancar — y un hook roto mide rapidísimo, así que sin esta comprobación
@@ -244,9 +254,9 @@ if (tiene("--rules")) {
   console.log(`  base:     ${PRESUPUESTO_BASE === null ? "(sin base)" : PRESUPUESTO_BASE} ms por hook`);
   console.log(`  corridas: ${CORRIDAS} (se reporta la mediana)`);
   for (const h of hooksDeclarados()) {
-    const propio = PRESUPUESTOS[h.file] !== undefined ? " (propio)" : "";
-    const p = presupuestoDe(h.file);
-    console.log(`  ${h.evento.padEnd(16)} ${h.file.padEnd(38)} ${String(p === null ? "—" : p).padStart(5)} ms${propio}`);
+    const propio = PRESUPUESTOS[h.comando] !== undefined || PRESUPUESTOS[h.file] !== undefined ? " (propio)" : "";
+    const p = presupuestoDe(h);
+    console.log(`  ${h.evento.padEnd(16)} ${h.comando.padEnd(38)} ${String(p === null ? "—" : p).padStart(5)} ms${propio}`);
   }
   if (obs.reason) console.log(`\nMotivo: ${obs.reason}`);
   process.exit(0);
@@ -271,7 +281,7 @@ for (const h of hooks) {
     filas.push({ ...h, omitido: `no pude derivar del matcher \`${h.matcher}\` un nombre que lo case (salió \`${h.herramienta}\`): medirlo sería medir un camino que no corre` });
     continue;
   }
-  const presupuesto = presupuestoDe(h.file);
+  const presupuesto = presupuestoDe(h);
   const { ms, muestras, roto } = medir(h);
   if (roto) filas.push({ ...h, ms, muestras, presupuesto, roto });
   else if (presupuesto === null) filas.push({ ...h, ms, muestras, omitido: `sin presupuesto declarado — midió ${ms} ms` });
@@ -290,15 +300,15 @@ if (!tiene("--json")) {
   console.log(`Latencia de los hooks (mediana de ${CORRIDAS} corridas)\n`);
   for (const f of filas) {
     if (f.omitido) {
-      console.log(`  – ${f.etiqueta} — OMITIDO: ${f.omitido}`);
+      console.log(`  – ${f.comando} — OMITIDO: ${f.omitido}`);
       continue;
     }
     if (f.roto) {
-      console.log(`  ✗ ${f.evento.padEnd(16)} ${(f.via ? `${f.file} vía ${f.via}` : f.file).padEnd(50)} ROTO — ${f.roto}`);
+      console.log(`  ✗ ${f.evento.padEnd(16)} ${(f.via ? `${f.comando} vía ${f.via}` : f.comando).padEnd(50)} ROTO — ${f.roto}`);
       continue;
     }
     const marca = f.ms > f.presupuesto ? "✗" : "✓";
-    console.log(`  ${marca} ${f.evento.padEnd(16)} ${(f.via ? `${f.file} vía ${f.via}` : f.file).padEnd(50)} ${String(f.ms).padStart(5)} ms  (presupuesto ${f.presupuesto} ms)`);
+    console.log(`  ${marca} ${f.evento.padEnd(16)} ${(f.via ? `${f.comando} vía ${f.via}` : f.comando).padEnd(50)} ${String(f.ms).padStart(5)} ms  (presupuesto ${f.presupuesto} ms)`);
   }
 
   // El número que de verdad importa no es el de un hook: es lo que el arnés le cuesta al
@@ -316,7 +326,7 @@ if (!tiene("--json")) {
 if (rotos.length) {
   console.error(
     `\nMEDICIÓN EN ROJO — ${rotos.length} hook(s) no respetan el contrato de exit codes: ` +
-      `${rotos.map((f) => f.file).join(", ")}`,
+      `${rotos.map((f) => f.comando).join(", ")}`,
   );
   console.error("Un hook que revienta al arrancar mide rapidísimo y parecería el más barato de todos.");
   process.exit(1);
@@ -324,7 +334,7 @@ if (rotos.length) {
 
 if (excedidos.length) {
   console.error(
-    `\nLATENCIA EN ROJO — ${excedidos.length} hook(s) sobre presupuesto: ${excedidos.map((f) => f.file).join(", ")}`,
+    `\nLATENCIA EN ROJO — ${excedidos.length} hook(s) sobre presupuesto: ${excedidos.map((f) => f.comando).join(", ")}`,
   );
   console.error(
     "Un hook lento se paga en cada edición y en cada prompt. Sacale el proceso que lanza, o subí\n" +

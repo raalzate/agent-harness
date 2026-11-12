@@ -42,7 +42,24 @@ export function firmaActual(raiz, { config, git = gitPorDefecto } = {}) {
   const spec = specDelPanel(config);
   const modelo = construirModelo(raiz, { config });
   const dirs = [raiz, ...spec.repos.filter((r) => r.path).map((r) => path.resolve(raiz, r.path))];
-  const arboles = dirs.map((d) => `${d}\n${git(d, ["status", "--porcelain=v2", "--branch", "--untracked-files=normal"])}`).join("\n");
+  // `git status` no cambia cuando se vuelve a editar un archivo que ya estaba modificado: sin la
+  // fecha de cada archivo cambiado, el panel en vivo no veía la segunda edición de la sesión.
+  const conFechas = (d, estado) =>
+    estado
+      .split("\n")
+      .map((l) => {
+        // porcelain v2: «1 XY sub mH mI mW hH hI ruta», «2 … X<score> ruta\torigen», «? ruta».
+        const campos = l.split(" ");
+        const ruta = l.startsWith("1 ") ? campos.slice(8).join(" ") : l.startsWith("2 ") ? campos.slice(9).join(" ").split("\t")[0] : l.startsWith("? ") ? l.slice(2) : null;
+        if (!ruta) return l;
+        try {
+          return `${l} @${fs.statSync(path.join(d, ruta)).mtimeMs}`;
+        } catch {
+          return l;
+        }
+      })
+      .join("\n");
+  const arboles = dirs.map((d) => `${d}\n${conFechas(d, git(d, ["status", "--porcelain=v2", "--branch", "--untracked-files=normal"]))}`).join("\n");
   const registro = leerJson(path.join(raiz, modelo.reglas.gate.registry));
   return { firma: sha(`${modelo.version}\n${arboles}\n${registro?.fecha ?? ""}`), version: modelo.version };
 }

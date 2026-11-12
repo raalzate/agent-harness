@@ -3,14 +3,14 @@
 > GENERADO por `node scripts/library.mjs index`: no se edita a mano. Lo consulta el subagente
 > `librarian`; lo verifica la señal del gate `library index (docs)`.
 
-46 entradas en 6 bases · 44 documentos (no estructurado) · 1 tablas · 1 grafos (estructurado).
+47 entradas en 6 bases · 45 documentos (no estructurado) · 1 tablas · 1 grafos (estructurado).
 
 ## Bases de conocimiento
 
 | Base | Concepto | Qué NO entra | Entradas |
 |---|---|---|---|
 | [metodo](#metodo) | Por qué existe el arnés: la teoría, el método y la evidencia | cómo se instala, cómo se configura, decisiones puntuales | 5 |
-| [diseno](#diseno) | Decisiones de diseño: arquitectura y ADR, con su porqué | la teoría general (metodo) y el uso diario (flujo) | 19 |
+| [diseno](#diseno) | Decisiones de diseño: arquitectura y ADR, con su porqué | la teoría general (metodo) y el uso diario (flujo) | 20 |
 | [instalacion](#instalacion) | Instalar y portar el arnés en otro repo, stack o plataforma | el trabajo diario una vez instalado (flujo) | 5 |
 | [flujo](#flujo) | El ciclo de trabajo: ramas, registro, SDD, CI/CD, despliegue y worktrees | cómo funciona cada pieza del arnés por dentro (referencia) | 6 |
 | [referencia](#referencia) | El arnés por dentro: claves del config, señales, índices, panel, evaluaciones y recetas | el porqué de fondo (metodo) y los incidentes (incidentes) | 10 |
@@ -53,6 +53,7 @@
 | [ADR 0016 — La documentación se indexa por tipo y se ubica por concepto](decisions/0016-biblioteca.md) | documento | El código tiene índice (codegraph, ADR 0005); la documentación no. Para contestar «qué dice la doc sobre X» el agente abría archivos enteros, y lo que no encontraba lo contestaba de memoria. Además la documentación mezc… |
 | [ADR 0017 — STATUS.md es una bitácora y el estado es su proyección](decisions/0017-status-como-bitacora.md) | documento | STATUS.md es lo que el hook SessionStart le presenta al agente como verdad. Se editaba en el lugar: una fila de señal se reescribía sin dejar rastro de lo que decía antes, sin autor y con una sola fecha para todo el arc… |
 | [ADR 0018 — Límites por diseño: lo que el arnés no hace a propósito](decisions/0018-limites-por-diseno.md) | documento | La «Deuda conocida» de STATUS.md mezclaba dos cosas distintas: |
+| [ADR 0019 — El gate incremental: modos de desarrollo, caché, carriles y cerrojo](decisions/0019-gate-incremental.md) | documento | El gate corría todas las señales, en serie, siempre. En este repo eso son tres minutos; en un repo portado con suites de producto fueron veintiuno, y arreglar un hook costaba repetirlos enteros. Un gate caro no se corre… |
 
 ## instalacion
 
@@ -93,7 +94,7 @@
 | [Evaluaciones del arnés: determinista y con IA](evaluaciones.md) | documento | Dos familias que no se mezclan, porque se prueban distinto: |
 | [Mapa del arnés](mapa-del-arnes.json) | grafo (49 nodos, 60 aristas) | GENERADO por `node scripts/harness-map.mjs --graph`: cada etapa del ciclo y las guías, frenos y sensores que actúan en ella, desde `taxonomy`. No se edita a mano. |
 | [El panel del arnés](panel.md) | documento | Una página HTML autocontenida que contesta de un vistazo tres preguntas: ¿el arnés está vivo?, ¿qué dice la memoria del repo? y ¿qué pasó de verdad en esta máquina?. Sin dependencias, sin red (salvo las sondas a localho… |
-| [Quién lee cada clave](quien-lee-cada-clave.md) | tabla | Claves del config y los scripts que las leen (47) |
+| [Quién lee cada clave](quien-lee-cada-clave.md) | tabla | Claves del config y los scripts que las leen (54) |
 | [Recetas](recetas.md) | documento | Situaciones concretas, con el comando al lado. Todo lo de acá asume el arnés ya instalado (docs/portar.md). |
 
 ## incidentes

@@ -49,7 +49,9 @@ En tu repo, agregá al manifiesto (`package.json`, `Makefile`, `justfile`, lo qu
 
 ```
 gate       → node scripts/gate.mjs
-gate:fast  → node scripts/gate.mjs fast
+gate:fast     → node scripts/gate.mjs fast
+gate:changed  → node scripts/gate.mjs changed   (opcional: sólo lo que toca lo cambiado)
+gate:retry    → node scripts/gate.mjs retry     (opcional: sólo lo que quedó rojo)
 ```
 
 Y activá el pre-commit real:

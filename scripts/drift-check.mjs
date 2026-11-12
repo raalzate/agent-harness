@@ -25,7 +25,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
-import { resolverEjecutable } from "../.claude/hooks/harness.mjs";
+import { prepararLanzamiento } from "../.claude/hooks/harness.mjs";
+const lanzarSync = (argv, opciones) => spawnSync(...prepararLanzamiento(argv, opciones));
 
 const args = process.argv.slice(2);
 const i = args.indexOf("--config");
@@ -143,8 +144,8 @@ const compila = (p) => {
     for (const rama of ramas) {
       const argv = proteccion.command.map((a) => String(a).split("{branch}").join(rama));
       // Sin shell: el comando sale del config y la rama, del config. En Windows, sólo un `.cmd`
-      // pasa por cmd.exe (resolverEjecutable lo encuentra con su extensión real).
-      const r = spawnSync(resolverEjecutable(argv[0]), argv.slice(1), { encoding: "utf8", windowsHide: true, timeout: 60000 });
+      // pasa por cmd.exe con sus argumentos citados (lanzarSync).
+      const r = lanzarSync(argv, { encoding: "utf8", windowsHide: true, timeout: 60000 });
       const salida = `${r.stdout ?? ""}${r.stderr ?? ""}`;
       if (r.error || r.status !== 0) {
         if (casa(proteccion.missingBranchPattern, salida)) continue; // la rama no existe en la forja

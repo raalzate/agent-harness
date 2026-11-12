@@ -15,8 +15,10 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { resolverEjecutable } from "../../.claude/hooks/harness.mjs";
+import { prepararLanzamiento } from "../../.claude/hooks/harness.mjs";
+const lanzarSync = (argv, opciones) => spawnSync(...prepararLanzamiento(argv, opciones));
 import { leerPlanDelGestor } from "./leer-plan.mjs";
+import { historialConRegistro, leerBandeja, leerDoctor, leerFoco, leerResponsable } from "./leer-resumen.mjs";
 import { construirMemoriaEnVivo, dirDeClaude, specDeMemoria } from "./leer-memoria.mjs";
 
 const LINEAS_DE_DIFF = 400;
@@ -189,7 +191,7 @@ export function leerTokens(dir, { ahora = new Date(), dias = DIAS_DE_TOKENS } = 
 /** `argv` con el CWD en la raíz → { status, stdout, stderr }. */
 export function comandoPorDefecto(raiz, argv, timeoutMs = 20000) {
   // Sin shell: ningún dato del config ni ningún id citado se interpola en una línea de comandos.
-  const r = spawnSync(resolverEjecutable(argv[0]), argv.slice(1), { cwd: raiz, encoding: "utf8", timeout: timeoutMs, windowsHide: true, shell: false });
+  const r = lanzarSync(argv, { cwd: raiz, encoding: "utf8", timeout: timeoutMs, windowsHide: true, shell: false });
   return { status: r.status, stdout: r.stdout ?? "", stderr: r.error ? String(r.error.message) : (r.stderr ?? "") };
 }
 
@@ -306,9 +308,26 @@ export async function construirEnVivo(raiz, memoria, spec, opciones = {}) {
     sondas.push({ nombre: p.name ?? p.url, url: p.url, ...(await sonda(p.url, p.timeoutMs ?? 1500)) });
   }
 
+  // Para el Resumen. Cada lector falla abierto: un doctor roto no tumba el panel, lo dice.
+  const intentar = (f) => {
+    try {
+      return f();
+    } catch (e) {
+      return { ok: false, error: String(e?.message ?? e) };
+    }
+  };
+
   return {
     generadoEn: ahora.toISOString(),
     maquina: os.hostname(),
+    responsable: intentar(() => leerResponsable(raiz, spec.owner ?? { env: [] }, { env, git: ejecutarGit })),
+    doctor: spec.doctor ? intentar(() => leerDoctor(raiz, spec.doctor, ejecutarComando)) : null,
+    foco: spec.focus ? intentar(() => leerFoco(raiz, spec.focus)) : null,
+    bandeja: spec.inbox ? intentar(() => leerBandeja(raiz, spec.inbox, ahora)) : null,
+    // El último barrido de deriva que dejó el panel en vivo (`drift.out`); sin barrido, `null`.
+    deriva: opciones.config?.drift?.out ? leerJson(path.join(raiz, opciones.config.drift.out)) : null,
+    historial: historialConRegistro(opciones.historialPrevio ?? [], gate.registro),
+    etapas: spec.pipeline ?? [],
     repos,
     gate,
     sondas,

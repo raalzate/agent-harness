@@ -12,7 +12,7 @@
       "id": "diseno",
       "concept": "Decisiones de diseño: arquitectura y ADR, con su porqué",
       "scope": "la teoría general (metodo) y el uso diario (flujo)",
-      "entries": 19
+      "entries": 20
     },
     {
       "id": "instalacion",
@@ -76,6 +76,7 @@
       "headings": [
         "El arnés de este repo — cómo está montado",
         "El gate",
+        "Qué gate corre cuándo",
         "Fuera del gate, con quien los corra",
         "Hooks del ciclo del agente (`.claude/settings.json`)",
         "El self-test: qué prueba exactamente",
@@ -540,6 +541,22 @@
       ]
     },
     {
+      "path": "docs/decisions/0019-gate-incremental.md",
+      "kind": "document",
+      "base": "diseno",
+      "title": "ADR 0019 — El gate incremental: modos de desarrollo, caché, carriles y cerrojo",
+      "summary": "El gate corría todas las señales, en serie, siempre. En este repo eso son tres minutos; en un repo portado con suites de producto fueron veintiuno, y arreglar un hook costaba repetirlos enteros. Un gate caro no se corre…",
+      "headings": [
+        "ADR 0019 — El gate incremental: modos de desarrollo, caché, carriles y cerrojo",
+        "Contexto",
+        "Decisión",
+        "Qué significa ahora «gate verde»",
+        "Lo que se acepta a sabiendas",
+        "Lo que se descartó",
+        "Prueba de vida"
+      ]
+    },
+    {
       "path": "docs/despliegue.md",
       "kind": "document",
       "base": "flujo",
@@ -790,7 +807,7 @@
       "kind": "table",
       "base": "referencia",
       "title": "Quién lee cada clave",
-      "summary": "Claves del config y los scripts que las leen (47)",
+      "summary": "Claves del config y los scripts que las leen (54)",
       "tables": [
         {
           "heading": "Claves del config y los scripts que las leen",
@@ -798,7 +815,7 @@
             "Clave",
             "Lo leen"
           ],
-          "rows": 47
+          "rows": 54
         }
       ]
     },

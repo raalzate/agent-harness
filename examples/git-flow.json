@@ -317,7 +317,7 @@
         "route": "clarify",
         "patterns": [
           "\\bno s[ée] si\\b",
-          "\\balgo as[íi]\\b",
+          "\\balgo as[íi](?![\\wáéíóúüñ])",
           "\\bcomo veas\\b"
         ],
         "message": "Pedido ambiguo → preguntá UNA sola cosa antes de tocar archivos."

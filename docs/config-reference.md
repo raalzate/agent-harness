@@ -45,6 +45,28 @@ tocás una clave.
 | `signals[].fastSkip` | `true` = se omite en modo `fast` |
 | `signals[].skipIfMissing` | ruta que, si no existe, hace que la señal se reporte **OMITIDA** en vez de fallar. "Omitida" se imprime siempre: nunca se confunde con "pasó". Una ruta `.git/…` se resuelve al gitdir real en un worktree |
 | `signals[].countsAttempts` | `false` = su rojo no cuenta para el ciclo acotado (`loop`). Para una señal cuyo rojo estable significa «todavía no terminé» y no «estoy trabado», como la de la tarea declarada |
+| `signals[].skipExitCode` | entero > 0: el código con el que la señal dice «en este checkout no hay nada que verificar». Se reporta **OMITIDA** y no cuenta como corrida. Es para lo que una sola ruta (`skipIfMissing`) no alcanza a decidir. Cualquier otro código distinto de 0 sigue siendo rojo; `0` es config inválido (rojo): convertiría un verde en omitida |
+| `signals[].paths` | prefijos relativos a la raíz de los que la señal **depende**. Definen su alcance en el modo `changed` y sus entradas para la caché. Sin `paths` la señal corre siempre y no se cachea (fail-safe). Un `paths` mal formado es rojo antes de correr nada, no «nunca relevante». Una ruta `../…` (un árbol hermano) vuelve relevante a la señal siempre, y la caché decide por su HEAD |
+| `signals[].cache` | `false` = nunca se cachea aunque declare `paths`: la señal lee estado de afuera (el reloj, la red, el gestor) |
+| `signals[].lane` | carril. Las señales de un mismo carril corren **en serie** (comparten árbol o artefactos); carriles distintos corren **a la vez** hasta `lanes.max`. Sin `lane`: carril `principal` |
+| `signals[].exclusive` | `true` = corre sola, después de todos los carriles. Para lo que mide la máquina (latencia) y no puede compartirla |
+| `signals[].timeoutMinutes` | límite propio de la señal (0 = sin límite). Sin él rige `signalTimeoutMinutes` |
+| `retryCommand` | cómo se invoca el modo `retry` (`node scripts/gate.mjs retry`): corre **sólo** las señales que la última corrida dejó rojas o abortadas; las demás conservan su resultado. Señal de desarrollo, no entregable. Si está declarado, el gate rojo lo sugiere al final |
+| `changedCommand` | cómo se invoca el modo `changed` (`node scripts/gate.mjs changed`): corre sólo las señales cuyo alcance toca lo que cambió desde el último gate **completo**. `--plan` dice qué correría sin correrlo. Señal de desarrollo, no entregable. Lo nombran el gate rojo y `gate-stop` |
+| `lanes.max` | cuántos carriles corren a la vez. `1` o sin la clave = todo en serie, en el orden declarado. Con más de uno, la salida de cada señal se imprime entera al terminar (no se mezclan líneas) y el carril más largo —según lo medido en la corrida anterior— arranca primero |
+| `lock` | `{ file, waitMinutes, pollMs, adopt }` o `false`. Dos gates a la vez sobre el mismo árbol se pisan marcadores y artefactos y salen rojos sin defecto. El segundo espera (default 30 min, sondeando cada 10 s); un cerrojo cuyo dueño murió se descarta. Con `adopt` (default `true`), si el primero corrió **completo** sobre el mismo HEAD con el árbol limpio, el segundo adopta su veredicto en vez de repetirlo. Default del archivo: `.git/gate.lock` |
+| `signalTimeoutMinutes` | cuánto puede tardar una señal antes de darla por **COLGADA**: se corta con todo su árbol de procesos y queda roja con ese motivo; las que esperaban en su carril siguen. Sin la clave, sin límite |
+| `nestedRepos` | carpetas de la raíz cuyas subcarpetas son repos de git propios que la raíz **no versiona** (un workspace con clones adentro). Sin declararlas, `changed` y la caché no ven lo que cambia ahí. Default: ninguna |
+
+**Estados de una señal en el registro:** `verde`, `rojo` (corrió y lo que mide falló), `omitida`
+(no le tocaba correr) y `abortada` (no llegó a medir: no arrancó o la cortaron desde afuera). Una
+abortada tiñe el veredicto —nada que no corrió es verde— pero no gasta el presupuesto de `loop`, y
+`retry` la vuelve a correr. Toda señal que no queda verde lleva su `motivo`, y de una roja el
+registro guarda las líneas de error de su salida: es la evidencia que muestra el panel.
+
+**`--no-cache`** (`npm run gate -- --no-cache`) mide en frío: usalo cuando cambió algo que las
+entradas no ven (el toolchain, una variable de entorno, un servicio). La tabla de qué gate corre
+cuándo está en `docs/arnes.md` § «Qué gate corre cuándo».
 
 **Orden de las señales:** de la más barata y más informativa a la más lenta. El self-test primero
 (un freno roto invalida todas las demás señales), el build último.
@@ -135,6 +157,20 @@ patrón con lookbehind, alternativas anidadas o comillas no se reduce a un ejemp
 quedaba **omitida para siempre**: un freno sin prueba de vida. Con `sample`, el caso usa la
 muestra del autor. El self-test verifica aparte que cada `sample` declarado case con su propio
 patrón: una muestra que no casa probaría un comando que la regla nunca ve, y eso es rojo.
+
+**`flags` (opcional, en las reglas de `bash.deny`, `bash.ask` y `deploy.bash`/`deploy.mcp`).** Las
+banderas con las que se compila el `pattern`. Sin la clave rige `"i"`, como siempre: no distingue
+mayúsculas, y ningún repo ya portado cambia de comportamiento. Con `"flags": ""` la regla
+distingue mayúsculas, que es lo que hace falta cuando la mayúscula ES la diferencia:
+
+```json
+{ "pattern": "git\\s+branch\\s+(-D|--delete\\s+--force)\\b", "flags": "", "reason": "…" }
+```
+
+Sin `flags`, esa regla escalaba también `git branch -d` (el borrado seguro) y no había forma de
+escribir la diferencia. El `exempt` de una regla de `ask` hereda sus `flags`. El self-test
+verifica que los `flags` declarados compilen (una bandera inválida deja la regla sin morder, en
+silencio) y que el `sample` declarado case con ellos.
 
 ### `bash.ask` — que decida el humano (opcional)
 
@@ -544,6 +580,7 @@ Los cuatro conjuntos de patrones son un **desempate**, y el orden importa:
 | Clave | Para qué |
 |---|---|
 | `questionPatterns` | ¿tiene forma de pregunta o de reporte? |
+| `informativePatterns` | ¿arranca con un imperativo informativo («contame», «explicame», «mostrame»)? Pide una respuesta igual que una pregunta, sin signo. No es pregunta fuerte: con un verbo de acción en el mismo pedido, gana la acción. Opcional |
 | `actionPatterns` | ¿nombra un verbo de cambio? |
 | `pastPatterns` | …¿pero **en pasado**? Entonces pregunta por lo hecho: sigue siendo consulta |
 | `strongQuestionPatterns` | ¿**arranca** con interrogativo? Entonces el verbo es el tema, no la orden |
@@ -958,6 +995,35 @@ que no se declara se deduce de claves que ya existen antes que de un literal. Ve
 | `memory.windowDays` | la ventana de días calendario para contar usos (default 14) |
 | `memory.personal`, `memory.transcripts` | `false` = no leer la memoria automática / las transcripciones de esta máquina |
 | `command` | lo que el panel dice que se corra para regenerarlo |
+| `owner` | `{ env: ["VAR"], envFile: ".env" }`: de quién es el informe. Se lee del entorno o del `.env` declarado (ignorado por git); sin dato, `git config user.name`; sin eso, queda como pendiente del humano. Nunca se inventa, y nada personal queda versionado. Default `env: ["HARNESS_OWNER"]` |
+| `doctor` | `{ command, timeoutMs, highlight }`: el diagnóstico de la máquina que muestra el Resumen. Formato de su salida: una sección por línea `N. Título`, un chequeo por línea `✔\|⚠\|✘ texto` y el arreglo opcional en la línea siguiente `→ comando`. `highlight` es un regex sobre el título de las secciones que van primero. Un ✘ es un problema y un pendiente del humano |
+| `focus` | `{ file }`: el objetivo en curso, como lo deja el gestor del repo: `{ id, title, state, url, plan: { resumen, tareas[{ id, title, state, dueno, cerrada, bloqueada }], propuestas[{ quien, texto }] } }` |
+| `inbox` | `{ file, command, maxAgeMinutes }`: la bandeja de «Qué hacer». `file` es el caché `{ leidoEn, items[], prs[] }` que deja el adaptador del gestor; si tiene más de `maxAgeMinutes` (default 10), el panel lanza `command` **desprendido** para refrescarlo: nunca espera a la red |
+| `triage` | cómo se reparte lo que el panel encuentra entre la persona y el agente, y cómo se nombra el gestor de este repo. `humanPattern` (regex: una deuda que lo casa es del humano), `decisionPattern` (un ítem que pide elegir), `containerPattern` (tipos de ítem que son contenedores y no acciones), `external` `{ pattern, label }` (ítems que esperan a un tercero: se siguen, no se resuelven), `closurePattern` (las frases que anuncian cómo se cierra una deuda: de ahí sale su remedio), `commands` (`take`, `show`, `threads`, `focus`, `owner`: plantillas con `{id}`; la que falta no se muestra) y `remote` (cómo se nombra adónde se empuja) |
+| `pipeline.stages` | `[{ name, match }]`: las etapas con que se dibuja la última corrida del gate, en orden; `match` es un regex sobre el nombre de la señal. Lo que no casa va a «Otras»; sin etapas, una sola |
+| `serve` | `{ port, everyMs, forceEveryMs }` del modo en vivo (`node scripts/panel/servir.mjs`). Default `4477`, 5 s y 60 s |
+
+**El contrato de `inbox.file`** (lo escribe el adaptador de tu gestor; el arnés no conoce ninguno):
+
+```json
+{ "leidoEn": "2026-01-01T10:00:00Z",
+  "items": [{ "id": 12, "tipo": "Task", "titulo": "…", "estado": "Active", "url": "…",
+              "dueno": "humano | agente", "bloqueado": false,
+              "frente": { "id": 3, "titulo": "…" },
+              "esperaA": [{ "id": 9, "titulo": "…", "url": "…", "dueno": "humano | agente | otro | sin-dueno", "asignado": "…" }] }],
+  "prs": [{ "id": 40, "titulo": "…", "url": "…", "base": "main", "mergeStatus": "conflicts | …",
+            "hilosAbiertos": 0, "revisores": [{ "nombre": "…", "aprobo": false, "estado": "espera cambios" }] }] }
+```
+
+`aprobo` es un booleano a propósito: cada forja tiene su escala de votos, y traducirla es trabajo
+del adaptador. Si `drift.runner` es `scripts/panel/servir.mjs`, el panel en vivo corre además el
+barrido de deriva cada `drift.everyMinutes` (default 60) y deja el resultado en `drift.out`, que
+Salud muestra; con el barrido en un pipeline (como en este repo) esas dos claves no se usan.
+
+**Dos variables de entorno, de uso interno.** `HARNESS_PROBE=1` la pone `hooks-timing.mjs` al medir
+un hook: corre de verdad, pero no deja estado de sesión (un marcador fabricado por la medición
+frenaba una edición legítima mientras existía). `HARNESS_STATE_DIR` manda el estado de sesión
+(`.git/…`) a otro directorio: la usa el self-test para no pisar los marcadores de la sesión real.
 
 ---
 
