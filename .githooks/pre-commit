@@ -21,11 +21,12 @@ FAILED=0
 #
 #    Excepción: las reglas con `agentOnly: true` protegen el archivo de la EDICIÓN por el
 #    agente, no de existir en el repo (una guía que se enmienda a conciencia, un documento
-#    de gobernanza). Bloquear su commit haría imposible crearlo.
+#    de gobernanza). Bloquear su commit haría imposible crearlo. Lo mismo las reglas con
+#    `ask: true`: el humano ya aprobó la edición, y el archivo (el config del arnés) se versiona.
 PROTECTED=$(node -e '
 const fs = require("fs");
 const c = JSON.parse(fs.readFileSync(".claude/harness.config.json", "utf8"));
-const rules = (c.protectedPaths || []).filter(r => !r.agentOnly).map(r => { try { return new RegExp(r.pattern); } catch { return null; } }).filter(Boolean);
+const rules = (c.protectedPaths || []).filter(r => !r.agentOnly && !r.ask).map(r => { try { return new RegExp(r.pattern); } catch { return null; } }).filter(Boolean);
 const staged = fs.readFileSync(0, "utf8").split("\n").filter(Boolean);
 for (const f of staged) if (rules.some(r => r.test(f))) console.log(f);
 ' <<< "$STAGED")

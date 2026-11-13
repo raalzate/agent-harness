@@ -14,7 +14,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { runEvent, strictest, isolated, inPool, installedConfig, hookName, seed, exec } from "./hooks.mjs";
+import { runEvent, strictest, isolated, inPool, installedConfig, hookName, seed, exec, allHooks, runHookRaw } from "./hooks.mjs";
 
 const broken = (runs) => runs.find((r) => r.status !== 0 && r.status !== 2);
 const brokenReason = (r) => `${hookName(r)} exit ${r.status}: ${r.stderr.trim().slice(0, 200)}`;
@@ -184,4 +184,56 @@ export async function runSignals(root, set, items) {
       return { ...row, actual, pass: actual === it.expected, latencies: latencies(runs) };
     }
   }
+}
+
+// ── robustness ───────────────────────────────────────────────────────────────
+
+/** The stdin of a robustness payload: `raw` as is, `json` serialised, `inflate` grown to size. */
+export function stdinOf(p) {
+  if (typeof p.raw === "string") return p.raw;
+  if (p.inflate) {
+    const body = JSON.parse(JSON.stringify(p.json ?? {}));
+    const keys = p.inflate.field.split(".");
+    let at = body;
+    for (const k of keys.slice(0, -1)) at = at[k] ??= {};
+    const unit = p.inflate.unit ?? "a";
+    at[keys.at(-1)] = unit.repeat(Math.ceil(p.inflate.bytes / unit.length));
+    return JSON.stringify(body);
+  }
+  return JSON.stringify(p.json);
+}
+
+/**
+ * Every hook settings.json declares, on every hostile payload. Not "does it decide right" —that
+ * is `rules`— but "does it keep its contract when the input is garbage": exit 0 or 2, never
+ * another exit (Claude Code treats it as a non-blocking error and the tool RUNS), never longer
+ * than the budget (a hook killed by its timeout lets the tool run too). A crash on bad input is
+ * the cheapest way around a guard: the attacker does not need to beat the rule, only the parser.
+ * Runs in a private copy: a fuzzed prompt may leave a marker.
+ */
+export async function runRobustness(root, spec) {
+  const payloads = spec?.payloads ?? [];
+  if (!payloads.length) return [];
+  return isolated(root, {}, async (where) => {
+    const pairs = allHooks(where).flatMap((command) => payloads.map((p) => ({ command, p })));
+    return inPool(pairs, async ({ command, p }) => {
+      const r = await runHookRaw(where, command, stdinOf(p), spec.budgetMs);
+      const hook = hookName(r);
+      const contract = r.status === 0 || r.status === 2;
+      const actual = r.timedOut ? "hung" : contract ? "keeps-contract" : "error";
+      const crash = r.stderr.trim().split("\n").find((l) => /Error/.test(l)) ?? r.stderr.trim().slice(0, 160);
+      return {
+        group: "robustness",
+        id: `${p.id} → ${hook}`,
+        kind: hook,
+        lang: null,
+        expected: "keeps-contract",
+        actual,
+        pass: actual === "keeps-contract",
+        note: p.note,
+        detail: r.timedOut ? `killed at ${spec.budgetMs} ms` : contract ? "" : `exit ${r.status}: ${crash}`,
+        latencies: [r.ms],
+      };
+    });
+  });
 }

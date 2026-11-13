@@ -3,7 +3,7 @@
 > GENERADO por `node scripts/library.mjs index`: no se edita a mano. Lo consulta el subagente
 > `librarian`; lo verifica la señal del gate `library index (docs)`.
 
-47 entradas en 6 bases · 45 documentos (no estructurado) · 1 tablas · 1 grafos (estructurado).
+48 entradas en 6 bases · 46 documentos (no estructurado) · 1 tablas · 1 grafos (estructurado).
 
 ## Bases de conocimiento
 
@@ -13,7 +13,7 @@
 | [diseno](#diseno) | Decisiones de diseño: arquitectura y ADR, con su porqué | la teoría general (metodo) y el uso diario (flujo) | 20 |
 | [instalacion](#instalacion) | Instalar y portar el arnés en otro repo, stack o plataforma | el trabajo diario una vez instalado (flujo) | 5 |
 | [flujo](#flujo) | El ciclo de trabajo: ramas, registro, SDD, CI/CD, despliegue y worktrees | cómo funciona cada pieza del arnés por dentro (referencia) | 6 |
-| [referencia](#referencia) | El arnés por dentro: claves del config, señales, índices, panel, evaluaciones y recetas | el porqué de fondo (metodo) y los incidentes (incidentes) | 10 |
+| [referencia](#referencia) | El arnés por dentro: claves del config, señales, índices, panel, evaluaciones, seguridad y recetas | el porqué de fondo (metodo) y los incidentes (incidentes) | 11 |
 | [incidentes](#incidentes) | Incidentes reales del arnés en formato fijo: síntoma, causa, regla, mecanismo | decisiones de diseño tomadas sin incidente (diseno) | 1 |
 
 ## metodo
@@ -82,7 +82,7 @@
 
 ## referencia
 
-**El arnés por dentro: claves del config, señales, índices, panel, evaluaciones y recetas**
+**El arnés por dentro: claves del config, señales, índices, panel, evaluaciones, seguridad y recetas**
 
 | Entrada | Tipo | Qué contiene |
 |---|---|---|
@@ -96,6 +96,7 @@
 | [El panel del arnés](panel.md) | documento | Una página HTML autocontenida que contesta de un vistazo tres preguntas: ¿el arnés está vivo?, ¿qué dice la memoria del repo? y ¿qué pasó de verdad en esta máquina?. Sin dependencias, sin red (salvo las sondas a localho… |
 | [Quién lee cada clave](quien-lee-cada-clave.md) | tabla | Claves del config y los scripts que las leen (54) |
 | [Recetas](recetas.md) | documento | Situaciones concretas, con el comando al lado. Todo lo de acá asume el arnés ya instalado (docs/portar.md). |
+| [Seguridad del arnés: qué garantiza, cómo se prueba y dónde no llega](seguridad.md) | documento | La pregunta de una empresa no es «¿tiene reglas?» sino «¿cómo sé que el agente no hace nada fuera de ellas?». Este documento la contesta con mecanismos y comandos, no con promesas: cada fila de abajo nombra el control q… |
 
 ## incidentes
 

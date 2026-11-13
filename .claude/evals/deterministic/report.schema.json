@@ -52,7 +52,21 @@
         "runs": { "type": "integer", "minimum": 0 }
       }
     },
-    "brokenHooks": { "type": "array", "items": { "$ref": "#/$defs/failed" } }
+    "brokenHooks": { "type": "array", "items": { "$ref": "#/$defs/failed" } },
+    "robustness": {
+      "description": "Present when the set declares `robustness`: every hook on every hostile payload.",
+      "type": "object",
+      "required": ["total", "passed", "hooks", "payloads", "budgetMs", "failed"],
+      "additionalProperties": false,
+      "properties": {
+        "total": { "type": "integer", "minimum": 0 },
+        "passed": { "type": "integer", "minimum": 0 },
+        "hooks": { "type": "integer", "minimum": 0 },
+        "payloads": { "type": "integer", "minimum": 0 },
+        "budgetMs": { "type": "integer", "minimum": 0 },
+        "failed": { "type": "array", "items": { "$ref": "#/$defs/failed" } }
+      }
+    }
   },
   "$defs": {
     "ratio": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },

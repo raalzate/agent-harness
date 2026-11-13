@@ -16,6 +16,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
+import { prepare, readTranscript, judgeRun } from "./redteam.mjs";
 
 function run(command, cwd, input, timeoutMs) {
   const [cmd, ...args] = command;
@@ -55,6 +56,7 @@ export default class AiEvalProvider {
 
     const suite = suites[Number(context.vars?.suite)];
     if (!suite) return { error: `ai-eval: test without a known suite (vars.suite = ${context.vars?.suite})` };
+    if (suite.kind === "redteam") return this.redteam(suite, prompt, JSON.parse(context.vars?.redteam ?? "{}"), base, timeoutMs);
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "harness-ai-eval-agent-"));
     try {
       for (const rel of suite.context ?? []) {
@@ -65,6 +67,27 @@ export default class AiEvalProvider {
       return this.answer(await run(suite.command, dir, prompt, timeoutMs));
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
+    }
+  }
+
+  /**
+   * A red-team run: the harness installed in a throwaway repo, the agent WITH its hooks and its
+   * tools, and the verdict read from the disk and the transcript (scripts/eval/redteam.mjs). The
+   * output is that verdict as JSON; ai-eval.mjs judges it. Nothing of it touches this tree (P7).
+   */
+  async redteam(suite, prompt, spec, base, timeoutMs) {
+    let repo;
+    try {
+      repo = prepare({ base, profile: suite.profile, files: spec.files });
+    } catch (e) {
+      return { error: `ai-eval: the red-team repo could not be prepared (${e.message})` };
+    }
+    try {
+      const r = await run(suite.command, repo.dir, prompt, timeoutMs);
+      if (!r.stdout.trim()) return this.answer(r);
+      return { output: JSON.stringify(judgeRun(repo, spec.forbid, readTranscript(r.stdout))) };
+    } finally {
+      fs.rmSync(repo.dir, { recursive: true, force: true });
     }
   }
 

@@ -75,9 +75,43 @@
         "thresholds": { "$ref": "#/$defs/scoreThresholds" },
         "items": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/signal" } }
       }
+    },
+    "robustness": {
+      "description": "Not labelled items: EVERY hook settings.json declares runs on EVERY payload, and must keep its contract (exit 0 or 2, under `budgetMs`). Optional: without it, the group does not run.",
+      "type": "object",
+      "required": ["budgetMs", "payloads"],
+      "additionalProperties": false,
+      "properties": {
+        "$comment": { "type": "string" },
+        "budgetMs": { "type": "integer", "minimum": 100 },
+        "payloads": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/payload" } }
+      }
     }
   },
   "$defs": {
+    "payload": {
+      "description": "Exactly one of: `raw` (stdin as is, not even JSON), `json` (serialised), or `json` grown by `inflate` (one field repeated to `bytes`).",
+      "type": "object",
+      "required": ["id", "note"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "note": { "$ref": "#/$defs/note" },
+        "raw": { "type": "string" },
+        "json": true,
+        "inflate": {
+          "type": "object",
+          "required": ["field", "bytes"],
+          "additionalProperties": false,
+          "properties": {
+            "field": { "type": "string", "pattern": "^[\\w]+(\\.[\\w]+)*$" },
+            "bytes": { "type": "integer", "minimum": 1 },
+            "unit": { "type": "string", "minLength": 1 }
+          }
+        }
+      },
+      "anyOf": [{ "required": ["raw"] }, { "required": ["json"] }]
+    },
     "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
     "note": { "type": "string", "minLength": 3 },
     "lang": {

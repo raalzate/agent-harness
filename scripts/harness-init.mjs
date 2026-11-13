@@ -313,12 +313,31 @@ if (configGenerado) {
   }
 }
 
+// El `settings.json` se copia CON la capa nativa de permisos (`plantillas/settings.permissions.json`):
+// lo que Claude Code niega por sí mismo, sin pasar por un hook. Es la defensa que queda con el
+// config del arnés roto (los hooks fallan abiertos, P5) y la única que ve una LECTURA de secreto.
+// Las reglas del origen se suman a las que ya traiga el settings, sin repetir.
+const permisos = path.join(ORIGEN, "plantillas", "settings.permissions.json");
+const accionSettings = acciones.find((a) => a.hacia === ".claude/settings.json");
+if (accionSettings && fs.existsSync(permisos)) {
+  const settings = JSON.parse(fs.readFileSync(path.join(ORIGEN, accionSettings.desde), "utf8"));
+  const capa = JSON.parse(fs.readFileSync(permisos, "utf8")).permissions ?? {};
+  settings.permissions ??= {};
+  for (const [clave, reglas] of Object.entries(capa)) {
+    if (!Array.isArray(reglas)) continue;
+    settings.permissions[clave] = [...new Set([...(settings.permissions[clave] ?? []), ...reglas])];
+  }
+  accionSettings.tipo = "generado-settings";
+  accionSettings.contenido = `${JSON.stringify(settings, null, 2)}\n`;
+}
+
 let copiados = 0;
 let conservados = 0;
 
 const ETIQUETA = {
   plantilla: "   (plantilla: hay que llenarla)",
   generado: `   (plantilla + perfil ${perfiles.join("+")}: faltan gate.signals y las reglas)`,
+  "generado-settings": "   (con la capa nativa de permisos: plantillas/settings.permissions.json)",
 };
 
 for (const a of acciones) {

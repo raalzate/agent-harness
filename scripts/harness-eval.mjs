@@ -44,10 +44,12 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { validate } from "./eval/schema.mjs";
 import { install } from "./eval/hooks.mjs";
-import { runGuides, runRules, runSignals, judgeReasons } from "./eval/groups.mjs";
+import { runGuides, runRules, runSignals, runRobustness, judgeReasons } from "./eval/groups.mjs";
 
 const REPO_ROOT = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
 const GROUPS = ["guides", "rules", "signals"];
+// Not a group of labelled items: every hook × every hostile payload of `robustness.payloads`.
+const ROBUSTNESS = "robustness";
 const args = process.argv.slice(2);
 const flag = (name) => {
   const withEquals = args.find((a) => a.startsWith(`${name}=`));
@@ -104,8 +106,8 @@ if (problems.length) {
   for (const p of problems.slice(0, 30)) console.error(`  · ${p}`);
   process.exit(1);
 }
-if (GROUP && !GROUPS.includes(GROUP)) {
-  console.error(`harness-eval: unknown group \`${GROUP}\`; groups: ${GROUPS.join(", ")}`);
+if (GROUP && !GROUPS.includes(GROUP) && GROUP !== ROBUSTNESS) {
+  console.error(`harness-eval: unknown group \`${GROUP}\`; groups: ${[...GROUPS, ROBUSTNESS].join(", ")}`);
   process.exit(1);
 }
 const pick = (g) => (GROUP && GROUP !== g ? [] : set[g].items.filter((it) => !ONLY || it.id === ONLY));
@@ -194,8 +196,21 @@ function buildReport(rows) {
     byLanguage[lang].total += 1;
     if (r.pass) byLanguage[lang].passed += 1;
   }
-  const brokenHooks = rows.filter((r) => r.actual === "error").map(failedOf);
-  const lat = rows.flatMap((r) => r.latencies ?? []);
+  const robust = by(ROBUSTNESS);
+  const robustness = robust.length
+    ? {
+        total: robust.length,
+        passed: robust.filter((r) => r.pass).length,
+        hooks: new Set(robust.map((r) => r.kind)).size,
+        payloads: set.robustness?.payloads?.length ?? 0,
+        budgetMs: set.robustness?.budgetMs ?? 0,
+        failed: robust.filter((r) => !r.pass).map(failedOf),
+      }
+    : null;
+  // A crash on garbage is reported under robustness, not twice as a broken hook.
+  const brokenHooks = rows.filter((r) => r.actual === "error" && r.group !== ROBUSTNESS).map(failedOf);
+  // The latency of the harness is the latency of real calls: a 4 MB fuzz payload is not one.
+  const lat = rows.filter((r) => r.group !== ROBUSTNESS).flatMap((r) => r.latencies ?? []);
   const th = set.rules.thresholds;
   const failures = [];
   if (brokenHooks.length) failures.push(`${brokenHooks.length} broken hook(s)`);
@@ -207,6 +222,7 @@ function buildReport(rows) {
   if (ru.fpr !== null && ru.fpr > th.maxFpr) failures.push(`rules false positives ${pct(ru.fpr)} above the threshold`);
   if (ru.accuracy !== null && ru.accuracy < th.minAccuracy) failures.push(`rules accuracy ${pct(ru.accuracy)} below the threshold`);
   if (ru.closedGaps.length) failures.push(`${ru.closedGaps.length} gap(s) that no longer are`);
+  if (robustness?.failed.length) failures.push(`${robustness.failed.length} hook run(s) that break their contract on hostile input`);
   return {
     kind: "deterministic-eval",
     version: 1,
@@ -219,6 +235,7 @@ function buildReport(rows) {
     byLanguage,
     latency: { p50Ms: Math.round(percentile(lat, 50)), p95Ms: Math.round(percentile(lat, 95)), runs: lat.length },
     brokenHooks,
+    ...(robustness ? { robustness } : {}),
   };
 }
 
@@ -263,6 +280,12 @@ function renderText(report, rows) {
   if (signals.total) lines.push(`    ${kinds(signals)}`);
   list("FAILED", signals.failed);
 
+  const rb = report.robustness;
+  if (rb) {
+    lines.push("", `  ROBUSTNESS (hostile input)            ${rb.passed}/${rb.total}  (${rb.hooks} hooks × ${rb.payloads} payloads: exit 0 or 2, under ${rb.budgetMs} ms)`);
+    list("CONTRACT BROKEN (a crash or a hang lets the tool run)", rb.failed, (f) => `${f.id} — ${f.note}: ${f.actual}${f.detail ? ` (${f.detail})` : ""}`);
+  }
+
   const langs = Object.entries(report.byLanguage).map(([l, v]) => `${l} ${v.passed}/${v.total}`).join(" · ");
   lines.push("", `  by language      ${langs}  (known gaps excluded)`);
   lines.push(`  latency          p50 ${report.latency.p50Ms} ms · p95 ${report.latency.p95Ms} ms per hook run (node start-up included; ${report.latency.runs} runs)`);
@@ -296,9 +319,11 @@ try {
     runGuides(root, set, pick("guides")),
     runSignals(root, set, pick("signals")),
   ]);
+  // After the others, not beside them: a pool of 4 MB payloads would inflate their latencies.
+  const robustRows = ONLY || (GROUP && GROUP !== ROBUSTNESS) ? [] : await runRobustness(root, set.robustness);
   const reasonRows = (GROUP && GROUP !== "guides") || ONLY ? [] : judgeReasons(set, ruleRuns);
-  const ruleRows = GROUP === "guides" ? [] : ruleRuns;
-  const rows = [...guideRows, ...reasonRows, ...ruleRows, ...signalRows];
+  const ruleRows = GROUP === "guides" || GROUP === ROBUSTNESS ? [] : ruleRuns;
+  const rows = [...guideRows, ...reasonRows, ...ruleRows, ...signalRows, ...robustRows];
   const report = buildReport(rows);
   const text = renderText(report, rows);
   console.log(JSON_OUT ? JSON.stringify(report, null, 2) : text);

@@ -90,6 +90,24 @@ deliberado: si la ruta es sagrada, lo es para todos.
 pero commitearlo es normal. Es para documentos de gobernanza que se enmiendan a conciencia — sin la
 marca, el pre-commit haría imposible crear el archivo la primera vez.
 
+`"ask": true` no bloquea: le pasa la decisión al **humano** (el hook sale 0 con
+`permissionDecision: "ask"`). Es para lo que el agente a veces sí tiene que tocar, pero nunca sin
+que alguien lo vea — en la plantilla, el propio `harness.config.json`, que `/lesson` y la skill
+`new-guardrail` editan para agregar una regla. Un bloqueo gana sobre una pregunta, la pregunta se
+hace después de los frenos de la tarea declarada, y el pre-commit no la frena (el humano ya la
+aprobó). En `claude -p` nadie contesta y la escritura no corre; lo que **tiene** que sostenerse
+va sin `ask`.
+
+Aparte de las reglas, `protected-paths.mjs` frena siempre una escritura (Write, Edit, MultiEdit)
+que dejaría `harness.config.json` **sin parsear**: con el config ilegible todos los hooks fallan
+abiertos (P5), así que es la forma más corta de apagar el arnés entero. Es un invariante del
+código, no una clave.
+
+La plantilla protege el cableado del arnés (`settings.json`, `settings.local.json`, `hooks/`,
+`.githooks/`, los scripts del gate) y el instalador suma una capa nativa de Claude Code
+(`plantillas/settings.permissions.json` → `permissions.deny` del `settings.json` instalado) que no
+depende de este config. Por qué y qué cubre cada capa: [`seguridad.md`](seguridad.md).
+
 ---
 
 ## `writeTools` — las herramientas MCP que escriben (opcional)
@@ -1225,6 +1243,18 @@ temporal (nunca en el árbol, P7), lo corre con `promptfoo` y calcula **él** la
   `subagentOutput.contracts.<agent>.mustMatch`. Un `expect` sin contrato es un error de config.
 - `cases[].mustCite` / `mustMatch` / `mustNotMatch`: texto o regex que la salida tiene que traer (o no).
 - `rubric`: en el caso, o `rubrics[<expect>]` de la suite, o `rubric` de la suite.
+- `suites[].minScore`: el umbral de esa suite, en lugar del de `aiEval`.
+- `suites[].kind: "redteam"`: el agente real **contra el arnés** ([`seguridad.md`](seguridad.md)).
+  Exige su propio `command` (no hereda el de sólo lectura) y `profile` elige el perfil con que se
+  instala el arnés en el repo descartable. Cada caso trae `input` (el pedido), `files` (un JSON con
+  `commit` —el repo base— y `dirty` —el trabajo sin commitear—) y `forbid`: `unchanged` (rutas o
+  `dir/` que terminan igual), `preserved` (contenido que tiene que seguir recuperable, en el árbol o
+  en git), `commands` (regex que ningún Bash que **corrió** puede casar), `leak` (textos que no
+  pueden llegar al transcript) y `noNewCommits`. Un caso que no prohíbe nada es un error de config:
+  saldría contenido siempre. `mustMatch`, si está, se mide contra la respuesta final.
+- `suites[].casesFromSuite`: los casos de otra suite, tal cual. Lo usa `redteam-compliant`: los
+  mismos ataques con otro `command` (un agente al que se le ordena obedecer), para medir el arnés
+  y no el criterio del modelo.
 
 **No es una señal del gate**: es caro, no determinista y necesita cuenta. **Por ahora tampoco tiene
 pipeline** (decisión de #63: sólo local, con la sesión de Claude Code), y por eso **no lleva

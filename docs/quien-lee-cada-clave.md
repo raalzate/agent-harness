@@ -9,7 +9,7 @@
 | `gate.retryCommand`, `gate.changedCommand` | `scripts/gate.mjs` (los sugiere al salir rojo), `gate-stop.mjs` (nombra `changedCommand`), `gate-runner` y `/gate`, self-test |
 | `gate.lanes`, `gate.lock`, `gate.signalTimeoutMinutes`, `gate.nestedRepos`, `gate.signals[].lane` · `exclusive` · `paths` · `cache` · `timeoutMinutes` · `skipExitCode` | `scripts/gate.mjs` (carriles, cerrojo, corte de colgadas, modo `changed` y caché), self-test (6-bis en adelante) |
 | `gate.installHooksCommand` | `session-start.mjs` (el aviso de pre-commit sin instalar), self-test |
-| `protectedPaths` | `protected-paths.mjs`, `.githooks/pre-commit`, self-test |
+| `protectedPaths` (`ask` y `agentOnly` incluidos) | `protected-paths.mjs`, `.githooks/pre-commit`, `session-start.mjs` (avisa de una ruta protegida con cambios sin commitear), self-test |
 | `writeTools` | `harness.mjs` (`escribe`, `targetPath`, `proposedContent`) → `protected-paths.mjs`, `action-guard.mjs`, `reuse-guard.mjs`, `post-edit-check.mjs`; self-test (3b-bis) |
 | `bash.deny` | `bash-guard.mjs`, self-test |
 | `bash.ask` | `bash-guard.mjs` (después de `deny`), self-test (3c-bis) |
@@ -46,7 +46,7 @@
 | `coherence` | `scripts/repo-lint.mjs` (regla `COHERENCIA`), self-test (4e-bis) |
 | `drift` (y `status.file`, `patterns`, `reuse`) | `scripts/drift-check.mjs` (lo invoca `.github/workflows/drift.yml`), self-test (10a) |
 | `reviewerEval` | `scripts/reviewer-eval.mjs` (lo invoca `.github/workflows/drift.yml`), `scripts/ai-eval.mjs` (la suite con `casesFrom`), self-test (10b) |
-| `aiEval` | `scripts/ai-eval.mjs` (a mano, `npm run eval:ai`) y `scripts/eval/ai-provider.mjs` (por el config que genera), self-test (10f) |
+| `aiEval` | `scripts/ai-eval.mjs` (a mano, `npm run eval:ai`) y `scripts/eval/ai-provider.mjs` (por el config que genera); las suites `kind: "redteam"`, además `scripts/eval/redteam.mjs`; self-test (10f, 10f-redteam) |
 | `harnessEval` | `scripts/harness-eval.mjs` (la señal `harness eval (deterministic)` del gate), self-test (10e) |
 | `ci.investigate` (y `gate.registry`) | `scripts/ci-investigate.mjs` (lo corre el subagente `ci-investigator` y `/ci`), self-test (2: sus regex; 10d: la máquina con un CLI de mentira) |
 | `library` (y `protectedPaths`, que `migrate` respeta; `library.agent` y `library.route` los lee además `graph-first.mjs`) | `scripts/library.mjs` (la señal `library index (docs)` del gate; lo corre el subagente `librarian` y los skills `library-index` / `library-migrate`), self-test (12) |

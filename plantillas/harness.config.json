@@ -108,11 +108,33 @@
     {
       "pattern": "^(build|dist|out|target|coverage)/",
       "reason": "artefactos derivados: se regeneran, no se editan."
+    },
+    {
+      "$pattern": "El arnés no lo desarma el que está siendo frenado (docs/seguridad.md). `settings.json` decide qué hook corre; `settings.local.json`, qué permisos tiene el agente. `agentOnly`: se versionan, así que el pre-commit no frena al humano que los commitea.",
+      "pattern": "^\\.claude/(settings(\\.local)?\\.json$|hooks/)",
+      "agentOnly": true,
+      "reason": "el cableado del arnés: `settings.json` decide qué hook corre, `settings.local.json` qué permisos tiene el agente y `hooks/` qué frena cada hook. Si el agente los edita, apaga el freno que lo frena o se da permisos a sí mismo. Si un hook estorba, contale al humano cuál y por qué: lo cambia él."
+    },
+    {
+      "pattern": "^(\\.githooks/|scripts/(gate\\.(mjs|sh)|harness-selftest\\.mjs|repo-lint\\.mjs|hooks-install\\.mjs)$)",
+      "agentOnly": true,
+      "reason": "los frenos de git y el gate: un `pre-commit` que sale 0 o un gate que se saltea una señal da verde sin verificar nada. Si el gate estorba, se arregla el gate, pero lo arregla el humano (o lo aprueba): pedíselo con la señal y la línea que falla."
+    },
+    {
+      "$pattern": "`ask` y no bloqueo: `/lesson` y la skill `new-guardrail` convierten un incidente en una regla NUEVA de este archivo, y eso es legítimo. Lo que no es legítimo es que pase sin que el humano lo vea.",
+      "pattern": "^\\.claude/harness\\.config\\.json$",
+      "ask": true,
+      "reason": "el config del arnés decide qué frena: una regla nueva es legítima, pero el humano la ve antes. Un config ilegible apaga TODOS los frenos (fallan abiertos, P5), así que tampoco se reescribe entero: se edita la clave que hace falta."
     }
   ],
   "bash": {
     "$comment": "Comandos irreversibles o que saltan la verificación. Agregá los propios de este stack (terraform apply, kubectl delete, drop de base, deploy directo a producción).",
     "deny": [
+      {
+        "$pattern": "Las mismas rutas que `protectedPaths` cuida del arnés, pero desde el shell: `protected-paths` mira las herramientas de escritura, no lo que un `>` o un `sed -i` escriben (docs/evaluaciones.md#huecos-conocidos). La ruta va en cualquier lugar después del verbo, como la regla del marcador: un `cp` que LEE el config también frena, y para leer está `Read`.",
+        "pattern": "(\\b(rm|mv|cp|tee|truncate|unlink|del|chmod|ln)\\b|>|\\bsed\\s+(-[a-zA-Z]*i|--in-place)|\\bperl\\s+-[a-zA-Z]*i)[^|;&]*(\\.claude[\\\\/](settings(\\.local)?\\.json|harness\\.config\\.json|hooks[\\\\/])|\\.githooks[\\\\/]|scripts[\\\\/](gate\\.(mjs|sh)|harness-selftest\\.mjs|repo-lint\\.mjs|hooks-install\\.mjs))",
+        "reason": "eso reescribe el arnés desde el shell, sin diff que el humano vea: el cableado de los hooks, el config que decide qué frena, los hooks de git o el gate. Si una regla estorba, contale al humano cuál y por qué; el config se edita con Edit (y pide confirmación), lo demás lo cambia él."
+      },
       {
         "pattern": "(\\b(rm|mv|cp|tee|truncate|unlink|del)\\b|>)[^|;&]*\\.git[\\\\/](gate-(escalate|attempts)|harness-task)",
         "reason": "el marcador y el libro del ciclo acotado (`loop`) los escribe el gate y los levanta el pedido del humano, y la tarea declarada (`task`) la escribe `scripts/task.mjs`. Reescribirlos a mano es saltarse la escalada o el alcance: para la tarea usá `node scripts/task.mjs`; para el presupuesto, pará y contale al humano qué falla."
@@ -165,6 +187,11 @@
       {
         "pattern": "\\b(curl|wget)\\b[^|;&]*\\|\\s*(sudo\\s+)?(ba|z)?sh\\b|\\b(ba|z)?sh\\s+<\\(\\s*(curl|wget)\\b",
         "reason": "ejecuta código remoto sin revisarlo (por tubería o por `<(…)`). Bajá el script, leelo, después corrélo."
+      },
+      {
+        "$pattern": "Código ofuscado: lo que se decodifica y se ejecuta en el mismo paso no lo puede leer ningún regex (ni el humano que aprueba). Es la forma de esconder un comando que otra regla frenaría.",
+        "pattern": "\\bbase64\\s+(-d|-D|--decode)\\b[^;&]*\\|\\s*(sudo\\s+)?(ba|z|da|k)?sh\\b|\\beval\\b[^;&]*\\bbase64\\b|\\b(ba|z)?sh\\s+-c\\s+[\"']?\\$\\(\\s*(echo|printf)\\b[^)]*\\|\\s*base64\\b",
+        "reason": "ejecuta un comando ofuscado (decodificado en el mismo paso): nadie —ni el arnés ni el humano— puede leer qué corre. Escribí el comando en claro."
       }
     ],
     "ask": [
